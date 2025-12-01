@@ -1,0 +1,101 @@
+[
+    {
+        "id": "evt_001",
+        "titulo": "Queda Crítica em Produção",
+        "tipo": "Incidente Técnico",
+        "gatilhos": {
+            "divida_tecnica": [
+                "Alta (Legado Crítico)",
+                "Média (Sistemas Estáveis)"
+            ],
+            "probabilidade_base": 0.15,
+            "modificadores": [
+                {
+                    "condicao": "divida_tecnica == 'Alta (Legado Crítico)'",
+                    "fator": 2.0
+                },
+                {
+                    "condicao": "velocidade_operacional == 'Ágil (Startup)'",
+                    "fator": 0.8
+                }
+            ]
+        },
+        "impacto": {
+            "roi": -50000,
+            "moral_time": -10,
+            "confianca_stakeholders": -15
+        },
+        "descricao": "Um serviço core parou de funcionar devido a um erro não tratado em código legado."
+    },
+    {
+        "id": "evt_002",
+        "titulo": "Resistência Passiva em Reunião",
+        "tipo": "Conflito Humano",
+        "gatilhos": {
+            "historico_traumatico": [
+                true
+            ],
+            "ecossistema_humano": [
+                "Céticos"
+            ],
+            "probabilidade_base": 0.4
+        },
+        "impacto": {
+            "velocidade_sprint": -0.2,
+            "moral_time": -5
+        },
+        "descricao": "Stakeholders céticos questionam a necessidade da mudança, citando falhas do passado."
+    },
+    {
+        "id": "evt_003",
+        "titulo": "Perda de Talento Chave",
+        "tipo": "Turnover",
+        "gatilhos": {
+            "contexto_situacional": [
+                "Corte de Custos (Layoffs)",
+                "Fusão & Aquisição (M&A)"
+            ],
+            "probabilidade_base": 0.3
+        },
+        "impacto": {
+            "custo_reposicao": 30000,
+            "atraso_cronograma_dias": 15
+        },
+        "descricao": "Um Tech Lead ou Sênior decide sair da empresa devido à incerteza."
+    },
+    {
+        "id": "evt_004",
+        "titulo": "Aprovação de Orçamento Extra",
+        "tipo": "Oportunidade",
+        "gatilhos": {
+            "orcamento_disponivel": [
+                "Venture Capital (Alto)",
+                "Adequado (Padrão de Mercado)"
+            ],
+            "contexto_situacional": [
+                "Hipercrescimento (Scale-up)"
+            ],
+            "probabilidade_base": 0.2
+        },
+        "impacto": {
+            "roi": -100000,
+            "capacidade_contratacao": 5
+        },
+        "descricao": "A diretoria aprova budget para contratar mais 5 devs para acelerar o roadmap."
+    },
+    {
+        "id": "evt_005",
+        "titulo": "Gargalo de Processo Identificado",
+        "tipo": "Processo",
+        "gatilhos": {
+            "velocidade_operacional": [
+                "Burocrática (Lenta)"
+            ],
+            "probabilidade_base": 0.5
+        },
+        "impacto": {
+            "eficiencia": 0.1
+        },
+        "descricao": "O time identifica que a aprovação do CAB (Change Advisory Board) está demorando 3 dias a mais que o necessário."
+    }
+]

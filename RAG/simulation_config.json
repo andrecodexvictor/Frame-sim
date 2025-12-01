@@ -1,0 +1,85 @@
+{
+    "contexto_estrutural": {
+        "categoria_cenario": {
+            "valor": "HÍBRIDO / TRANSFORMAÇÃO DIGITAL GERAL",
+            "opcoes": [
+                "HÍBRIDO / TRANSFORMAÇÃO DIGITAL GERAL",
+                "DESENVOLVIMENTO (ENGENHARIA / DEVOPS / QA)",
+                "GESTÃO (ÁGIL / PROJETOS / PRODUTO)",
+                "GOVERNANÇA (COMPLIANCE / SEGURANÇA / AUDIT)"
+            ]
+        },
+        "setor_atuacao": {
+            "valor": "TECNOLOGIA / SAAS",
+            "opcoes": [
+                "TECNOLOGIA / SAAS",
+                "FINANCEIRO / FINTECH",
+                "VAREJO / E-COMMERCE",
+                "SAÚDE / PHARMA",
+                "INDÚSTRIA / MANUFATURA",
+                "SETOR PÚBLICO / GOV"
+            ]
+        },
+        "tamanho_ftes": {
+            "valor": 100,
+            "descricao": "Full Time Equivalents."
+        },
+        "orcamento_disponivel": {
+            "valor": "ADEQUADO (PADRÃO DE MERCADO)",
+            "opcoes": [
+                "RESTRITO (BOOTSTRAP/CRISE)",
+                "ADEQUADO (PADRÃO DE MERCADO)",
+                "AGRESSIVO (VENTURE CAPITAL/BONANÇA)"
+            ]
+        }
+    },
+    "calibragem_realismo": {
+        "divida_tecnica": {
+            "valor": "MÉDIA (SISTEMAS ESTÁVEIS)",
+            "opcoes": [
+                "BAIXA (GREENFIELD)",
+                "MÉDIA (SISTEMAS ESTÁVEIS)",
+                "ALTA (MONOLITO LEGADO)",
+                "CRÍTICA (RISCO DE COLAPSO)"
+            ]
+        },
+        "velocidade_operacional": {
+            "valor": "BUROCRÁTICA (LENTA)",
+            "opcoes": [
+                "STARTUP (CAOS ÁGIL)",
+                "ÁGIL CORPORATIVO",
+                "BUROCRÁTICA (LENTA)",
+                "FOSSILIZADA (RESISTENTE)"
+            ]
+        },
+        "historico_traumatico": {
+            "valor": true,
+            "descricao": "Sim, falhamos antes."
+        }
+    },
+    "ecossistema_humano": {
+        "distribuicao_selecionada": [
+            "Júnior / Trainee",
+            "Pleno",
+            "Sênior / Staff",
+            "Céticos",
+            "CTO / Tech Lead"
+        ],
+        "descricao": "Define quais arquétipos estarão mais presentes ou terão mais peso na simulação."
+    },
+    "contexto_situacional": {
+        "cenario_atual": "MIGRAÇÃO DE LEGADO CRÍTICO",
+        "opcoes": [
+            "FUSÃO & AQUISIÇÃO (M&A)",
+            "PREPARAÇÃO PARA IPO",
+            "MIGRAÇÃO DE LEGADO CRÍTICO",
+            "CORTE DE CUSTOS (LAYOFFS)",
+            "HIPERCRESCIMENTO (SCALE-UP)"
+        ]
+    },
+    "parametros_simulacao": {
+        "duracao_meses": 36,
+        "acuracia_alvo": "95%",
+        "adaptacao_pme": true
+    }
+}

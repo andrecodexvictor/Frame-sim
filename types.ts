@@ -1,75 +1,112 @@
 
-export interface TimelinePoint {
-  month: number;
-  adoptionRate: number; // 0-100
-  roi: number; // Percentage or raw value
-  compliance: number; // 0-100
-  efficiency: number; // 0-100
-}
-
-export interface Risk {
-  id: string;
-  category: 'Crítico' | 'Alto' | 'Médio' | 'Baixo';
-  description: string;
-  mitigation: string;
-}
-
-export interface Recommendation {
-  id: string;
-  phase: string;
-  action: string;
-}
-
-export interface KeyPersona {
-  role: string;
-  archetype: string;
-  sentiment: number; // 0-100
-  impact: string;
-}
-
-export interface HeatmapCell {
-  department: string;
-  score: number; // 0-100
-}
-
-export interface SimulationOutput {
-  frameworkName: string; // Added to identify output in comparison
-  summary: {
-    finalAdoption: number;
-    totalRoi: number;
-    maturityScore: number; // 0-10
-    monthsToComplete: number;
-  };
-  timeline: TimelinePoint[];
-  keyPersonas: KeyPersona[];
-  risks: Risk[];
-  recommendations: Recommendation[];
-  departmentReadiness: HeatmapCell[];
-}
-
 export interface FrameworkInput {
   id: string;
   name: string;
   text: string;
 }
 
+export type CorporateArchetype = 
+  | 'visionary'       // Early adopter, takes risks
+  | 'skeptic'         // "We tried this before"
+  | 'bureaucrat'      // Loves process, hates change
+  | 'legacy_keeper'   // Protects old systems
+  | 'overworked'      // No time for new things
+  | 'new_grad'        // Eager but inexperienced
+  | 'political_player' // Uses framework for power
+  | 'hr_guardian'     // Focus on culture/people protection
+  | 'sales_shark'     // Revenue first, process later
+  | 'data_driven'     // Needs metrics, hates feeling
+  | 'senior_staff'    // High XP, pragmatic, expensive
+  | 'mid_level'       // The execution engine (Pleno)
+  | 'ceo'             // Chief Executive Officer
+  | 'cmo'             // Chief Marketing Officer
+  | 'cto'             // Chief Technology Officer
+  | 'cfo'             // Chief Financial Officer
+  | 'coo';            // Chief Operating Officer
+
 export interface SimulationConfig {
-  frameworks: FrameworkInput[]; // Changed from single name/text to array
-  frameworkCategory: 'development' | 'management' | 'governance' | 'hybrid';
+  frameworks: FrameworkInput[];
+  frameworkCategory: 'development' | 'management' | 'governance' | 'hybrid' | string;
   companySize: number;
-  sector: 'tech' | 'finance' | 'retail' | 'healthcare' | 'other';
-  currentMaturity: number; // 1-5
-  budgetLevel: 'low' | 'medium' | 'high';
+  currentMaturity: number;
+  sector: string;
+  budgetLevel: string;
+  employeeArchetypes: CorporateArchetype[];
+  
+  // Realism & Accuracy Parameters
+  techDebtLevel: 'low' | 'medium' | 'high' | 'critical';
+  operationalVelocity: 'startup' | 'agile' | 'bureaucrat' | 'fossilized';
+  previousFailures: boolean;
+
+  // Scenario Context
+  scenarioMode: 'recommended' | 'custom';
+  selectedScenarioId?: string;
+  customScenarioText?: string;
 }
 
-export interface SingleSimulationConfig extends Omit<SimulationConfig, 'frameworks'> {
+export interface SingleSimulationConfig {
   frameworkName: string;
   frameworkText: string;
+  frameworkCategory: string;
+  companySize: number;
+  sector: string;
+  budgetLevel: string;
+  currentMaturity?: number;
+  employeeArchetypes: CorporateArchetype[];
+  
+  // Accuracy & Context
+  techDebtLevel: string;
+  operationalVelocity: string;
+  previousFailures: boolean;
+  scenarioContext: string;
 }
 
-export enum AppState {
-  UPLOAD = 'UPLOAD',
-  CONFIG = 'CONFIG',
-  SIMULATING = 'SIMULATING',
-  RESULTS = 'RESULTS',
+export interface SimulationOutput {
+  frameworkName: string;
+  summary: {
+    finalAdoption: number;
+    totalRoi: number;
+    maturityScore: number;
+    monthsToComplete: number;
+    scenarioValidity?: number; 
+  };
+  // New Visual Data
+  implementationNarrative: string; // Story of how it went
+  sentimentBreakdown: Array<{
+    group: string; // e.g., "Promotores", "Neutros", "Detratores"
+    value: number;
+  }>;
+  resourceAllocation: Array<{
+    category: string; // e.g., "Treinamento", "Ferramentas", "Consultoria", "Perda Produtividade"
+    amount: number; // Percentage or value
+  }>;
+  
+  timeline: Array<{
+    month: number;
+    adoptionRate: number;
+    roi: number;
+    compliance: number;
+    efficiency: number;
+  }>;
+  keyPersonas: Array<{
+    role: string;
+    archetype: string;
+    sentiment: number;
+    impact: string;
+  }>;
+  risks: Array<{
+    id: string;
+    category: string;
+    description: string;
+    mitigation: string;
+  }>;
+  recommendations: Array<{
+    id: string;
+    phase: string;
+    action: string;
+  }>;
+  departmentReadiness: Array<{
+    department: string;
+    score: number;
+  }>;
 }

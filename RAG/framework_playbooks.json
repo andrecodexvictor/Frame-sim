@@ -1,0 +1,110 @@
+{
+    "scrum": {
+        "nome": "Scrum",
+        "rituais": [
+            {
+                "nome": "Daily Standup",
+                "duracao": "15min",
+                "frequencia": "Diária",
+                "custo_tempo": 0.03
+            },
+            {
+                "nome": "Sprint Planning",
+                "duracao": "4h",
+                "frequencia": "Quinzenal",
+                "custo_tempo": 0.05
+            },
+            {
+                "nome": "Sprint Review",
+                "duracao": "2h",
+                "frequencia": "Quinzenal",
+                "custo_tempo": 0.025
+            },
+            {
+                "nome": "Sprint Retrospective",
+                "duracao": "1.5h",
+                "frequencia": "Quinzenal",
+                "custo_tempo": 0.02
+            }
+        ],
+        "regras_ouro": [
+            "Timebox rígido",
+            "PO define o 'O Quê', Time define o 'Como'",
+            "Nenhuma mudança no escopo durante a Sprint"
+        ],
+        "falhas_comuns_simulacao": [
+            {
+                "gatilho": "velocidade_operacional == 'BUROCRÁTICA (LENTA)'",
+                "efeito": "Daily vira status report de 1 hora"
+            },
+            {
+                "gatilho": "ecossistema_humano contem 'Céticos'",
+                "efeito": "Retrospectiva vira sessão de reclamação sem ação"
+            }
+        ]
+    },
+    "kanban": {
+        "nome": "Kanban",
+        "rituais": [
+            {
+                "nome": "Replenishment",
+                "duracao": "30min",
+                "frequencia": "Semanal",
+                "custo_tempo": 0.01
+            },
+            {
+                "nome": "Service Delivery Review",
+                "duracao": "1h",
+                "frequencia": "Quinzenal",
+                "custo_tempo": 0.01
+            }
+        ],
+        "regras_ouro": [
+            "Visualize o trabalho",
+            "Limite o WIP (Work in Progress)",
+            "Gerencie o fluxo"
+        ],
+        "falhas_comuns_simulacao": [
+            {
+                "gatilho": "divida_tecnica == 'ALTA (MONOLITO LEGADO)'",
+                "efeito": "WIP estoura devido a bloqueios constantes"
+            },
+            {
+                "gatilho": "orcamento_disponivel == 'RESTRITO (BOOTSTRAP/CRISE)'",
+                "efeito": "Fila de 'To Do' cresce infinitamente sem priorização"
+            }
+        ]
+    },
+    "safe": {
+        "nome": "SAFe (Scaled Agile Framework)",
+        "rituais": [
+            {
+                "nome": "PI Planning",
+                "duracao": "2 dias",
+                "frequencia": "Trimestral",
+                "custo_tempo": 0.05
+            },
+            {
+                "nome": "System Demo",
+                "duracao": "1h",
+                "frequencia": "Quinzenal",
+                "custo_tempo": 0.01
+            }
+        ],
+        "regras_ouro": [
+            "Alinhamento em escala",
+            "Qualidade embutida",
+            "Execução descentralizada"
+        ],
+        "falhas_comuns_simulacao": [
+            {
+                "gatilho": "tamanho_ftes < 50",
+                "efeito": "Overhead de processos mata a produtividade (ROI negativo)"
+            },
+            {
+                "gatilho": "velocidade_operacional == 'FOSSILIZADA (RESISTENTE)'",
+                "efeito": "SAFe vira Waterfall com nomes novos (Zombie Agile)"
+            }
+        ]
+    }
+}

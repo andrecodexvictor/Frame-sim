@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FrameSim // Deep Reality Engine</title>
+    <title>FrameSim // Enterprise Framework Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
@@ -19,11 +20,29 @@
                 black: '#0a0a0a',
                 white: '#fafafa',
                 green: '#00ff88',
+                purple: '#ff00ff',
                 red: '#ff3366',
+                yellow: '#ffaa00',
               }
             },
             boxShadow: {
               'hard': '4px 4px 0px 0px #0a0a0a',
+              'hard-green': '4px 4px 0px 0px #00ff88',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+              'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
             }
           }
         }
@@ -31,27 +50,30 @@
     </script>
     <style>
       body {
-        background-color: #09090b; /* Default dark solid base */
+        background-color: #f4f4f5;
+        color: #0a0a0a;
+        overflow-x: hidden;
+      }
+      .dark body {
+        background-color: #09090b;
         color: #fafafa;
       }
-      /* Custom Scrollbar */
       .custom-scrollbar::-webkit-scrollbar {
         width: 8px;
-        height: 8px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(0,0,0,0.1);
+        background: #18181b;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #333;
-        border-radius: 4px;
+        background: #00ff88;
+        border: 2px solid #18181b;
       }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #555;
+      /* Brutalist Utilities */
+      .brutal-border {
+        border: 3px solid #0a0a0a;
       }
-      
-      .brutal-card {
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      .dark .brutal-border {
+        border: 3px solid #27272a;
       }
     </style>
   <script type="importmap">
@@ -69,7 +91,7 @@
 }
 </script>
 </head>
-  <body>
+  <body class="antialiased transition-colors duration-300 selection:bg-brutal-green selection:text-black">
     <div id="root"></div>
   </body>
 </html>

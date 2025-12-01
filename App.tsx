@@ -2,114 +2,120 @@
 import React, { useState } from 'react';
 import { UploadSection } from './components/UploadSection';
 import { ConfigForm } from './components/ConfigForm';
+import { SimulationLoader } from './components/SimulationLoader';
 import { Dashboard } from './components/Dashboard';
 import { ComparisonDashboard } from './components/ComparisonDashboard';
-import { SimulationLoader } from './components/SimulationLoader';
-import { AppState, SimulationConfig, SimulationOutput, FrameworkInput, SingleSimulationConfig } from './types';
+import { FrameworkInput, SimulationConfig, SimulationOutput } from './types';
 import { runSimulation } from './services/geminiService';
 
-const App: React.FC = () => {
-  const [state, setState] = useState<AppState>(AppState.UPLOAD);
-  
-  // Now managing an array of inputs
-  const [frameworks, setFrameworks] = useState<FrameworkInput[]>([]);
-  
-  const [config, setConfig] = useState<SimulationConfig | null>(null);
-  // Store array of results (length 1 for single mode, >1 for comparison)
-  const [results, setResults] = useState<SimulationOutput[]>([]);
-  const [error, setError] = useState<string | null>(null);
+type Step = 'upload' | 'config' | 'simulating' | 'results';
 
-  const handleUploadNext = (inputs: FrameworkInput[]) => {
+const App: React.FC = () => {
+  const [step, setStep] = useState<Step>('upload');
+  const [frameworks, setFrameworks] = useState<FrameworkInput[]>([]);
+  const [config, setConfig] = useState<SimulationConfig | null>(null);
+  const [results, setResults] = useState<SimulationOutput[]>([]);
+  const [darkMode, setDarkMode] = useState(true);
+
+  const handleFrameworksSubmit = (inputs: FrameworkInput[]) => {
     setFrameworks(inputs);
-    setState(AppState.CONFIG);
+    setStep('config');
   };
 
   const handleConfigSubmit = async (simulationConfig: SimulationConfig) => {
     setConfig(simulationConfig);
-    setState(AppState.SIMULATING);
-    setError(null);
-    setResults([]);
+    setStep('simulating');
 
     try {
-      // Run simulations in parallel for all frameworks
-      // We map over the frameworks stored in state (or config) and call the service for each
-      // The service expects a single config object, so we spread the global config and override specific framework details
-      const promises = simulationConfig.frameworks.map(async (fw) => {
-        // Create a specific config for this run, keeping global params but isolating the framework text
-        // We separate frameworks array from the base config to match SingleSimulationConfig type
-        const { frameworks, ...baseConfig } = simulationConfig;
-        
-        const singleRunConfig: SingleSimulationConfig = {
-          ...baseConfig,
+      const promises = simulationConfig.frameworks.map(fw => {
+        // Construct the scenario context string based on user selection
+        const scenarioContext = simulationConfig.scenarioMode === 'custom'
+          ? simulationConfig.customScenarioText || "Nenhum cenário específico."
+          : `Cenário Recomendado: ${simulationConfig.selectedScenarioId} (Verificar preset)`;
+
+        return runSimulation({
           frameworkName: fw.name,
           frameworkText: fw.text,
-        };
-        
-        const output = await runSimulation(singleRunConfig);
-        // Ensure the output knows its name (service adds it, but just to be safe)
-        output.frameworkName = fw.name; 
-        return output;
+          frameworkCategory: simulationConfig.frameworkCategory,
+          companySize: simulationConfig.companySize,
+          sector: simulationConfig.sector,
+          budgetLevel: simulationConfig.budgetLevel,
+          currentMaturity: simulationConfig.currentMaturity,
+          employeeArchetypes: simulationConfig.employeeArchetypes,
+          // Pass new accuracy parameters
+          techDebtLevel: simulationConfig.techDebtLevel,
+          operationalVelocity: simulationConfig.operationalVelocity,
+          previousFailures: simulationConfig.previousFailures,
+          scenarioContext: scenarioContext
+        });
       });
 
-      const outputs = await Promise.all(promises);
-      setResults(outputs);
-      setState(AppState.RESULTS);
-
-    } catch (err) {
-      console.error(err);
-      setError("Falha ao gerar simulação. Verifique sua API Key ou reduza o número de comparações.");
-      setState(AppState.CONFIG);
+      const simulationResults = await Promise.all(promises);
+      setResults(simulationResults);
+      setStep('results');
+    } catch (error) {
+      console.error("Simulation failed", error);
+      setStep('config'); // Go back on error
+      alert("Erro ao executar a simulação. Verifique o console ou tente novamente.");
     }
   };
 
   const handleReset = () => {
-    setState(AppState.UPLOAD);
+    setStep('upload');
     setFrameworks([]);
     setConfig(null);
     setResults([]);
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8 relative">
-      <div className="scanline"></div>
-      
-      {/* Brutalist Corner Decorations */}
-      <div className="fixed top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-black pointer-events-none z-50 mix-blend-difference"></div>
-      <div className="fixed top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-black pointer-events-none z-50 mix-blend-difference"></div>
-      <div className="fixed bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-black pointer-events-none z-50 mix-blend-difference"></div>
-      <div className="fixed bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-black pointer-events-none z-50 mix-blend-difference"></div>
+    <div className={`${darkMode ? 'dark' : ''} min-h-screen font-sans transition-colors duration-500`}>
+      <div className="min-h-screen bg-brutal-white dark:bg-brutal-black text-brutal-black dark:text-brutal-white relative overflow-hidden">
+        
+        {/* Ambient Background Noise/Grid */}
+        <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+        <div className="absolute inset-0 z-0 opacity-5 pointer-events-none" 
+             style={{ 
+               backgroundImage: `linear-gradient(${darkMode ? '#333' : '#ccc'} 1px, transparent 1px), linear-gradient(90deg, ${darkMode ? '#333' : '#ccc'} 1px, transparent 1px)`, 
+               backgroundSize: '40px 40px' 
+             }}>
+        </div>
 
-      <main className="container mx-auto mt-12 mb-12">
-        {state === AppState.UPLOAD && (
-          <UploadSection onNext={handleUploadNext} />
-        )}
+        <main className="relative z-10 container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-screen">
+          
+          {step === 'upload' && (
+            <UploadSection onNext={handleFrameworksSubmit} />
+          )}
 
-        {state === AppState.CONFIG && (
-          <ConfigForm 
-            frameworks={frameworks}
-            onSubmit={handleConfigSubmit}
-            onBack={() => setState(AppState.UPLOAD)}
-          />
-        )}
+          {step === 'config' && (
+            <ConfigForm 
+              frameworks={frameworks} 
+              onSubmit={handleConfigSubmit} 
+              onBack={() => setStep('upload')}
+            />
+          )}
 
-        {state === AppState.SIMULATING && (
-          <SimulationLoader />
-        )}
+          {step === 'simulating' && (
+            <SimulationLoader />
+          )}
 
-        {state === AppState.RESULTS && results.length > 0 && config && (
-          results.length === 1 ? (
-             <Dashboard data={results[0]} config={config} onReset={handleReset} />
-          ) : (
-             <ComparisonDashboard results={results} config={config} onReset={handleReset} />
-          )
-        )}
+          {step === 'results' && config && (
+            results.length === 1 ? (
+              <Dashboard 
+                data={results[0]} 
+                config={config} 
+                onReset={handleReset} 
+              />
+            ) : (
+              <ComparisonDashboard 
+                results={results} 
+                config={config} 
+                onReset={handleReset} 
+              />
+            )
+          )}
 
-        {error && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-red-100 border-4 border-red-500 text-red-600 p-4 font-bold shadow-hard animate-bounce z-50">
-            ERRO: {error}
-          </div>
-        )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 };

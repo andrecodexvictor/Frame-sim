@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend
 } from 'recharts';
 import { SimulationOutput, SimulationConfig } from '../types';
@@ -170,7 +170,7 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
                     <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: darkMode ? '#18181b' : '#fff', border: '1px solid #333'}} />
                     <Bar dataKey="roi" radius={[0, 4, 4, 0]}>
                       {comparisonData.map((entry, index) => (
-                        <cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                        <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
                       ))}
                     </Bar>
                  </BarChart>
