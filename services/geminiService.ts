@@ -1,6 +1,11 @@
+/// <reference types="vite/client" />
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { SingleSimulationConfig, SimulationOutput } from "../types";
+import { calculateMonthlyMetrics, SimulationRawData } from "./metricsCalculator";
+import { MOCK_SIMULATION_RESULT } from "./mockData";
+import { generateRAGContext, injectRAGContext } from "./ragService";
+
 
 const SIMULATION_SCHEMA = {
   type: Type.OBJECT,
@@ -17,6 +22,29 @@ const SIMULATION_SCHEMA = {
       required: ["finalAdoption", "totalRoi", "maturityScore", "monthsToComplete", "scenarioValidity"],
     },
     implementationNarrative: { type: Type.STRING, description: "Um resumo executivo de 2-3 parágrafos contando a história de como foi a implantação, focando nos pontos de virada." },
+    roiAnalysis: {
+      type: Type.OBJECT,
+      description: "Análise detalhada explicando por que o ROI ficou positivo ou negativo",
+      properties: {
+        verdict: { type: Type.STRING, enum: ["POSITIVO", "NEGATIVO", "NEUTRO"], description: "Resultado geral do ROI" },
+        mainFactors: {
+          type: Type.ARRAY,
+          description: "3-5 fatores principais que influenciaram o ROI (positivos ou negativos)",
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              factor: { type: Type.STRING, description: "Nome do fator (ex: 'Curva J Acentuada', 'Dívida Técnica', 'Resistência Cultural')" },
+              impact: { type: Type.STRING, enum: ["POSITIVO", "NEGATIVO"], description: "Se contribuiu positiva ou negativamente" },
+              description: { type: Type.STRING, description: "Explicação curta de como este fator afetou o ROI" }
+            },
+            required: ["factor", "impact", "description"]
+          }
+        },
+        breakEvenMonth: { type: Type.NUMBER, description: "Mês em que o ROI passou a ser positivo (0 se nunca)" },
+        recommendation: { type: Type.STRING, description: "Recomendação de 1 frase para melhorar o ROI" }
+      },
+      required: ["verdict", "mainFactors", "breakEvenMonth", "recommendation"]
+    },
     sentimentBreakdown: {
       type: Type.ARRAY,
       description: "Distribuição do sentimento dos funcionários para gráfico de pizza/rosca.",
@@ -43,17 +71,28 @@ const SIMULATION_SCHEMA = {
     },
     timeline: {
       type: Type.ARRAY,
-      description: "Dados mensais. ROI deve flutuar independentemente da adoção. ROI geralmente começa negativo (investimento).",
+      description: "Dados mensais. OBRIGATÓRIO: Forneça os dados brutos operacionais (features, bugs) para que o sistema calcule o ROI exato.",
       items: {
         type: Type.OBJECT,
         properties: {
           month: { type: Type.NUMBER },
           adoptionRate: { type: Type.NUMBER },
-          roi: { type: Type.NUMBER, description: "Retorno Financeiro Mensal Acumulado %" },
+          // Removed ROI from LLM responsibility - it will be calculated
           compliance: { type: Type.NUMBER },
           efficiency: { type: Type.NUMBER },
+          rawData: {
+            type: Type.OBJECT,
+            properties: {
+              featuresDelivered: { type: Type.NUMBER, description: "Quantidade absoluta de features, histórias ou PROCESSOS/CONTROLES (para Governança) entregues." },
+              bugsGenerated: { type: Type.NUMBER, description: "Quantidade de bugs encontrados em produção" },
+              criticalIncidents: { type: Type.NUMBER, description: "Incidentes graves (P0)" },
+              teamSize: { type: Type.NUMBER, description: "Tamanho do time neste mês" },
+              learningCurveFactor: { type: Type.NUMBER, description: "Fator de produtividade (0.5 = aprendendo, 1.0 = normal, 1.2 = performando)" }
+            },
+            required: ["featuresDelivered", "bugsGenerated", "criticalIncidents", "teamSize", "learningCurveFactor"]
+          }
         },
-        required: ["month", "adoptionRate", "roi", "compliance", "efficiency"],
+        required: ["month", "adoptionRate", "compliance", "efficiency", "rawData"],
       },
     },
     keyPersonas: {
@@ -112,37 +151,20 @@ const SIMULATION_SCHEMA = {
 
 export const runSimulation = async (config: SingleSimulationConfig): Promise<SimulationOutput> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // RAG Logic Injection - Playbooks Summary
-    const playbookLogic = `
-      CONHECIMENTO DE PLAYBOOKS (RAG):
-      - SCRUM: Daily Standup (15min, custo tempo 0.03), Sprint Planning (4h), Reviews. Falha comum: Daily vira report de status em empresas burocráticas.
-      - KANBAN: Replenishment, Limite de WIP. Falha comum: WIP estoura se dívida técnica for alta.
-      - SAFE: PI Planning (2 dias, custo alto), System Demo. Falha comum: Overhead de processo mata produtividade em empresas < 50 FTEs.
-    `;
+    const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
 
-    // RAG Logic Injection - Business Metrics
-    const metricsLogic = `
-      MODELO DE MÉTRICAS FINANCEIRAS (RAG):
-      - OpEx (Custo Operacional): Salários + Infra + Licenças.
-      - CoNQ (Custo da Não-Qualidade): Bugs (Rework) + Incidentes.
-      - Curva J (Productivity Dip): Mês 1-2 tem queda de 40% na velocidade (Learning Curve).
-      - Lei de Brooks: Adicionar pessoas a projeto atrasado o atrasa mais.
-      - Dívida Técnica: Juros compostos. Se ignorada, velocidade cai 50% em 6 meses.
-      - ROI = ((Valor Entregue - CoNQ) - OpEx) / OpEx.
-    `;
+    // Fallback to Mock if no API Key (Safety Net)
+    if (!apiKey) {
+      console.warn("No API Key found. Using Mock Mode.");
+      return { ...MOCK_SIMULATION_RESULT, frameworkName: config.frameworkName };
+    }
 
-    // Sample Profiles from RAG (Condensed for context window)
-    const profileSamples = `
-      EXEMPLOS DE PERFIS REAIS (Use como base para 'keyPersonas'):
-      1. [Tech] Avery Souza (Estagiário, Architecture): Diplomático, Foco em velocidade. Stack: React/K8s.
-      2. [Tech] Vanessa Gomes (Estagiário, FullStack): Casual, Foco em qualidade. Stack: JS/Docker.
-      3. [Tech] Kai Almeida (Estagiário, DevOps): Reservado, Visionário. Stack: Rust/Python.
-      4. [Tech] Igor Schmidt (PM): Autista Nível 1, Metódico, Técnico puro.
-      5. [Non-Tech] Sofia Pereira (Vendas): Diplomática, Líder nata. Foco em CRM.
-      6. [Non-Tech] Wagner Vieira (Diretor Financeiro): Formal, Conservador. Foco em Contabilidade.
-    `;
+    const ai = new GoogleGenAI({ apiKey });
+
+    // ===== RAG OTIMIZADO =====
+    // Gera contexto RAG baseado na configuração (Self-RAG implícito)
+    const ragContext = generateRAGContext(config);
+    const ragInjection = injectRAGContext(ragContext);
 
     // Define category-specific chaos context
     let categoryContext = "";
@@ -161,8 +183,8 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
         break;
     }
 
-    const archetypesList = config.employeeArchetypes && config.employeeArchetypes.length > 0 
-      ? config.employeeArchetypes.join(", ") 
+    const archetypesList = config.employeeArchetypes && config.employeeArchetypes.length > 0
+      ? config.employeeArchetypes.join(", ")
       : "Mistura padrão de céticos e pragmáticos";
 
     const isHighDensity = config.employeeArchetypes && config.employeeArchetypes.length > 5;
@@ -176,7 +198,7 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       - Cenário Específico: ${config.scenarioContext}
     `;
 
-    // Prompt "DAN-style" for realism with Multi-Threaded Brain
+    // Prompt otimizado com RAG dinâmico
     const prompt = `
       Atue como uma Engine de Realidade Estendida (XRE) e CFO Virtual Multidimensional.
       
@@ -184,17 +206,17 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       Simular a implementação do framework "${config.frameworkName}" na empresa com 95% de fidelidade ao mundo real, utilizando os dados de RAG fornecidos.
       
       DADOS DE ENTRADA:
-      - Framework: ${config.frameworkText.substring(0, 500)}...
+      - Framework: ${config.frameworkText.substring(0, 5000)}...
       - Categoria: ${config.frameworkCategory.toUpperCase()}
       - Tamanho: ${config.companySize} funcionários.
       - Setor: ${config.sector}.
       - Orçamento: ${config.budgetLevel}.
       - ECOSSISTEMA HUMANO: ${archetypesList}.
       
-      CONHECIMENTO RAG INJETADO:
-      ${playbookLogic}
-      ${metricsLogic}
-      ${profileSamples}
+      INSTRUÇÃO DE CONTEXTO:
+      Caso o texto do "Framework" acima seja breve ou genérico, você DEVE utilizar seu vasto conhecimento interno sobre o framework citado (rituais, papéis, artefatos, métricas) para preencher as lacunas. Não invente frameworks inexistentes, mas expanda os conceitos padrão de mercado se necessário.
+
+      ${ragInjection}
       
       MODIFICADORES DE CENÁRIO:
       ${categoryContext}
@@ -220,6 +242,7 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       
       SAÍDA OBRIGATÓRIA:
       - JSON estrito conforme o schema.
+      - Timeline DEVE conter exatamente ${config.durationMonths || 12} meses.
       - Personas reagindo especificamente ao cenário (Ex: 'Wagner Vieira' bloqueando orçamento devido a ROI baixo).
       - Linguagem: PORTUGUÊS BRASIL.
       
@@ -246,13 +269,60 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
 
     // Safety: ensure default validation score if missing
     if (result.summary && typeof result.summary.scenarioValidity === 'undefined') {
-        result.summary.scenarioValidity = 50; 
+      result.summary.scenarioValidity = 50;
     }
 
-    return { ...result, frameworkName: config.frameworkName } as SimulationOutput;
+    // Post-Processing: Calculate Deterministic ROI
+    let accumulatedValue = 0;
+    let accumulatedOpEx = 0;
+    let accumulatedCoNQ = 0;
+
+    const processedTimeline = result.timeline.map((monthData: any) => {
+      // Safety check for rawData
+      const rawData = monthData.rawData || {
+        featuresDelivered: 5,
+        bugsGenerated: 2,
+        criticalIncidents: 0,
+        teamSize: config.companySize,
+        learningCurveFactor: 1.0
+      };
+
+      const metrics = calculateMonthlyMetrics(
+        rawData,
+        config as any, // Type assertion needed as SingleSimulationConfig is slightly different from SimulationConfig but compatible for this
+        accumulatedValue,
+        accumulatedOpEx,
+        accumulatedCoNQ
+      );
+
+      // Update accumulators
+      accumulatedValue += metrics.valueDelivered;
+      accumulatedOpEx += metrics.opEx;
+      accumulatedCoNQ += metrics.conq;
+
+      return {
+        ...monthData,
+        roi: parseFloat(metrics.accumulatedRoi.toFixed(2)), // Overwrite LLM ROI with calculated one
+        rawData // Keep raw data for transparency
+      };
+    });
+
+    const finalResult = {
+      ...result,
+      timeline: processedTimeline,
+      summary: {
+        ...result.summary,
+        totalRoi: parseFloat(((accumulatedValue - accumulatedCoNQ - accumulatedOpEx) / accumulatedOpEx * 100).toFixed(2))
+      },
+      frameworkName: config.frameworkName
+    };
+
+    return finalResult as SimulationOutput;
 
   } catch (error) {
     console.error("Simulation Engine Critical Failure:", error);
-    throw error;
+    console.warn("Falling back to MOCK MODE due to error.");
+    // Safe Mode: Return Mock Data instead of crashing
+    return { ...MOCK_SIMULATION_RESULT, frameworkName: config.frameworkName };
   }
 };

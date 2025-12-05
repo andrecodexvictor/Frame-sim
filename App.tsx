@@ -5,10 +5,11 @@ import { ConfigForm } from './components/ConfigForm';
 import { SimulationLoader } from './components/SimulationLoader';
 import { Dashboard } from './components/Dashboard';
 import { ComparisonDashboard } from './components/ComparisonDashboard';
+import { BatchSimulationPanel } from './components/BatchSimulationPanel';
 import { FrameworkInput, SimulationConfig, SimulationOutput } from './types';
 import { runSimulation } from './services/geminiService';
 
-type Step = 'upload' | 'config' | 'simulating' | 'results';
+type Step = 'upload' | 'config' | 'simulating' | 'results' | 'batch';
 
 const App: React.FC = () => {
   const [step, setStep] = useState<Step>('upload');
@@ -46,7 +47,8 @@ const App: React.FC = () => {
           techDebtLevel: simulationConfig.techDebtLevel,
           operationalVelocity: simulationConfig.operationalVelocity,
           previousFailures: simulationConfig.previousFailures,
-          scenarioContext: scenarioContext
+          scenarioContext: scenarioContext,
+          durationMonths: simulationConfig.durationMonths || 12
         });
       });
 
@@ -70,27 +72,38 @@ const App: React.FC = () => {
   return (
     <div className={`${darkMode ? 'dark' : ''} min-h-screen font-sans transition-colors duration-500`}>
       <div className="min-h-screen bg-brutal-white dark:bg-brutal-black text-brutal-black dark:text-brutal-white relative overflow-hidden">
-        
+
         {/* Ambient Background Noise/Grid */}
         <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
-        <div className="absolute inset-0 z-0 opacity-5 pointer-events-none" 
-             style={{ 
-               backgroundImage: `linear-gradient(${darkMode ? '#333' : '#ccc'} 1px, transparent 1px), linear-gradient(90deg, ${darkMode ? '#333' : '#ccc'} 1px, transparent 1px)`, 
-               backgroundSize: '40px 40px' 
-             }}>
+        <div className="absolute inset-0 z-0 opacity-5 pointer-events-none"
+          style={{
+            backgroundImage: `linear-gradient(${darkMode ? '#333' : '#ccc'} 1px, transparent 1px), linear-gradient(90deg, ${darkMode ? '#333' : '#ccc'} 1px, transparent 1px)`,
+            backgroundSize: '40px 40px'
+          }}>
         </div>
 
         <main className="relative z-10 container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-screen">
-          
+
           {step === 'upload' && (
             <UploadSection onNext={handleFrameworksSubmit} />
           )}
 
           {step === 'config' && (
-            <ConfigForm 
-              frameworks={frameworks} 
-              onSubmit={handleConfigSubmit} 
+            <ConfigForm
+              frameworks={frameworks}
+              onSubmit={handleConfigSubmit}
               onBack={() => setStep('upload')}
+              onBatchMode={(config) => {
+                setConfig(config);
+                setStep('batch');
+              }}
+            />
+          )}
+
+          {step === 'batch' && config && (
+            <BatchSimulationPanel
+              config={config}
+              onBack={() => setStep('config')}
             />
           )}
 
@@ -100,16 +113,16 @@ const App: React.FC = () => {
 
           {step === 'results' && config && (
             results.length === 1 ? (
-              <Dashboard 
-                data={results[0]} 
-                config={config} 
-                onReset={handleReset} 
+              <Dashboard
+                data={results[0]}
+                config={config}
+                onReset={handleReset}
               />
             ) : (
-              <ComparisonDashboard 
-                results={results} 
-                config={config} 
-                onReset={handleReset} 
+              <ComparisonDashboard
+                results={results}
+                config={config}
+                onReset={handleReset}
               />
             )
           )}

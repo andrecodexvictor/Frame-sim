@@ -5,7 +5,7 @@ export interface FrameworkInput {
   text: string;
 }
 
-export type CorporateArchetype = 
+export type CorporateArchetype =
   | 'visionary'       // Early adopter, takes risks
   | 'skeptic'         // "We tried this before"
   | 'bureaucrat'      // Loves process, hates change
@@ -32,7 +32,7 @@ export interface SimulationConfig {
   sector: string;
   budgetLevel: string;
   employeeArchetypes: CorporateArchetype[];
-  
+
   // Realism & Accuracy Parameters
   techDebtLevel: 'low' | 'medium' | 'high' | 'critical';
   operationalVelocity: 'startup' | 'agile' | 'bureaucrat' | 'fossilized';
@@ -42,6 +42,7 @@ export interface SimulationConfig {
   scenarioMode: 'recommended' | 'custom';
   selectedScenarioId?: string;
   customScenarioText?: string;
+  durationMonths?: number;
 }
 
 export interface SingleSimulationConfig {
@@ -53,12 +54,13 @@ export interface SingleSimulationConfig {
   budgetLevel: string;
   currentMaturity?: number;
   employeeArchetypes: CorporateArchetype[];
-  
+
   // Accuracy & Context
   techDebtLevel: string;
   operationalVelocity: string;
   previousFailures: boolean;
   scenarioContext: string;
+  durationMonths?: number;
 }
 
 export interface SimulationOutput {
@@ -68,7 +70,7 @@ export interface SimulationOutput {
     totalRoi: number;
     maturityScore: number;
     monthsToComplete: number;
-    scenarioValidity?: number; 
+    scenarioValidity?: number;
   };
   // New Visual Data
   implementationNarrative: string; // Story of how it went
@@ -80,13 +82,21 @@ export interface SimulationOutput {
     category: string; // e.g., "Treinamento", "Ferramentas", "Consultoria", "Perda Produtividade"
     amount: number; // Percentage or value
   }>;
-  
+
   timeline: Array<{
     month: number;
     adoptionRate: number;
     roi: number;
     compliance: number;
     efficiency: number;
+    // Raw Data for Validation
+    rawData?: {
+      featuresDelivered: number;
+      bugsGenerated: number;
+      criticalIncidents: number;
+      teamSize: number;
+      learningCurveFactor: number;
+    };
   }>;
   keyPersonas: Array<{
     role: string;

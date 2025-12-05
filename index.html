@@ -70,26 +70,85 @@
       }
       /* Brutalist Utilities */
       .brutal-border {
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrameSim // Enterprise Framework Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['Space Mono', 'monospace'],
+            },
+            colors: {
+              brutal: {
+                black: '#0a0a0a',
+                white: '#fafafa',
+                green: '#00ff88',
+                purple: '#ff00ff',
+                red: '#ff3366',
+                yellow: '#ffaa00',
+              }
+            },
+            boxShadow: {
+              'hard': '4px 4px 0px 0px #0a0a0a',
+              'hard-green': '4px 4px 0px 0px #00ff88',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+              'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #f4f4f5;
+        color: #0a0a0a;
+        overflow-x: hidden;
+      }
+      .dark body {
+        background-color: #09090b;
+        color: #fafafa;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #18181b;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #00ff88;
+        border: 2px solid #18181b;
+      }
+      /* Brutalist Utilities */
+      .brutal-border {
         border: 3px solid #0a0a0a;
       }
       .dark .brutal-border {
         border: 3px solid #27272a;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react-hook-form": "https://aistudiocdn.com/react-hook-form@^7.66.1",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.0"
-  }
-}
-</script>
+    <script type="module" src="/index.tsx"></script>
 </head>
   <body class="antialiased transition-colors duration-300 selection:bg-brutal-green selection:text-black">
     <div id="root"></div>
