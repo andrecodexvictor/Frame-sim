@@ -7,6 +7,49 @@ import { MOCK_SIMULATION_RESULT } from "./mockData";
 import { generateRAGContext, injectRAGContext } from "./ragService";
 
 
+// === NEW: Document Digestion Service (Gemini Flash) ===
+export const digestFrameworkDocument = async (rawText: string): Promise<string> => {
+  try {
+    const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
+    if (!apiKey) return rawText; // Fallback if no key
+
+    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `Você é um Arquiteto de Soluções Sênior. Sua tarefa é analisar este documento técnico de um Framework Corporativo e extrair um MANIFESTO ESTRUTURADO DENSO para ser usado em uma simulação.
+            
+            Foque em:
+            1. Valores Core e Filosofia
+            2. Papéis e Responsabilidades (Quem faz o que)
+            3. Cerimônias, Reuniões e Eventos
+            4. Artefatos e Saídas
+            5. Estratégias de Adoção Recomendadas
+
+            Se o texto for muito longo, priorize os processos e regras de negócio.
+            
+            SAÍDA: Um texto Markdown bem estruturado e conciso (máximo 4000 caracteres) com essas seções.`
+          }, {
+            text: `DOCUMENTO ORIGINAL (Trecho): ${rawText.slice(0, 500000)}` // Limit to safe Flash context
+          }]
+        }]
+      })
+    });
+
+    const data = await result.json();
+    const digest = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    return digest ? `=== DOCUMENTO DIGERIDO (via Gemini 1.5 Flash) ===\n\n${digest}` : rawText;
+
+  } catch (error) {
+    console.error("Erro na digestão do documento:", error);
+    return rawText; // Fallback to raw text on error
+  }
+};
+
+
 const SIMULATION_SCHEMA = {
   type: Type.OBJECT,
   properties: {

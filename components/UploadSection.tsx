@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
-import { Upload, FileText, AlertTriangle, Plus, Trash2, Layers, Zap, Paperclip, Check } from 'lucide-react';
+import { Upload, FileText, AlertTriangle, Plus, Trash2, Layers, Zap, Paperclip, Check, Loader2 } from 'lucide-react';
 import { BrutalButton } from './ui/BrutalButton';
 import { FrameworkInput } from '../types';
+import { digestFrameworkDocument } from '../services/geminiService';
 
 interface UploadSectionProps {
   onNext: (inputs: FrameworkInput[]) => void;
@@ -11,6 +12,7 @@ interface UploadSectionProps {
 export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
   const [mode, setMode] = useState<'single' | 'compare'>('single');
   const [inputs, setInputs] = useState<FrameworkInput[]>([{ id: '1', name: '', text: '' }]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Single file state (legacy support for drag drop visual)
   const [dragActive, setDragActive] = useState(false);
@@ -32,33 +34,82 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
   };
 
   const processFile = async (file: File): Promise<string> => {
-    // Try to read text content from supported files
+    let extractedText = '';
+
+    // 1. Text Files including JSON/MD/CSV
     if (file.type.startsWith('text/') ||
       file.name.endsWith('.md') ||
       file.name.endsWith('.json') ||
       file.name.endsWith('.txt') ||
       file.name.endsWith('.csv')) {
       try {
-        const text = await file.text();
-        return text.slice(0, 15000); // Limit context size for token efficiency
+        extractedText = (await file.text()).slice(0, 500000);
       } catch (e) {
         console.warn('Failed to read text file', e);
       }
     }
-    return `Conteúdo técnico extraído do arquivo: ${file.name}.`;
+    // 2. PDF Handling
+    else if (file.type === 'application/pdf') {
+      try {
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        let fullText = '';
+        // Read ALL pages for digestion (up to ~50 pages safe limit for speed)
+        const maxPages = Math.min(pdf.numPages, 50);
+
+        for (let i = 1; i <= maxPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          extractedText += `\n--- Page ${i} ---\n${pageText}`;
+        }
+      } catch (e) {
+        console.error('PDF parsing error', e);
+        return `Erro ao ler PDF: ${file.name}.`;
+      }
+    }
+    // 3. DOCX Handling
+    else if (file.name.endsWith('.docx')) {
+      try {
+        const mammoth = await import('mammoth');
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        extractedText = result.value.slice(0, 500000);
+      } catch (e) {
+        console.error('DOCX parsing error', e);
+        return `Erro ao ler DOCX: ${file.name}.`;
+      }
+    } else {
+      return `Tipo de arquivo não suportado: ${file.name}`;
+    }
+
+    // Call Gemini Flash for Digestion if content is substantial
+    if (extractedText.length > 200) {
+      return await digestFrameworkDocument(extractedText);
+    }
+
+    return extractedText;
   };
 
   const handleFileSelect = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const content = await processFile(file);
+      setIsProcessing(true);
       const fileName = file.name.split('.')[0];
 
-      setInputs(prev => prev.map(i => i.id === id ? {
-        ...i,
-        name: i.name || fileName, // Only auto-fill name if empty
-        text: content
-      } : i));
+      // Update name immediately if empty
+      setInputs(prev => prev.map(i => i.id === id ? { ...i, name: i.name || fileName } : i));
+
+      try {
+        const content = await processFile(file);
+        setInputs(prev => prev.map(i => i.id === id ? { ...i, text: content } : i));
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -91,14 +142,19 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      const content = await processFile(file);
+      setIsProcessing(true);
       const fileName = file.name.split('.')[0];
 
-      setInputs(prev => prev.map((i, idx) => idx === 0 ? {
-        ...i,
-        name: i.name || fileName,
-        text: content
-      } : i));
+      try {
+        const content = await processFile(file);
+        setInputs(prev => prev.map((i, idx) => idx === 0 ? {
+          ...i,
+          name: i.name || fileName,
+          text: content
+        } : i));
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -152,21 +208,33 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
               >
                 <div className="flex flex-col items-center gap-4 text-zinc-500 dark:text-zinc-400">
                   <div className="relative">
-                    <Upload className="w-12 h-12" />
-                    {inputs[0].text && (
-                      <div className="absolute -right-2 -top-2 bg-brutal-green text-black rounded-full p-1 border-2 border-black">
-                        <Check className="w-3 h-3" />
-                      </div>
+                    {isProcessing ? (
+                      <Loader2 className="w-12 h-12 animate-spin text-brutal-green" />
+                    ) : (
+                      <>
+                        <Upload className="w-12 h-12" />
+                        {inputs[0].text && (
+                          <div className="absolute -right-2 -top-2 bg-brutal-green text-black rounded-full p-1 border-2 border-black">
+                            <Check className="w-3 h-3" />
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   <p className="font-mono text-sm uppercase">
-                    {inputs[0].text ? 'Arquivo Carregado com Sucesso' : 'Arraste o documento técnico ou digite o nome acima'}
+                    {isProcessing
+                      ? 'Processando IA (Isso pode levar alguns segundos)...'
+                      : inputs[0].text
+                        ? 'Arquivo Processado com Sucesso!'
+                        : 'Arraste o documento técnico ou digite o nome acima'
+                    }
                   </p>
                 </div>
                 <input
                   type="file"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={(e) => handleFileSelect(inputs[0].id, e)}
+                  disabled={isProcessing}
                 />
               </div>
             </div>
@@ -193,8 +261,8 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
                       onChange={(e) => handleInputChange(input.id, 'name', e.target.value)}
                     />
                     <label className={`cursor-pointer p-2 rounded transition-all ${input.text ? 'bg-brutal-green/20 text-brutal-green' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400'}`} title="Importar Arquivo">
-                      <input type="file" className="hidden" onChange={(e) => handleFileSelect(input.id, e)} />
-                      {input.text ? <Check className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
+                      <input type="file" className="hidden" onChange={(e) => handleFileSelect(input.id, e)} disabled={isProcessing} />
+                      {isProcessing && idx === 0 ? <Loader2 className="w-4 h-4 animate-spin" /> : (input.text ? <Check className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />)}
                     </label>
                   </div>
                   {inputs.length > 2 && (
@@ -212,15 +280,15 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
 
           <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 text-xs font-mono flex gap-2 dark:text-blue-200">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            <p>A importação de arquivos enriquece o contexto da IA para uma simulação mais precisa.</p>
+            <p>O conteúdo do arquivo será analisado pela IA para extrair parâmetros técnicos cruciais.</p>
           </div>
 
           <BrutalButton
             className="w-full"
             onClick={handleSubmit}
-            disabled={inputs.some(i => !i.name)}
+            disabled={inputs.some(i => !i.name) || isProcessing}
           >
-            {mode === 'single' ? 'INICIAR SIMULAÇÃO ÚNICA' : 'INICIAR BATALHA COMPARATIVA'} &rarr;
+            {isProcessing ? 'PROCESSANDO DOCUMENTOS...' : (mode === 'single' ? 'INICIAR SIMULAÇÃO ÚNICA' : 'INICIAR BATALHA COMPARATIVA')} &rarr;
           </BrutalButton>
         </div>
       </div>
