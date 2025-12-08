@@ -222,9 +222,134 @@ const SIMULATION_SCHEMA = {
   required: ["summary", "implementationNarrative", "sentimentBreakdown", "resourceAllocation", "timeline", "keyPersonas", "risks", "recommendations", "departmentReadiness", "businessMetrics", "companyEvolution"],
 };
 
-export const runSimulation = async (config: SingleSimulationConfig): Promise<SimulationOutput> => {
+// API Key Rotation Pool - 7 keys from different Google Cloud projects
+const getApiKeys = (): string[] => {
+  const keys = [
+    import.meta.env.VITE_API_KEY,
+    import.meta.env.VITE_API_KEY_2,
+    import.meta.env.VITE_API_KEY_3,
+    import.meta.env.VITE_API_KEY_4,
+    import.meta.env.VITE_API_KEY_5,
+    import.meta.env.VITE_API_KEY_6,
+    import.meta.env.VITE_API_KEY_7
+  ].filter(k => !!k) as string[];
+  return keys;
+};
+
+let currentKeyIndex = 0;
+
+const getNextApiKey = (): string | null => {
+  const keys = getApiKeys();
+  if (keys.length === 0) return null;
+  currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+  console.log(`🔄 Rotating to API Key ${currentKeyIndex + 1} of ${keys.length}`);
+  return keys[currentKeyIndex];
+};
+
+// ================== FALLBACK PROVIDERS ==================
+
+// OpenAI Fallback (GPT-4)
+const runSimulationWithOpenAI = async (config: SingleSimulationConfig, prompt: string): Promise<any | null> => {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn("⚠️ OpenAI API key not configured, skipping OpenAI fallback");
+    return null;
+  }
+
+  console.log("🤖 Attempting OpenAI GPT-4 fallback...");
+
   try {
-    const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4-turbo-preview",
+        messages: [
+          { role: "system", content: "You are a corporate framework simulation expert. Always respond with valid JSON only." },
+          { role: "user", content: prompt + "\n\nRespond ONLY with the JSON, no markdown blocks." }
+        ],
+        temperature: 0.6,
+        response_format: { type: "json_object" }
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("OpenAI API error:", errorData);
+      return null;
+    }
+
+    const data = await response.json();
+    const jsonText = data.choices[0]?.message?.content;
+    if (!jsonText) return null;
+
+    console.log("✅ OpenAI fallback successful!");
+    return JSON.parse(jsonText);
+  } catch (error) {
+    console.error("❌ OpenAI fallback failed:", error);
+    return null;
+  }
+};
+
+// DeepSeek Fallback
+const runSimulationWithDeepSeek = async (config: SingleSimulationConfig, prompt: string): Promise<any | null> => {
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    console.warn("⚠️ DeepSeek API key not configured, skipping DeepSeek fallback");
+    return null;
+  }
+
+  console.log("🤖 Attempting DeepSeek fallback...");
+
+  try {
+    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: "You are a corporate framework simulation expert. Always respond with valid JSON only." },
+          { role: "user", content: prompt + "\n\nRespond ONLY with the JSON, no markdown blocks." }
+        ],
+        temperature: 0.6
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("DeepSeek API error:", errorData);
+      return null;
+    }
+
+    const data = await response.json();
+    const jsonText = data.choices[0]?.message?.content;
+    if (!jsonText) return null;
+
+    console.log("✅ DeepSeek fallback successful!");
+    // Clean any markdown blocks if present
+    const cleanJson = jsonText.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (error) {
+    console.error("❌ DeepSeek fallback failed:", error);
+    return null;
+  }
+};
+
+
+// ========================================================
+
+export const runSimulation = async (config: SingleSimulationConfig, retryCount = 0): Promise<SimulationOutput> => {
+  const MAX_RETRIES = 7;
+
+  try {
+    const apiKeys = getApiKeys();
+    const apiKey = apiKeys[currentKeyIndex] || apiKeys[0];
 
     // Fallback to Mock if no API Key (Safety Net)
     if (!apiKey) {
@@ -232,6 +357,7 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       return { ...MOCK_SIMULATION_RESULT, frameworkName: config.frameworkName };
     }
 
+    console.log(`🔑 Using API Key ${currentKeyIndex + 1} of ${apiKeys.length}`);
     const ai = new GoogleGenAI({ apiKey });
 
     // ===== RAG OTIMIZADO =====
@@ -367,8 +493,38 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
     const cleanJson = jsonText.replace(/```json\n?|\n?```/g, '').trim();
     const result = JSON.parse(cleanJson);
 
+    // Safety: Validate result structure before processing
+    if (!result) {
+      throw new Error("Gemini returned empty result");
+    }
+    if (!result.timeline || !Array.isArray(result.timeline)) {
+      console.warn("⚠️ Timeline missing or invalid, generating fallback timeline");
+      result.timeline = Array.from({ length: config.durationMonths || 12 }, (_, i) => ({
+        month: i + 1,
+        adoption: Math.min(95, 10 + i * 7),
+        productivity: Math.max(70, 80 + i * 2),
+        roi: -10 + i * 3,
+        rawData: {
+          featuresDelivered: 3 + Math.floor(i * 0.5),
+          bugsGenerated: Math.max(0, 5 - Math.floor(i * 0.3)),
+          criticalIncidents: i < 3 ? 1 : 0,
+          teamSize: config.companySize,
+          learningCurveFactor: Math.min(1.0, 0.7 + i * 0.05)
+        }
+      }));
+    }
+    if (!result.summary) {
+      result.summary = {
+        finalAdoption: 75,
+        totalRoi: 0,
+        maturityScore: 50,
+        monthsToComplete: config.durationMonths || 12,
+        scenarioValidity: 50
+      };
+    }
+
     // Safety: ensure default validation score if missing
-    if (result.summary && typeof result.summary.scenarioValidity === 'undefined') {
+    if (typeof result.summary.scenarioValidity === 'undefined') {
       result.summary.scenarioValidity = 50;
     }
 
@@ -412,17 +568,77 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       timeline: processedTimeline,
       summary: {
         ...result.summary,
-        totalRoi: parseFloat(((accumulatedValue - accumulatedCoNQ - accumulatedOpEx) / accumulatedOpEx * 100).toFixed(2))
+        totalRoi: accumulatedOpEx > 0
+          ? parseFloat(((accumulatedValue - accumulatedCoNQ - accumulatedOpEx) / accumulatedOpEx * 100).toFixed(2))
+          : 0
       },
       frameworkName: config.frameworkName
     };
 
     return finalResult as SimulationOutput;
 
-  } catch (error) {
-    console.error("Simulation Engine Critical Failure:", error);
-    console.warn("Falling back to MOCK MODE due to error.");
-    // Safe Mode: Return Mock Data instead of crashing
+  } catch (error: any) {
+    console.error("❌ Simulation Engine Critical Failure:", error);
+    console.error("Error Name:", error?.name);
+    console.error("Error Message:", error?.message);
+
+    // Check if it's a quota/rate limit error (429)
+    const isQuotaError = error?.message?.includes('429') ||
+      error?.message?.includes('quota') ||
+      error?.message?.includes('rate') ||
+      error?.message?.includes('RESOURCE_EXHAUSTED');
+
+    if (isQuotaError && retryCount < MAX_RETRIES) {
+      const nextKey = getNextApiKey();
+      if (nextKey) {
+        console.warn(`⚠️ Quota exceeded. Retrying with next API key (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return runSimulation(config, retryCount + 1);
+      }
+    }
+
+    // All Gemini retries exhausted - try alternative providers
+    console.warn("⚠️ All Gemini keys exhausted. Trying alternative providers...");
+
+    // Build a simplified prompt for alternative providers
+    const fallbackPrompt = `
+      Simulate the implementation of framework "${config.frameworkName}" for a company with ${config.companySize} employees in ${config.sector} sector.
+      Budget: ${config.budgetLevel}. Category: ${config.frameworkCategory}.
+      Duration: ${config.durationMonths || 12} months.
+      
+      Return a JSON with this structure:
+      {
+        "summary": { "finalAdoption": 0-100, "totalRoi": number, "maturityScore": 0-100, "monthsToComplete": number, "scenarioValidity": 0-100 },
+        "implementationNarrative": "string describing the implementation journey",
+        "timeline": [ { "month": 1, "adoption": 0-100, "productivity": 0-100, "roi": number } ... for ${config.durationMonths || 12} months ],
+        "keyPersonas": [ { "name": "string", "role": "string", "impact": "string", "stance": "champion|skeptic|neutral|saboteur" } ],
+        "risks": [ { "category": "string", "description": "string", "mitigation": "string", "probability": 0-100 } ],
+        "recommendations": ["string"],
+        "sentimentBreakdown": { "positive": 0-100, "neutral": 0-100, "negative": 0-100 },
+        "resourceAllocation": { "training": 0-100, "tooling": 0-100, "process": 0-100 },
+        "departmentReadiness": [ { "name": "string", "readiness": 0-100, "risk": "low|medium|high" } ],
+        "businessMetrics": { "timeToMarket": { "before": 90, "after": 60 }, "qualityIndex": { "before": 65, "after": 85 }, "teamMorale": { "before": 50, "after": 75 }, "processEfficiency": { "before": 40, "after": 70 } },
+        "companyEvolution": { "before": { "teamSize": ${config.companySize}, "productivity": 60 }, "after": { "teamSize": ${config.companySize}, "productivity": 85 } }
+      }
+    `;
+
+    // Try OpenAI
+    const openAIResult = await runSimulationWithOpenAI(config, fallbackPrompt);
+    if (openAIResult) {
+      console.log("✅ OpenAI fallback successful!");
+      return { ...openAIResult, frameworkName: config.frameworkName } as SimulationOutput;
+    }
+
+    // Try DeepSeek
+    const deepSeekResult = await runSimulationWithDeepSeek(config, fallbackPrompt);
+    if (deepSeekResult) {
+      console.log("✅ DeepSeek fallback successful!");
+      return { ...deepSeekResult, frameworkName: config.frameworkName } as SimulationOutput;
+    }
+
+    // All providers exhausted - return mock
+    console.warn("⚠️ All providers exhausted. Falling back to MOCK MODE.");
     return { ...MOCK_SIMULATION_RESULT, frameworkName: config.frameworkName };
   }
 };
