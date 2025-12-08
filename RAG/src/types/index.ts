@@ -15,7 +15,7 @@ export interface QueryClassification {
     mode: QueryMode;
     confidence: number;
     filters: {
-        collections: ('profiles' | 'metrics' | 'events' | 'playbooks')[];
+        collections: ('profiles' | 'metrics' | 'events' | 'playbooks' | 'history')[];
         metadata?: Record<string, string | string[]>;
     };
     refinedQuery: string;
@@ -152,6 +152,24 @@ export interface ROIResult {
 
 // ===== AGENT OUTPUTS =====
 
+export interface SimulationState {
+    turno: number;
+    moral_time: number;
+    velocidade_sprint: number;
+    confianca_stakeholders: number;
+    scratchpad: string;
+    eventos_disparados: string[];
+    historico: OrchestratorOutput[];
+    difficulty_scalar: number;
+    current_objective: string;
+}
+
+export interface SimulationStep {
+    query: string;
+    stakeholders: PersonaProfile[];
+    config?: SimulationConfig;
+}
+
 export interface PersonaResponse {
     resposta_persona: string;
     emocao_detectada: string;
@@ -170,6 +188,15 @@ export interface OrchestratorOutput {
         confianca_stakeholders: number;
     };
     eventos_disparados: string[];
+    metricas_agenticas?: AgenticMetrics;
+}
+
+export interface AgenticMetrics {
+    quality_per_cycle: number; // 0-100 (Replan penalty)
+    time_to_solve_ms: number;
+    cost_estimate_usd: number;
+    total_tokens: number;
+    router_choice: string;
 }
 
 // ===== FEW-SHOT EXAMPLES =====
@@ -179,6 +206,13 @@ export interface FewShotExample {
     resposta: string;
 }
 
-export interface ArchetypeFewShots {
-    [archetype: string]: FewShotExample[];
+
+// ===== GOAL AGENT =====
+
+export interface GoalEvaluation {
+    difficulty_scalar: number; // 0.8 (Easier) to 1.5 (Harder)
+    new_directive?: string;
+    crisis_triggered?: boolean;
+    hope_triggered?: boolean;
+    reasoning: string;
 }

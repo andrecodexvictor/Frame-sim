@@ -1,8 +1,7 @@
-
 import React from 'react';
 import {
     ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    BarChart, Bar, Legend, LineChart, Line
+    BarChart, Bar, Legend, LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { BatchResult } from '../services/batchService';
 
@@ -29,7 +28,6 @@ export const BatchResultsChart: React.FC<BatchResultsChartProps> = ({ result }) 
     ];
 
     // Data for Average Timeline
-    // We need to aggregate the timelines of all runs
     const maxMonths = Math.max(...result.outputs.map(o => o.timeline.length));
     const timelineData = [];
 
@@ -49,6 +47,35 @@ export const BatchResultsChart: React.FC<BatchResultsChartProps> = ({ result }) 
             });
         }
     }
+
+    // NEW: Business Metrics Aggregation
+    const businessMetricsData = (() => {
+        const outputs = result.outputs.filter(o => o.businessMetrics);
+        if (outputs.length === 0) return null;
+
+        const avg = (key: keyof NonNullable<typeof outputs[0]['businessMetrics']>) =>
+            outputs.reduce((sum, o) => sum + (o.businessMetrics?.[key] || 0), 0) / outputs.length;
+
+        return [
+            { metric: 'Eficiência', value: avg('efficiencyGain') },
+            { metric: 'Redução Retrabalho', value: avg('reworkReduction') },
+            { metric: 'Agilidade', value: avg('processAgility') },
+            { metric: 'Time-to-Market', value: avg('timeToMarket') },
+            { metric: 'Qualidade', value: avg('qualityScore') },
+        ];
+    })();
+
+    // NEW: Company Evolution Aggregation
+    const evolutionData = (() => {
+        const outputs = result.outputs.filter(o => o.companyEvolution);
+        if (outputs.length === 0) return null;
+
+        const avgBreakEven = outputs.reduce((sum, o) => sum + (o.companyEvolution?.breakEvenProjection || 0), 0) / outputs.length;
+        const avgHires = outputs.reduce((sum, o) => sum + (o.companyEvolution?.newHires || 0), 0) / outputs.length;
+        const avgCapacity = outputs.reduce((sum, o) => sum + (o.companyEvolution?.capacityGrowth || 0), 0) / outputs.length;
+
+        return { avgBreakEven: avgBreakEven.toFixed(1), avgHires: avgHires.toFixed(1), avgCapacity: avgCapacity.toFixed(1) };
+    })();
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
@@ -89,7 +116,45 @@ export const BatchResultsChart: React.FC<BatchResultsChartProps> = ({ result }) 
                 </div>
             </div>
 
-            {/* Chart 3: Average Evolution */}
+            {/* Chart 3: Business Metrics Radar (NEW) */}
+            {businessMetricsData && (
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Métricas de Negócio (Média)</h3>
+                    <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart data={businessMetricsData}>
+                                <PolarGrid />
+                                <PolarAngleAxis dataKey="metric" />
+                                <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                                <Radar name="Média" dataKey="value" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
+                            </RadarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
+
+            {/* Chart 4: Company Evolution Summary (NEW) */}
+            {evolutionData && (
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Evolução da Empresa (Média)</h3>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                        <div className="p-4 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                            <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{evolutionData.avgBreakEven}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">Mês Break-Even</p>
+                        </div>
+                        <div className="p-4 bg-green-100 dark:bg-green-900 rounded-lg">
+                            <p className="text-2xl font-bold text-green-600 dark:text-green-300">{evolutionData.avgHires}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">Novas Contratações</p>
+                        </div>
+                        <div className="p-4 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                            <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{evolutionData.avgCapacity}%</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">Crescimento Capacidade</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Chart 5: Average Evolution */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 col-span-1 lg:col-span-2">
                 <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Evolução Média (Tendência Central)</h3>
                 <div className="h-64">

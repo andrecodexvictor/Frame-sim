@@ -16,7 +16,7 @@ export interface SearchResult {
 
 export interface HybridSearchOptions {
     query: string;
-    collections: ('profiles' | 'metrics' | 'events' | 'playbooks')[];
+    collections: ('profiles' | 'metrics' | 'events' | 'playbooks' | 'history')[];
     topK?: number;
     filters?: {
         cargo?: string[];
@@ -44,7 +44,7 @@ export class VectorStoreService {
      * Inicializa ou carrega todas as collections
      */
     async initialize(): Promise<void> {
-        const collections = ['profiles', 'metrics', 'events', 'playbooks'];
+        const collections = ['profiles', 'metrics', 'events', 'playbooks', 'history'];
 
         for (const collection of collections) {
             try {
@@ -58,6 +58,41 @@ export class VectorStoreService {
                 console.log(`⏳ Collection '${collection}' não existe, será criada na indexação`);
             }
         }
+    }
+
+    /**
+     * Salva uma memória de longo prazo (histórico da simulação)
+     */
+    async saveMemory(content: string, metadata: Record<string, unknown>): Promise<void> {
+        const store = this.stores.get('history');
+        if (!store) {
+            // Se não existir, criar on-the-fly (embora initialize deva cuidar disso)
+            const newStore = await Chroma.fromDocuments([], this.embeddings, {
+                collectionName: 'history',
+                url: 'http://localhost:8000',
+            });
+            this.stores.set('history', newStore);
+        }
+
+        const activeStore = this.stores.get('history')!;
+
+        await activeStore.addDocuments([
+            new Document({
+                pageContent: content,
+                metadata: {
+                    ...metadata,
+                    timestamp: Date.now()
+                }
+            })
+        ]);
+        console.log(`💾 Memória salva em 'history'`);
+    }
+
+    /**
+     * Recupera memórias relevantes do histórico
+     */
+    async recallMemories(query: string, topK: number = 3): Promise<SearchResult[]> {
+        return this.searchCollection('history', query, topK);
     }
 
     /**
@@ -139,7 +174,7 @@ export class VectorStoreService {
      * Busca específica em uma collection
      */
     async searchCollection(
-        collection: 'profiles' | 'metrics' | 'events' | 'playbooks',
+        collection: 'profiles' | 'metrics' | 'events' | 'playbooks' | 'history',
         query: string,
         topK: number = 5,
         filters?: Record<string, string | string[]>
@@ -157,7 +192,7 @@ export class VectorStoreService {
             whereFilter
         );
 
-        return results.map(([doc, score]) => ({
+        return results.map(([doc, score]: [Document, number]) => ({
             content: doc.pageContent,
             metadata: doc.metadata,
             score

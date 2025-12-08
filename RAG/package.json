@@ -9,21 +9,27 @@
         "index": "tsx src/main.ts --index",
         "query": "tsx src/main.ts --query",
         "test": "tsx src/tests/index.test.ts",
-        "build": "tsc"
+        "build": "tsc",
+        "server": "tsx src/server.ts"
     },
     "dependencies": {
-        "langchain": "^0.3.6",
-        "@langchain/google-genai": "^0.1.3",
         "@langchain/community": "^0.3.14",
         "@langchain/core": "^0.3.18",
+        "@langchain/google-genai": "^0.1.3",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
         "chromadb": "^1.9.2",
         "chromadb-default-embed": "^2.13.2",
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.3",
+        "express": "^5.2.1",
+        "langchain": "^0.3.6",
         "zod": "^3.23.8"
     },
     "devDependencies": {
-        "typescript": "^5.6.3",
+        "@types/node": "^22.9.0",
         "tsx": "^4.19.2",
-        "@types/node": "^22.9.0"
+        "typescript": "^5.6.3"
     },
     "engines": {
         "node": ">=18.0.0"

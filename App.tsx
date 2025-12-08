@@ -8,6 +8,7 @@ import { ComparisonDashboard } from './components/ComparisonDashboard';
 import { BatchSimulationPanel } from './components/BatchSimulationPanel';
 import { FrameworkInput, SimulationConfig, SimulationOutput } from './types';
 import { runSimulation } from './services/geminiService';
+import { runAgenticSimulation } from './services/agenticService';
 
 type Step = 'upload' | 'config' | 'simulating' | 'results' | 'batch';
 
@@ -28,36 +29,45 @@ const App: React.FC = () => {
     setStep('simulating');
 
     try {
-      const promises = simulationConfig.frameworks.map(fw => {
-        // Construct the scenario context string based on user selection
-        const scenarioContext = simulationConfig.scenarioMode === 'custom'
-          ? simulationConfig.customScenarioText || "Nenhum cenário específico."
-          : `Cenário Recomendado: ${simulationConfig.selectedScenarioId} (Verificar preset)`;
+      let promises: Promise<SimulationOutput>[] = [];
 
-        return runSimulation({
-          frameworkName: fw.name,
-          frameworkText: fw.text,
-          frameworkCategory: simulationConfig.frameworkCategory,
-          companySize: simulationConfig.companySize,
-          sector: simulationConfig.sector,
-          budgetLevel: simulationConfig.budgetLevel,
-          currentMaturity: simulationConfig.currentMaturity,
-          employeeArchetypes: simulationConfig.employeeArchetypes,
-          // Pass new accuracy parameters
-          techDebtLevel: simulationConfig.techDebtLevel,
-          operationalVelocity: simulationConfig.operationalVelocity,
-          previousFailures: simulationConfig.previousFailures,
-          scenarioContext: scenarioContext,
-          durationMonths: simulationConfig.durationMonths || 12
+      if (simulationConfig.simulationMode === 'agentic') {
+        // AGENTIC MODE (Node.js Backend)
+        promises = simulationConfig.frameworks.map(fw => {
+          const fwConfig = { ...simulationConfig, frameworks: [fw] };
+          return runAgenticSimulation(fwConfig);
         });
-      });
+      } else {
+        // LEGACY/FAST MODE (Client-side Gemini)
+        promises = simulationConfig.frameworks.map(fw => {
+          const scenarioContext = simulationConfig.scenarioMode === 'custom'
+            ? simulationConfig.customScenarioText || "Nenhum cenário específico."
+            : `Cenário Recomendado: ${simulationConfig.selectedScenarioId} (Verificar preset)`;
+
+          return runSimulation({
+            frameworkName: fw.name,
+            frameworkText: fw.text,
+            frameworkCategory: simulationConfig.frameworkCategory,
+            companySize: simulationConfig.companySize,
+            sector: simulationConfig.sector,
+            budgetLevel: simulationConfig.budgetLevel,
+            currentMaturity: simulationConfig.currentMaturity,
+            employeeArchetypes: simulationConfig.employeeArchetypes,
+            techDebtLevel: simulationConfig.techDebtLevel,
+            operationalVelocity: simulationConfig.operationalVelocity,
+            previousFailures: simulationConfig.previousFailures,
+            scenarioContext: scenarioContext,
+            durationMonths: simulationConfig.durationMonths || 12
+          });
+        });
+      }
 
       const simulationResults = await Promise.all(promises);
       setResults(simulationResults);
       setStep('results');
     } catch (error) {
       console.error("Simulation failed", error);
-      setStep('config'); // Go back on error
+      setStep('config');
       alert("Erro ao executar a simulação. Verifique o console ou tente novamente.");
     }
   };

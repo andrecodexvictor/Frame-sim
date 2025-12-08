@@ -1,0 +1,388 @@
+{
+    "profiles": [
+        {
+            "id": "br_interior",
+            "name": "Brasil - Interior/Região",
+            "region": "BR",
+            "currency": "BRL",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 80,
+                    "monthly": 1500,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 150,
+                    "monthly": 3000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 200,
+                    "monthly": 4500,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 350,
+                    "monthly": 8000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 450,
+                    "monthly": 10000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 500,
+                    "monthly": 12000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 200,
+                "SENIOR_DEV_DAY_COST": 350,
+                "FEATURE_VALUE": 2000,
+                "INCIDENT_COST": 3000,
+                "BUG_FIX_COST": 150,
+                "TRAINING_COST_PER_HEAD": 1000,
+                "TURNOVER_COST_MULTIPLIER": 2
+            },
+            "description": "Empresas em cidades do interior, custos de vida e salários menores."
+        },
+        {
+            "id": "br_pme",
+            "name": "Brasil - PME (Pequena/Média)",
+            "region": "BR",
+            "currency": "BRL",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 100,
+                    "monthly": 2000,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 200,
+                    "monthly": 4000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 300,
+                    "monthly": 6500,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 500,
+                    "monthly": 11000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 600,
+                    "monthly": 14000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 700,
+                    "monthly": 16000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 300,
+                "SENIOR_DEV_DAY_COST": 500,
+                "FEATURE_VALUE": 3000,
+                "INCIDENT_COST": 5000,
+                "BUG_FIX_COST": 250,
+                "TRAINING_COST_PER_HEAD": 1500,
+                "TURNOVER_COST_MULTIPLIER": 2
+            },
+            "description": "Pequenas e médias empresas brasileiras com orçamento limitado."
+        },
+        {
+            "id": "br_startup",
+            "name": "Brasil - Startup Tech (SP/RJ)",
+            "region": "BR",
+            "currency": "BRL",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 130,
+                    "monthly": 2500,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 280,
+                    "monthly": 5500,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 450,
+                    "monthly": 9000,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 750,
+                    "monthly": 16000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 900,
+                    "monthly": 20000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 1000,
+                    "monthly": 22000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 450,
+                "SENIOR_DEV_DAY_COST": 750,
+                "FEATURE_VALUE": 4000,
+                "INCIDENT_COST": 8000,
+                "BUG_FIX_COST": 400,
+                "TRAINING_COST_PER_HEAD": 2500,
+                "TURNOVER_COST_MULTIPLIER": 3
+            },
+            "description": "Startups em SP/RJ com salários competitivos. Alta rotatividade."
+        },
+        {
+            "id": "br_enterprise_lean",
+            "name": "Brasil - Grande Empresa (Custo Controlado)",
+            "region": "BR",
+            "currency": "BRL",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 120,
+                    "monthly": 2300,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 300,
+                    "monthly": 6000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 500,
+                    "monthly": 10000,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 850,
+                    "monthly": 18000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 1000,
+                    "monthly": 22000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 1200,
+                    "monthly": 26000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 500,
+                "SENIOR_DEV_DAY_COST": 850,
+                "FEATURE_VALUE": 8000,
+                "INCIDENT_COST": 50000,
+                "BUG_FIX_COST": 800,
+                "TRAINING_COST_PER_HEAD": 3000,
+                "TURNOVER_COST_MULTIPLIER": 3
+            },
+            "description": "Grandes empresas com políticas de contenção de custos."
+        },
+        {
+            "id": "br_enterprise",
+            "name": "Brasil - Grande Empresa (Premium)",
+            "region": "BR",
+            "currency": "BRL",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 150,
+                    "monthly": 3000,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 400,
+                    "monthly": 8000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 700,
+                    "monthly": 15000,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 1200,
+                    "monthly": 26000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 1500,
+                    "monthly": 32000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 1800,
+                    "monthly": 40000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 700,
+                "SENIOR_DEV_DAY_COST": 1200,
+                "FEATURE_VALUE": 15000,
+                "INCIDENT_COST": 250000,
+                "BUG_FIX_COST": 1500,
+                "TRAINING_COST_PER_HEAD": 5000,
+                "TURNOVER_COST_MULTIPLIER": 4
+            },
+            "description": "Grandes empresas com CLT integral, benefícios premium, plano de carreira."
+        },
+        {
+            "id": "latam_remote",
+            "name": "LATAM - Remoto para Exterior",
+            "region": "LATAM",
+            "currency": "USD",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 50,
+                    "monthly": 1000,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 150,
+                    "monthly": 3000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 300,
+                    "monthly": 6000,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 550,
+                    "monthly": 11000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 700,
+                    "monthly": 14000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 850,
+                    "monthly": 17000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 300,
+                "SENIOR_DEV_DAY_COST": 550,
+                "FEATURE_VALUE": 20000,
+                "INCIDENT_COST": 50000,
+                "BUG_FIX_COST": 800,
+                "TRAINING_COST_PER_HEAD": 3000,
+                "TURNOVER_COST_MULTIPLIER": 2
+            },
+            "description": "Devs LATAM trabalhando remoto para empresas US/EU."
+        },
+        {
+            "id": "us_faang",
+            "name": "USA - Big Tech (FAANG)",
+            "region": "US",
+            "currency": "USD",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 300,
+                    "monthly": 6000,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 500,
+                    "monthly": 10000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 800,
+                    "monthly": 16000,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 1500,
+                    "monthly": 30000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 2000,
+                    "monthly": 40000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 2500,
+                    "monthly": 50000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 800,
+                "SENIOR_DEV_DAY_COST": 1500,
+                "FEATURE_VALUE": 50000,
+                "INCIDENT_COST": 1000000,
+                "BUG_FIX_COST": 5000,
+                "TRAINING_COST_PER_HEAD": 10000,
+                "TURNOVER_COST_MULTIPLIER": 2
+            },
+            "description": "Silicon Valley. Total compensation inclui stock options."
+        },
+        {
+            "id": "eu_western",
+            "name": "Europa - Ocidental",
+            "region": "EU",
+            "currency": "EUR",
+            "salaryTiers": {
+                "intern": {
+                    "daily": 100,
+                    "monthly": 2000,
+                    "label": "Estagiário"
+                },
+                "junior": {
+                    "daily": 250,
+                    "monthly": 5000,
+                    "label": "Júnior"
+                },
+                "mid": {
+                    "daily": 500,
+                    "monthly": 9000,
+                    "label": "Pleno"
+                },
+                "senior": {
+                    "daily": 900,
+                    "monthly": 16000,
+                    "label": "Sênior"
+                },
+                "tech_lead": {
+                    "daily": 1100,
+                    "monthly": 20000,
+                    "label": "Tech Lead"
+                },
+                "manager": {
+                    "daily": 1300,
+                    "monthly": 24000,
+                    "label": "Gerente"
+                }
+            },
+            "constants": {
+                "DEV_DAY_COST": 500,
+                "SENIOR_DEV_DAY_COST": 900,
+                "FEATURE_VALUE": 30000,
+                "INCIDENT_COST": 200000,
+                "BUG_FIX_COST": 3000,
+                "TRAINING_COST_PER_HEAD": 6000,
+                "TURNOVER_COST_MULTIPLIER": 3
+            },
+            "description": "UK, Alemanha, França. Regulação forte, benefícios legais extensos."
+        }
+    ]
+}

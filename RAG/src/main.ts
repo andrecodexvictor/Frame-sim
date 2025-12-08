@@ -15,6 +15,12 @@ import { ROICalculatorAgent } from './agents/roiCalculator.js';
 import { createOrchestrator } from './agents/orchestrator.js';
 import type { PersonaProfile, SimulationConfig } from './types/index.js';
 import { readFile } from 'fs/promises';
+import { config } from 'dotenv';
+import path from 'path';
+
+// Load .env from root
+config({ path: path.join(process.cwd(), '../.env') });
+config({ path: path.join(process.cwd(), '.env') }); // Fallback for local RAG folder runs
 
 // ===== CONFIGURATION =====
 

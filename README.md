@@ -1,39 +1,59 @@
 
-# Frame-sim: Deep Enterprise Simulation Kernel v3.3
+# Frame-sim: Deep Enterprise Simulation Kernel v4.0
 
 **Frame-sim** é um simulador empresarial avançado projetado para testar a implementação de frameworks de gestão e engenharia (Scrum, SAFe, Spotify, etc.) em ambientes corporativos complexos.
 
-Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine de **IA Generativa (Gemini 1.5 Pro)** combinada com **RAG (Retrieval-Augmented Generation)** e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com alto grau de realismo.
+Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM Agentic** (Gemini, GPT-4, DeepSeek, Ollama) combinada com **RAG (Retrieval-Augmented Generation)**, **Agentes Autônomos (CriticAgent)** e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com alto grau de realismo.
 
-![Frame-Sim Banner](https://via.placeholder.com/800x400?text=Frame-Sim+v3.3)
+![Frame-Sim Banner](https://via.placeholder.com/800x400?text=Frame-Sim+v4.0)
 
 ---
 
-## 🚀 Novidades da v3.3 (Longo Prazo & UI)
+## 🚀 Novidades da v4.0 (Agentic Loop & Multi-LLM)
 
-- **Simulação de Longo Prazo (5 Anos)**: Capacidade de projetar maturidade, cultura e ROI ao longo de 60 meses.
-- **Micro-SaaS UI**: Interface moderna, "brutalista-clean", com tooltips otimizados para Dark Mode.
-- **Análise Detalhada de ROI**: Explicação automática dos fatores que levaram ao lucro ou prejuízo (Curva J, Dívida Técnica, Velocidade).
-- **RAG Otimizado**: Retrieval inteligente de personas e playbooks para maior consistência.
+- **SmartRouter (Multi-LLM)**: Roteia automaticamente para o LLM mais adequado (GPT-4 para raciocínio complexo, Gemini para criatividade, DeepSeek/Ollama para validações simples).
+- **CriticAgent (Auto-Reflexão)**: Agente que valida os resultados da simulação com uma pontuação de plausibilidade. Se < 70%, solicita replanejamento.
+- **Memória de Curto Prazo (Scratchpad)**: Foco dinâmico que evolui a cada turno da simulação.
+- **Memória de Longo Prazo (ChromaDB)**: Histórico de turnos persiste para RAG de situações passadas.
+- **Viés Cognitivo nas Personas**: Cada stakeholder agora carrega um viés (Confirmação, Status Quo, Aversão à Perda) que afeta suas respostas.
+- **Ruído Estocástico no ROI**: Variações aleatórias (±10%) para quebrar o determinismo absoluto.
 
 ## 🧠 Core Features
 
-### 1. Simulação Multi-Agente
-Simula stakeholders reais (CEO impaciente, Dev Sênior cético, RH protetor) com memórias e reações baseadas em arquétipos psicológicos.
+### 1. Simulação Multi-Agente & Persona Enrichment
+Simula stakeholders reais e um time completo com base em **arquétipos estendidos**:
+- **Key Stakeholders**: CEO, CTO, Tech Leads com perfis psicológicos profundos.
+- **Distribuição Realista**: O restante do time (Júniors, Plenos, QA, RH) é gerado automaticamente com base no tamanho da empresa.
+- **Enriquecimento RAG**: Personas ganham nomes reais, histórias de fundo e vieses cognitivos extraídos de um banco de dados de 21k perfis (`profiles.json`).
 
-### 2. Engine Financeira Determinística
-O cálculo de ROI não é alucinado pela IA. Utilizamos um motor híbrido que considera:
+### 2. Roteamento de Cenário Econômico (NOVO 💰)
+Selecione perfis econômicos realistas para calibrar custos e ROI:
+- **Brasil**: PME, Startup SP/RJ, Grande Empresa, Interior.
+- **Internacional**: US Big Tech (FAANG), LATAM Remoto, Europa Ocidental.
+- **Impacto**: Salários, custo de incidentes e valor por feature variam drasticamente conforme o perfil (ex: Incidente no Google custa $1M vs R$5k na PME).
+
+### 3. Engine Financeira Determinística + Estocástica
+O cálculo de ROI combina fórmulas determinísticas com ruído aleatório:
 - **Curva J**: Queda natural de produtividade na adoção.
 - **Dívida Técnica**: Juros compostos sobre decisões ruins.
 - **CoNQ (Cost of Non-Quality)**: Custo financeiro de bugs e incidentes.
+- **Ruído Gaussiano**: Variação de ±10% para maior realismo.
 
-### 3. Cenários Dinâmicos
+### 4. Métricas de Negócio e Evolução (NOVO 📊)
+Painéis detalhados para métricas além do ROI:
+- **Eficiência e Qualidade**: Ganho de eficiência, redução de retrabalho, agilidade.
+- **Evolução da Empresa**: Crescimento do time, contratações, turnover, promoções.
+- **Break-even Point**: Projeção de quando o framework se paga.
+
+### 5. Cenários Dinâmicos
 Configure o ambiente da simulação:
 - **Tamanho**: De Startups (10 FTEs) a Enterprises (2000+ FTEs).
 - **Cultura**: "Startup Caótica" vs "Corporação Fossilizada".
 - **Contexto**: Fusão & Aquisição, Preparação para IPO, Corte de Custos, etc.
+- **Contexto Econômico**: Seleção de país/moeda e perfil salarial.
 
 ---
+
 
 ## 🛠️ Tecnologias
 

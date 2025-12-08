@@ -1,5 +1,6 @@
 
 import { SimulationConfig } from '../types';
+import costProfiles from '../data/cost_profiles.json';
 
 export interface SimulationRawData {
     month: number;
@@ -21,20 +22,55 @@ export interface CalculatedMetrics {
     accumulatedRoi: number;
 }
 
-// Base Constants (can be adjusted based on company size/sector if needed)
-const BASE_CONSTANTS = {
-    PME: {
-        DEV_DAY_COST: 400,
-        FEATURE_VALUE: 3000, // Dampened value since Maintenance covers base
-        INCIDENT_COST: 5000,
-        BUG_FIX_COST: 300,
-    },
-    ENTERPRISE: {
-        DEV_DAY_COST: 800,
-        FEATURE_VALUE: 12000, // Dampened value since Maintenance covers base
-        INCIDENT_COST: 500000,
-        BUG_FIX_COST: 2000,
+export interface CostConstants {
+    DEV_DAY_COST: number;
+    SENIOR_DEV_DAY_COST: number;
+    FEATURE_VALUE: number;
+    INCIDENT_COST: number;
+    BUG_FIX_COST: number;
+    TRAINING_COST_PER_HEAD: number;
+    TURNOVER_COST_MULTIPLIER: number;
+}
+
+// Default Constants (fallback if no profile selected)
+const DEFAULT_CONSTANTS: CostConstants = {
+    DEV_DAY_COST: 400,
+    SENIOR_DEV_DAY_COST: 700,
+    FEATURE_VALUE: 3000,
+    INCIDENT_COST: 5000,
+    BUG_FIX_COST: 300,
+    TRAINING_COST_PER_HEAD: 2000,
+    TURNOVER_COST_MULTIPLIER: 3
+};
+
+/**
+ * Recupera as constantes de custo baseadas no perfil econômico selecionado
+ */
+export const getCostConstants = (profileId?: string): CostConstants => {
+    if (!profileId) return DEFAULT_CONSTANTS;
+
+    const profile = costProfiles.profiles.find(p => p.id === profileId);
+    if (!profile) {
+        console.warn(`Cost profile '${profileId}' not found, using default`);
+        return DEFAULT_CONSTANTS;
     }
+
+    return profile.constants as CostConstants;
+};
+
+/**
+ * Recupera informações do perfil econômico para exibição
+ */
+export const getCostProfile = (profileId?: string) => {
+    if (!profileId) return null;
+    return costProfiles.profiles.find(p => p.id === profileId) || null;
+};
+
+/**
+ * Lista todos os perfis disponíveis
+ */
+export const getAllCostProfiles = () => {
+    return costProfiles.profiles;
 };
 
 export const calculateMonthlyMetrics = (
@@ -45,8 +81,8 @@ export const calculateMonthlyMetrics = (
     previousAccumulatedCoNQ: number = 0
 ): CalculatedMetrics => {
 
-    const isEnterprise = config.companySize >= 50;
-    const constants = isEnterprise ? BASE_CONSTANTS.ENTERPRISE : BASE_CONSTANTS.PME;
+    // Use dynamic cost profile or fallback to default
+    const constants = getCostConstants(config.economicProfileId);
 
     // 1. Calculate OpEx (Operational Expenditure)
     // Formula: (Devs * DailyCost * 22 days)
@@ -59,32 +95,23 @@ export const calculateMonthlyMetrics = (
     if (config.techDebtLevel === 'high') techDebtPenalty = 0.8;
     if (config.techDebtLevel === 'critical') techDebtPenalty = 0.5;
 
-    // CORREÇÃO: Removido teamScaleFactor excessivo (era teamSize/8 = 12.5x para 100 FTEs!)
-    // Agora usamos um fator logarítmico mais suave
-    const teamScaleFactor = Math.log10(Math.max(10, rawData.teamSize)) / 2; // ~1.0 para 100 FTEs
+    // Team scale factor (logarithmic)
+    const teamScaleFactor = Math.log10(Math.max(10, rawData.teamSize)) / 2;
 
-    // Feature Value (New Deliverables) - "Profit"
+    // Feature Value (New Deliverables)
     const featureValue = rawData.featuresDelivered * constants.FEATURE_VALUE * teamScaleFactor * rawData.learningCurveFactor * techDebtPenalty;
 
-    // Maintenance Value (Business as Usual) - "Survival"
-    // CORREÇÃO: Reduzido de 90% para 50% do OpEx - times geram valor igual ao custo no baseline
-    // Efficiency e compliance ajustam, mas não inflacionam
+    // Maintenance Value (Business as Usual)
     const efficiencyMultiplier = Math.max(0.4, (rawData.efficiency || 100) / 100);
     const complianceMultiplier = (rawData.compliance || 100) / 100;
-
-    // Maintenance value é ~50% do OpEx (break-even point)
     const maintenanceValue = (opEx * 0.50) * efficiencyMultiplier * complianceMultiplier;
 
     const valueDelivered = featureValue + maintenanceValue;
 
-
     // 3. Calculate CoNQ (Cost of Non-Quality)
-    // Formula: (Bugs * FixCost) + (Incidents * IncidentCost)
     const conq = (rawData.bugsGenerated * constants.BUG_FIX_COST) + (rawData.criticalIncidents * constants.INCIDENT_COST);
 
     // 4. Calculate ROI (Monthly Snapshot)
-    // ROI = ((Value - CoNQ) - OpEx) / OpEx
-    // Note: This is a monthly snapshot, real ROI is usually accumulated.
     const roi = opEx > 0 ? ((valueDelivered - conq) - opEx) / opEx : 0;
 
     // 5. Accumulated ROI

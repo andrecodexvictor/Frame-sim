@@ -65,7 +65,19 @@ const ARCHETYPE_EXAMPLES: Record<string, FewShotExample[]> = {
     ]
 };
 
+// Viéses Cognitivos para maior realismo
+const COGNITIVE_BIASES = [
+    'Viés de Confirmação: Tende a favorecer informações que confirmam suas crenças pré-existentes.',
+    'Status Quo Bias: Preferência desproporcional por manter as coisas como estão.',
+    'Falácia do Custo Irrecuperável: Apegado a investimentos passados mesmo que não façam mais sentido.',
+    'Viés de Autoridade: Valoriza excessivamente a opinião de figuras de autoridade ou dados "oficiais".',
+    'Aversão à Perda: O medo de perder autonomia/status é maior que a motivação por ganhos.',
+    'Viés de Otimismo: Subestima riscos e prazos (comum em perfis entusiastas).',
+    'Viés de Negatividade: Foca excessivamente nos problemas e riscos (comum em perfis céticos).'
+];
+
 const PERSONA_PROMPT = `# SIMULADOR DE STAKEHOLDER
+{bias_instruction}
 
 Você está simulando o comportamento de um stakeholder específico durante a implementação de um framework de gestão.
 
@@ -82,6 +94,10 @@ Opinião sobre Ágil: {opiniao_agil}
 Desafio Atual: {desafio}
 Motivação Principal: {motivacao}
 
+## VIÉS COGNITIVO DOMINANTE
+⚠️ **APLIQUE ESTE VIÉS NA RESPOSTA:**
+{bias}
+
 ## EXEMPLOS DE COMPORTAMENTO (mantenha consistência)
 {examples}
 
@@ -89,7 +105,7 @@ Motivação Principal: {motivacao}
 {contexto}
 
 ## REGRAS DE SIMULAÇÃO
-1. Mantenha TOTAL consistência com o perfil psicológico acima
+1. Mantenha TOTAL consistência com o perfil psicológico e o viés cognitivo.
 2. Use termos e vocabulário adequados ao cargo
 3. Referencie o histórico e desafios quando relevante
 4. Seja realista - nem todo stakeholder é resistente ou entusiasta
@@ -168,6 +184,10 @@ export class PersonaAgent {
         const archetype = this.determineArchetype(persona);
         const examples = this.getExamples(archetype);
 
+        // Selecionar Viés Cognitivo (Simples randomização ponderada pelo arquétipo no futuro)
+        // Por enquanto, randomico para garantir variedade
+        const randomBias = COGNITIVE_BIASES[Math.floor(Math.random() * COGNITIVE_BIASES.length)];
+
         // Formatar exemplos
         const examplesText = examples
             .map((ex, i) => `### Exemplo ${i + 1}\nSituação: ${ex.situacao}\nResposta: "${ex.resposta}"`)
@@ -182,6 +202,7 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
             : 'Contexto padrão de simulação';
 
         return PERSONA_PROMPT
+            .replace('{bias_instruction}', `⚠️ ATENÇÃO: Esta persona está sob efeito de **${randomBias.split(':')[0]}**.`)
             .replace('{nome}', info.nome)
             .replace('{cargo}', info.cargo)
             .replace('{area}', info.area)
@@ -194,6 +215,7 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
             .replace('{opiniao_agil}', contexto.opiniao_agil)
             .replace('{desafio}', contexto.desafio_atual)
             .replace('{motivacao}', contexto.motivacao_atual)
+            .replace('{bias}', randomBias)
             .replace('{examples}', examplesText || 'Nenhum exemplo específico disponível')
             .replace('{contexto}', contextoText)
             .replace('{situacao}', situacao);
@@ -262,4 +284,4 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
 }
 
 // Export para uso direto
-export const personaAgent = new PersonaAgent();
+// export const personaAgent = new PersonaAgent();

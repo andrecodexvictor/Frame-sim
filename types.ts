@@ -43,6 +43,12 @@ export interface SimulationConfig {
   selectedScenarioId?: string;
   customScenarioText?: string;
   durationMonths?: number;
+
+  // Economic Profile (Custo Dinâmico)
+  economicProfileId?: string; // e.g., 'br_pme', 'br_startup', 'us_faang'
+
+  // Agentic Mode
+  simulationMode?: 'standard' | 'agentic';
 }
 
 export interface SingleSimulationConfig {
@@ -72,15 +78,16 @@ export interface SimulationOutput {
     monthsToComplete: number;
     scenarioValidity?: number;
   };
-  // New Visual Data
-  implementationNarrative: string; // Story of how it went
+
+  // Core Visual Data
+  implementationNarrative: string;
   sentimentBreakdown: Array<{
-    group: string; // e.g., "Promotores", "Neutros", "Detratores"
+    group: string;
     value: number;
   }>;
   resourceAllocation: Array<{
-    category: string; // e.g., "Treinamento", "Ferramentas", "Consultoria", "Perda Produtividade"
-    amount: number; // Percentage or value
+    category: string;
+    amount: number;
   }>;
 
   timeline: Array<{
@@ -89,7 +96,6 @@ export interface SimulationOutput {
     roi: number;
     compliance: number;
     efficiency: number;
-    // Raw Data for Validation
     rawData?: {
       featuresDelivered: number;
       bugsGenerated: number;
@@ -98,25 +104,75 @@ export interface SimulationOutput {
       learningCurveFactor: number;
     };
   }>;
+
   keyPersonas: Array<{
     role: string;
     archetype: string;
     sentiment: number;
     impact: string;
   }>;
+
   risks: Array<{
     id: string;
     category: string;
     description: string;
     mitigation: string;
   }>;
+
   recommendations: Array<{
     id: string;
     phase: string;
     action: string;
   }>;
+
   departmentReadiness: Array<{
     department: string;
     score: number;
   }>;
+
+  // ROI Analysis
+  roiAnalysis?: {
+    verdict: 'POSITIVO' | 'NEGATIVO' | 'NEUTRO';
+    mainFactors: Array<{
+      factor: string;
+      impact: 'POSITIVO' | 'NEGATIVO';
+      description: string;
+    }>;
+    breakEvenMonth: number;
+    recommendation: string;
+  };
+
+  // NEW: Business Performance Metrics (Phase 5)
+  businessMetrics?: {
+    efficiencyGain: number;      // % improvement in team efficiency
+    reworkReduction: number;     // % reduction in rework/bugs
+    processAgility: number;      // % improvement in process speed
+    timeToMarket: number;        // % reduction in delivery time
+    qualityScore: number;        // Overall quality index (0-100)
+  };
+
+  // NEW: Company Evolution Metrics
+  companyEvolution?: {
+    initialTeamSize: number;
+    finalTeamSize: number;
+    newHires: number;
+    turnover: number;            // % of people who left
+    promotions: number;
+    capacityGrowth: number;      // % growth in delivery capacity
+    breakEvenProjection: number; // Month when ROI becomes positive (0 = never in period)
+    maturityLevelBefore: number; // 1-5 scale
+    maturityLevelAfter: number;  // 1-5 scale
+    culturalShift: 'RESISTENTE' | 'NEUTRO' | 'FAVORÁVEL' | 'ENTUSIASTA';
+  };
+
+  // Agentic Observability (Developer Only)
+  agenticMetrics?: AgenticMetrics;
+}
+
+export interface AgenticMetrics {
+  quality_per_cycle: number;
+  time_to_solve_ms: number;
+  cost_estimate_usd: number;
+  total_tokens: number;
+  router_choice: string;
 }

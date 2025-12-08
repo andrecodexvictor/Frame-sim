@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { 
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+import {
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend
 } from 'recharts';
 import { SimulationOutput, SimulationConfig } from '../types';
@@ -61,7 +61,7 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
       if (metric.subject === 'Adoção') val = r.summary.finalAdoption;
       if (metric.subject === 'Maturidade (x10)') val = r.summary.maturityScore * 10;
       if (metric.subject === 'Velocidade (inv)') val = 100 - Math.min(100, r.summary.monthsToComplete * 2);
-      if (metric.subject === 'Compliance') val = r.timeline[r.timeline.length -1].compliance;
+      if (metric.subject === 'Compliance') val = r.timeline[r.timeline.length - 1].compliance;
       point[r.frameworkName] = val;
     });
     return point;
@@ -72,19 +72,19 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
       <div className={`fixed inset-0 z-0 pointer-events-none opacity-[0.03] ${darkMode ? 'bg-[url("https://grainy-gradients.vercel.app/noise.svg")]' : ''}`} style={{ backgroundSize: '100px 100px' }}></div>
 
       <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-10 space-y-10">
-        
+
         {/* Navigation */}
         <nav className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b ${theme.border} pb-6`}>
-           <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">
               FrameSim<span className="text-brutal-green">.VS</span>
             </h1>
             <div className={`hidden md:flex px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border ${theme.border} rounded bg-opacity-50`}>
-               Comparison Engine
+              Comparison Engine
             </div>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded border ${theme.border} hover:bg-zinc-500/10 transition-colors`}>
+            <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded border ${theme.border} hover:bg-zinc-500/10 transition-colors`}>
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
             <BrutalButton variant="secondary" className="text-xs h-9 px-4" onClick={onReset}>Nova Comparação</BrutalButton>
@@ -105,29 +105,29 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
               </p>
             </div>
             <div className="absolute -right-10 -bottom-10 opacity-10 rotate-12">
-               <Trophy className="w-64 h-64" />
+              <Trophy className="w-64 h-64" />
             </div>
           </div>
-          
+
           <div className="md:col-span-4 grid grid-cols-1 gap-4">
-             <div className={`p-6 rounded border ${theme.border} ${theme.card} flex flex-col justify-center`}>
-                <span className="text-xs font-mono uppercase opacity-60 mb-2">Melhor ROI Projetado</span>
-                <span className="text-4xl font-black text-purple-500">
-                  {results.reduce((prev, curr) => prev.summary.totalRoi > curr.summary.totalRoi ? prev : curr).frameworkName}
-                </span>
-             </div>
-             <div className={`p-6 rounded border ${theme.border} ${theme.card} flex flex-col justify-center`}>
-                <span className="text-xs font-mono uppercase opacity-60 mb-2">Implementação Mais Rápida</span>
-                <span className="text-4xl font-black text-blue-500">
-                  {results.reduce((prev, curr) => prev.summary.monthsToComplete < curr.summary.monthsToComplete ? prev : curr).frameworkName}
-                </span>
-             </div>
+            <div className={`p-6 rounded border ${theme.border} ${theme.card} flex flex-col justify-center`}>
+              <span className="text-xs font-mono uppercase opacity-60 mb-2">Melhor ROI Projetado</span>
+              <span className="text-4xl font-black text-purple-500">
+                {results.reduce((prev, curr) => prev.summary.totalRoi > curr.summary.totalRoi ? prev : curr).frameworkName}
+              </span>
+            </div>
+            <div className={`p-6 rounded border ${theme.border} ${theme.card} flex flex-col justify-center`}>
+              <span className="text-xs font-mono uppercase opacity-60 mb-2">Implementação Mais Rápida</span>
+              <span className="text-4xl font-black text-blue-500">
+                {results.reduce((prev, curr) => prev.summary.monthsToComplete < curr.summary.monthsToComplete ? prev : curr).frameworkName}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
+
           {/* Radar Overlay */}
           <div className={`p-6 rounded border ${theme.border} ${theme.card} min-h-[400px]`}>
             <h3 className="font-bold text-sm uppercase mb-6 flex items-center gap-2">
@@ -140,7 +140,7 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
                   <PolarAngleAxis dataKey="subject" tick={{ fill: theme.axisColor, fontSize: 10, fontWeight: 'bold' }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                   {results.map((r, idx) => (
-                    <Radar 
+                    <Radar
                       key={r.frameworkName}
                       name={r.frameworkName}
                       dataKey={r.frameworkName}
@@ -158,54 +158,163 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
 
           {/* Bar Chart ROI */}
           <div className={`p-6 rounded border ${theme.border} ${theme.card} min-h-[400px]`}>
-             <h3 className="font-bold text-sm uppercase mb-6 flex items-center gap-2">
-               <TrendingUp className="w-4 h-4 text-emerald-500" /> Comparativo de ROI (%)
-             </h3>
-             <div className="h-[300px]">
-               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={comparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.gridColor} />
-                    <XAxis type="number" stroke={theme.axisColor} tick={{fontSize: 10}} />
-                    <YAxis dataKey="name" type="category" stroke={theme.axisColor} width={80} tick={{fontSize: 10, fontWeight: 'bold'}} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: darkMode ? '#18181b' : '#fff', border: '1px solid #333'}} />
-                    <Bar dataKey="roi" radius={[0, 4, 4, 0]}>
-                      {comparisonData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                      ))}
-                    </Bar>
-                 </BarChart>
-               </ResponsiveContainer>
-             </div>
+            <h3 className="font-bold text-sm uppercase mb-6 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-500" /> Comparativo de ROI (%)
+            </h3>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={comparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.gridColor} />
+                  <XAxis type="number" stroke={theme.axisColor} tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="name" type="category" stroke={theme.axisColor} width={80} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#fff', border: '1px solid #333' }} />
+                  <Bar dataKey="roi" radius={[0, 4, 4, 0]}>
+                    {comparisonData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
         </div>
 
         {/* Details Table */}
         <div className={`p-6 rounded border ${theme.border} ${theme.card} overflow-x-auto`}>
-           <h3 className="font-bold text-sm uppercase mb-6">Detalhamento Head-to-Head</h3>
-           <table className="w-full text-left font-mono text-sm">
-             <thead>
-               <tr className="border-b border-zinc-700">
-                 <th className="p-4 uppercase opacity-60">Framework</th>
-                 <th className="p-4 uppercase opacity-60">Maturidade Final</th>
-                 <th className="p-4 uppercase opacity-60">Tempo (Meses)</th>
-                 <th className="p-4 uppercase opacity-60">Risco Principal</th>
-                 <th className="p-4 uppercase opacity-60">Ponto Forte</th>
-               </tr>
-             </thead>
-             <tbody>
-               {results.map((r, idx) => (
-                 <tr key={idx} className="border-b border-zinc-800 hover:bg-zinc-500/5 transition-colors">
-                   <td className="p-4 font-bold" style={{ color: colors[idx % colors.length] }}>{r.frameworkName}</td>
-                   <td className="p-4">{r.summary.maturityScore}/10</td>
-                   <td className="p-4">{r.summary.monthsToComplete}</td>
-                   <td className="p-4 text-red-400 text-xs">{r.risks.find(risk => risk.category === 'Crítico')?.description || r.risks[0].description}</td>
-                   <td className="p-4 text-emerald-400 text-xs italic">"{r.keyPersonas.find(p => p.sentiment > 80)?.impact || 'Alta aceitação técnica'}"</td>
-                 </tr>
-               ))}
-             </tbody>
-           </table>
+          <h3 className="font-bold text-sm uppercase mb-6">Detalhamento Head-to-Head</h3>
+          <table className="w-full text-left font-mono text-sm">
+            <thead>
+              <tr className="border-b border-zinc-700">
+                <th className="p-4 uppercase opacity-60">Framework</th>
+                <th className="p-4 uppercase opacity-60">Maturidade Final</th>
+                <th className="p-4 uppercase opacity-60">Tempo (Meses)</th>
+                <th className="p-4 uppercase opacity-60">Risco Principal</th>
+                <th className="p-4 uppercase opacity-60">Ponto Forte</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, idx) => (
+                <tr key={idx} className="border-b border-zinc-800 hover:bg-zinc-500/5 transition-colors">
+                  <td className="p-4 font-bold" style={{ color: colors[idx % colors.length] }}>{r.frameworkName}</td>
+                  <td className="p-4">{r.summary.maturityScore}/10</td>
+                  <td className="p-4">{r.summary.monthsToComplete}</td>
+                  <td className="p-4 text-red-400 text-xs">{r.risks.find(risk => risk.category === 'Crítico')?.description || r.risks[0].description}</td>
+                  <td className="p-4 text-emerald-400 text-xs italic">"{r.keyPersonas.find(p => p.sentiment > 80)?.impact || 'Alta aceitação técnica'}"</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+
+        {/* Business Metrics Comparison (Phase 5) */}
+        {results.some(r => r.businessMetrics) && (
+          <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
+            <h3 className="font-bold text-sm uppercase mb-6">📊 Comparativo de Métricas de Desempenho</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {/* Efficiency Gain */}
+              <div className="space-y-2">
+                <div className="text-xs font-mono uppercase opacity-60 text-center">Ganho Eficiência</div>
+                {results.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-emerald-500/10">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
+                    <span className="text-sm font-black text-emerald-500">+{r.businessMetrics?.efficiencyGain || 0}%</span>
+                  </div>
+                ))}
+              </div>
+              {/* Rework Reduction */}
+              <div className="space-y-2">
+                <div className="text-xs font-mono uppercase opacity-60 text-center">Redução Retrabalho</div>
+                {results.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-yellow-500/10">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
+                    <span className="text-sm font-black text-yellow-500">-{r.businessMetrics?.reworkReduction || 0}%</span>
+                  </div>
+                ))}
+              </div>
+              {/* Process Agility */}
+              <div className="space-y-2">
+                <div className="text-xs font-mono uppercase opacity-60 text-center">Agilidade</div>
+                {results.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-purple-500/10">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
+                    <span className="text-sm font-black text-purple-500">+{r.businessMetrics?.processAgility || 0}%</span>
+                  </div>
+                ))}
+              </div>
+              {/* Time to Market */}
+              <div className="space-y-2">
+                <div className="text-xs font-mono uppercase opacity-60 text-center">Time-to-Market</div>
+                {results.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-blue-500/10">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
+                    <span className="text-sm font-black text-blue-500">-{r.businessMetrics?.timeToMarket || 0}%</span>
+                  </div>
+                ))}
+              </div>
+              {/* Quality Score */}
+              <div className="space-y-2">
+                <div className="text-xs font-mono uppercase opacity-60 text-center">Qualidade</div>
+                {results.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-zinc-500/10">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
+                    <span className="text-sm font-black">{r.businessMetrics?.qualityScore || 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Company Evolution Comparison (Phase 5) */}
+        {results.some(r => r.companyEvolution) && (
+          <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
+            <h3 className="font-bold text-sm uppercase mb-6">📈 Comparativo de Evolução Empresarial</h3>
+            <table className="w-full text-left font-mono text-sm">
+              <thead>
+                <tr className="border-b border-zinc-700">
+                  <th className="p-3 uppercase opacity-60">Framework</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Contratações</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Turnover</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Promoções</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Capacidade</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Break-Even</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Maturidade</th>
+                  <th className="p-3 uppercase opacity-60 text-center">Cultura</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, idx) => (
+                  <tr key={idx} className="border-b border-zinc-800 hover:bg-zinc-500/5">
+                    <td className="p-3 font-bold" style={{ color: colors[idx % colors.length] }}>{r.frameworkName}</td>
+                    <td className="p-3 text-center text-green-500">+{r.companyEvolution?.newHires || 0}</td>
+                    <td className="p-3 text-center text-red-500">{r.companyEvolution?.turnover || 0}%</td>
+                    <td className="p-3 text-center text-amber-500">{r.companyEvolution?.promotions || 0}</td>
+                    <td className="p-3 text-center text-purple-500">+{r.companyEvolution?.capacityGrowth || 0}%</td>
+                    <td className={`p-3 text-center ${(r.companyEvolution?.breakEvenProjection || 0) > 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                      {(r.companyEvolution?.breakEvenProjection || 0) > 0 ? `Mês ${r.companyEvolution?.breakEvenProjection}` : 'N/A'}
+                    </td>
+                    <td className="p-3 text-center">
+                      <span className="opacity-50">{r.companyEvolution?.maturityLevelBefore || '-'}</span>
+                      <span className="mx-1">→</span>
+                      <span className="text-emerald-500 font-bold">{r.companyEvolution?.maturityLevelAfter || '-'}</span>
+                    </td>
+                    <td className={`p-3 text-center font-bold ${r.companyEvolution?.culturalShift === 'ENTUSIASTA' ? 'text-emerald-500' :
+                        r.companyEvolution?.culturalShift === 'FAVORÁVEL' ? 'text-green-500' :
+                          r.companyEvolution?.culturalShift === 'NEUTRO' ? 'text-yellow-500' :
+                            'text-red-500'
+                      }`}>{r.companyEvolution?.culturalShift || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
       </div>
     </div>

@@ -216,7 +216,15 @@ export class ROICalculatorAgent {
 
         const conq = custoRework + custoManutencao;
 
-        return { opex, value, conq };
+        // Stochastic Noise (Incerteza do mundo real)
+        // +/- 10% de variação aleatória
+        const noise = (Math.random() * 0.2) - 0.1; // -0.1 to 0.1
+
+        return {
+            opex: opex * (1 + (noise * 0.5)), // OpEx é mais estável
+            value: value * (1 + noise), // Value é volátil
+            conq: conq * (1 + (Math.abs(noise) * 2)) // CoNQ tende a piorar com o caos
+        };
     }
 
     /**
@@ -352,4 +360,4 @@ export class ROICalculatorAgent {
 }
 
 // Export singleton
-export const roiCalculator = new ROICalculatorAgent();
+// export const roiCalculator = new ROICalculatorAgent();

@@ -2,9 +2,10 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { SingleSimulationConfig, SimulationOutput } from "../types";
-import { calculateMonthlyMetrics, SimulationRawData } from "./metricsCalculator";
+import { calculateMonthlyMetrics, SimulationRawData, getCostProfile } from "./metricsCalculator";
 import { MOCK_SIMULATION_RESULT } from "./mockData";
 import { generateRAGContext, injectRAGContext } from "./ragService";
+import { enrichArchetypesToTeam, generateTeamDescription, calculateTeamResistance } from "./personaEnricher";
 
 
 // === NEW: Document Digestion Service (Gemini Flash) ===
@@ -188,8 +189,37 @@ const SIMULATION_SCHEMA = {
         required: ["department", "score"],
       },
     },
+    businessMetrics: {
+      type: Type.OBJECT,
+      description: "Métricas de negócio resultantes da implementação do framework",
+      properties: {
+        efficiencyGain: { type: Type.NUMBER, description: "% de ganho de eficiência do time (ex: 25 significa 25% mais eficiente)" },
+        reworkReduction: { type: Type.NUMBER, description: "% de redução de retrabalho/bugs (ex: 40 significa 40% menos retrabalho)" },
+        processAgility: { type: Type.NUMBER, description: "% de melhoria na agilidade dos processos (ex: 30 significa 30% mais ágil)" },
+        timeToMarket: { type: Type.NUMBER, description: "% de redução no tempo de entrega (ex: 20 significa 20% mais rápido)" },
+        qualityScore: { type: Type.NUMBER, description: "Índice geral de qualidade (0-100)" }
+      },
+      required: ["efficiencyGain", "reworkReduction", "processAgility", "timeToMarket", "qualityScore"]
+    },
+    companyEvolution: {
+      type: Type.OBJECT,
+      description: "Evolução do estado da empresa durante a implementação",
+      properties: {
+        initialTeamSize: { type: Type.NUMBER, description: "Tamanho inicial do time no mês 1" },
+        finalTeamSize: { type: Type.NUMBER, description: "Tamanho final do time no último mês" },
+        newHires: { type: Type.NUMBER, description: "Número de novas contratações durante o período" },
+        turnover: { type: Type.NUMBER, description: "% de turnover (pessoas que saíram)" },
+        promotions: { type: Type.NUMBER, description: "Número de promoções internas" },
+        capacityGrowth: { type: Type.NUMBER, description: "% de crescimento na capacidade de entrega" },
+        breakEvenProjection: { type: Type.NUMBER, description: "Mês estimado para break-even. Se ROI já positivo, use 0. Se nunca, use -1 ou mês futuro estimado além do período." },
+        maturityLevelBefore: { type: Type.NUMBER, description: "Nível de maturidade antes (1-5)" },
+        maturityLevelAfter: { type: Type.NUMBER, description: "Nível de maturidade depois (1-5)" },
+        culturalShift: { type: Type.STRING, enum: ["RESISTENTE", "NEUTRO", "FAVORÁVEL", "ENTUSIASTA"], description: "Mudança cultural predominante" }
+      },
+      required: ["initialTeamSize", "finalTeamSize", "newHires", "turnover", "promotions", "capacityGrowth", "breakEvenProjection", "maturityLevelBefore", "maturityLevelAfter", "culturalShift"]
+    },
   },
-  required: ["summary", "implementationNarrative", "sentimentBreakdown", "resourceAllocation", "timeline", "keyPersonas", "risks", "recommendations", "departmentReadiness"],
+  required: ["summary", "implementationNarrative", "sentimentBreakdown", "resourceAllocation", "timeline", "keyPersonas", "risks", "recommendations", "departmentReadiness", "businessMetrics", "companyEvolution"],
 };
 
 export const runSimulation = async (config: SingleSimulationConfig): Promise<SimulationOutput> => {
@@ -226,11 +256,21 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
         break;
     }
 
-    const archetypesList = config.employeeArchetypes && config.employeeArchetypes.length > 0
-      ? config.employeeArchetypes.join(", ")
-      : "Mistura padrão de céticos e pragmáticos";
+    // PERSONA ENRICHMENT: Map archetypes to real personas from profiles.json
+    const archetypes = config.employeeArchetypes || ['mid_level', 'senior_staff'];
+    const { team, keyStakeholders, archetypeDistribution } = enrichArchetypesToTeam(
+      archetypes,
+      config.companySize
+    );
 
-    const isHighDensity = config.employeeArchetypes && config.employeeArchetypes.length > 5;
+    // Generate rich team description for prompt
+    const teamDescription = generateTeamDescription(keyStakeholders);
+    const teamResistance = calculateTeamResistance(team);
+
+    console.log(`[PersonaEnricher] Team of ${team.length} personas, resistance score: ${teamResistance}%`);
+    console.log(`[PersonaEnricher] Key stakeholders:`, keyStakeholders.map(p => `${p.nome} (${p.cargo})`).join(', '));
+
+    const isHighDensity = archetypes.length > 5;
 
     // Realism Factors Calculation
     const realismContext = `
@@ -240,6 +280,19 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       - Trauma Anterior: ${config.previousFailures ? 'SIM (Funcionários céticos, "lá vem outra bala de prata")' : 'NÃO'}
       - Cenário Específico: ${config.scenarioContext}
     `;
+
+    // Economic Profile Context for accurate cost simulation
+    const costProfile = getCostProfile((config as any).economicProfileId);
+    const economicContext = costProfile ? `
+      CONTEXTO ECONÔMICO (${costProfile.name}):
+      - Região: ${costProfile.region} | Moeda: ${costProfile.currency}
+      - Custo Dev/Dia: ${costProfile.currency} ${costProfile.constants.DEV_DAY_COST}
+      - Custo Incidente: ${costProfile.currency} ${costProfile.constants.INCIDENT_COST}
+      - Valor por Feature: ${costProfile.currency} ${costProfile.constants.FEATURE_VALUE}
+      - ${costProfile.description}
+      
+      INSTRUÇÃO: Use esses valores como referência para cálculos de ROI e custos.
+    ` : '';
 
     // Prompt otimizado com RAG dinâmico
     const prompt = `
@@ -254,7 +307,10 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       - Tamanho: ${config.companySize} funcionários.
       - Setor: ${config.sector}.
       - Orçamento: ${config.budgetLevel}.
-      - ECOSSISTEMA HUMANO: ${archetypesList}.
+      
+      ECOSSISTEMA HUMANO (Personas Reais do RAG):
+      Resistência Cultural Calculada: ${teamResistance}%
+      ${teamDescription}
       
       INSTRUÇÃO DE CONTEXTO:
       Caso o texto do "Framework" acima seja breve ou genérico, você DEVE utilizar seu vasto conhecimento interno sobre o framework citado (rituais, papéis, artefatos, métricas) para preencher as lacunas. Não invente frameworks inexistentes, mas expanda os conceitos padrão de mercado se necessário.
@@ -264,6 +320,7 @@ export const runSimulation = async (config: SingleSimulationConfig): Promise<Sim
       MODIFICADORES DE CENÁRIO:
       ${categoryContext}
       ${realismContext}
+      ${economicContext}
       
       ${isHighDensity ? "ALERTA DE ALTA DENSIDADE: Muitos arquétipos selecionados. Simule conflitos interdepartamentais." : ""}
 

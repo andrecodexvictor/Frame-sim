@@ -1,4 +1,4 @@
-# Sistema RAG Otimizado - Documentação Técnica
+# Sistema RAG Otimizado - Documentação Técnica v4.0
 
 ## Visão Geral
 
@@ -6,9 +6,10 @@ Este sistema implementa **RAG (Retrieval-Augmented Generation) otimizado** com L
 
 - **Self-RAG**: Query Router que decide automaticamente quando usar/ignorar retrieval
 - **Hierarchical Retrieval**: Índices separados por tipo de documento
-- **Multi-Agent**: Personas, cálculo de ROI e orquestração de stakeholders
+- **Multi-Agent (Agentic L4)**: Personas, CriticAgent, SmartRouter, cálculo de ROI e orquestração
+- **Memória de Agente**: Scratchpad (curto prazo) + Vector History (longo prazo)
 
-## Arquitetura
+## Arquitetura Agentic
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -23,33 +24,64 @@ Este sistema implementa **RAG (Retrieval-Augmented Generation) otimizado** com L
 │  • CALCULO_ROI → RAG só em métricas                             │
 │  • CENARIO_COMPARATIVO → RAG full (playbooks + métricas)        │
 │  • EVENTO_SIMULACAO → RAG só em eventos                         │
-│  • HIBRIDO → Múltiplas collections                              │
+│  • HIBRIDO → Múltiplas collections (inclui history)             │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
-          ┌─────────────────┼─────────────────┐
-          │                 │                 │
-          ▼                 ▼                 ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│ PersonaAgent│   │ROICalculator│   │Orchestrator │
-│ (Few-shot)  │   │ (Curva J)   │   │(Multi-agent)│
-└─────────────┘   └─────────────┘   └─────────────┘
+           ┌────────────────┴────────────────┐
+           ▼                                 ▼
+┌─────────────────────┐             ┌─────────────────────┐
+│     SmartRouter     │             │  Vector Store       │
+│  (Multi-LLM: GPT-4, │             │  (ChromaDB)         │
+│  Gemini, DeepSeek,  │             │  - profiles         │
+│  Ollama [local])    │             │  - metrics          │
+└──────────┬──────────┘             │  - events           │
+           │                        │  - playbooks        │
+           ▼                        │  - history (NEW!)   │
+┌─────────────────────┐             └─────────────────────┘
+│ Selected LLM        │
+│ (Best for task)     │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────────────────────────┐
+│             ORCHESTRATOR                 │
+│  - Manages SimulationState               │
+│  - Scratchpad (short-term memory)        │
+│  - Calls PersonaAgent, ROICalculator     │
+│  - Runs Agentic Loop:                    │
+│    Thought → Route → Act → Observe →     │
+│    Critique (via CriticAgent)            │
+└──────────┬──────────────────────────────┘
+           │
+           ▼
+┌─────────────────────┐    ┌─────────────────────┐
+│    CriticAgent      │◄───│    MetricsService   │
+│  (Self-Reflection)  │    │    (QPC, TTS, Cost) │
+│  - Plausibility     │    └─────────────────────┘
+│    Score (0-100)    │
+│  - Replan if < 70   │
+└─────────────────────┘
 ```
 
 ## Estrutura de Arquivos
 
 ```
-RAG implement/
+RAG/
 ├── src/
 │   ├── types/
-│   │   └── index.ts          # Tipos centrais (PersonaProfile, ROIResult, etc.)
+│   │   └── index.ts          # Tipos (PersonaProfile, SimulationState, etc.)
 │   ├── services/
 │   │   ├── queryRouter.ts    # Self-RAG - classificador de queries
 │   │   ├── documentLoader.ts # Chunking hierárquico por tipo
-│   │   └── vectorStore.ts    # ChromaDB com collections separadas
+│   │   ├── vectorStore.ts    # ChromaDB (+history collection)
+│   │   ├── SmartRouter.ts    # Multi-LLM routing (NEW!)
+│   │   ├── LLMProvider.ts    # Unified LLM interface (NEW!)
+│   │   └── MetricsService.ts # Agentic Metrics (NEW!)
 │   ├── agents/
-│   │   ├── personaAgent.ts   # Simula stakeholders com few-shot examples
-│   │   ├── roiCalculator.ts  # Cálculos financeiros (Curva J, dívida técnica)
-│   │   └── orchestrator.ts   # Coordena simulação multi-stakeholder
+│   │   ├── personaAgent.ts   # Stakeholders + Cognitive Bias
+│   │   ├── roiCalculator.ts  # ROI + Stochastic Noise
+│   │   ├── CriticAgent.ts    # Self-Reflection (NEW!)
+│   │   └── orchestrator.ts   # Agentic Loop + Scratchpad
 │   ├── index.ts              # Barrel exports
 │   └── main.ts               # CLI entry point
 ├── profiles.json             # 350+ personas geradas
@@ -58,6 +90,7 @@ RAG implement/
 ├── simulation_events.json    # Eventos com gatilhos
 └── simulation_config.json    # Configuração do cenário
 ```
+
 
 ## Componentes Principais
 
@@ -189,6 +222,21 @@ npm run dev -- --simulate
 ```
 
 ## Changelog
+
+### v6.0 (2025-12-07) - Economic & Persona Realism
+- ✅ **Dynamic Cost Profiles**: 8 cenários econômicos (PME, Startup, Enterprise, FAANG, etc.) afetando custos e ROI.
+- ✅ **Persona Enrichment**: Mapeamento de arquétipos para stakeholders reais com nomes e histórias de `profiles.json`.
+- ✅ **Team Distribution**: Geração realista de time (estagiário a tech lead) baseada no tamanho da empresa.
+- ✅ **New Business Metrics**: Eficiência, Retrabalho, Agilidade e Evolução do Time.
+
+### v4.0 (2025-12-07) - Agentic Transformation
+- ✅ **SmartRouter (Multi-LLM)**: Integração de GPT-4, Gemini, DeepSeek e Ollama.
+- ✅ **CriticAgent (Self-Reflection)**: Validação de resultados com pontuação de plausibilidade.
+- ✅ **Memória de Curto Prazo (Scratchpad)**: Foco dinâmico a cada turno.
+- ✅ **Memória de Longo Prazo (History Collection)**: Persistência de turnos em ChromaDB.
+- ✅ **Viés Cognitivo**: PersonaAgent agora aplica viéses (Confirmação, Status Quo, Aversão).
+- ✅ **Ruído Estocástico**: ROICalculator injeta variações de ±10%.
+- ✅ **MetricsService**: Métricas agenticas (QPC, TTS, Cost).
 
 ### v3.3 (2025-12-05) - Simulação Longo Prazo
 - ✅ **Modo 5 Anos**: Nova opção no formulário para simular 60 meses.

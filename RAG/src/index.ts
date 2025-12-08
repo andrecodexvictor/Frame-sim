@@ -11,6 +11,8 @@ export { DocumentLoader, documentLoader, type LoadedDocuments } from './services
 export { VectorStoreService, createVectorStore, type SearchResult, type HybridSearchOptions } from './services/vectorStore.js';
 
 // Agents
-export { PersonaAgent, personaAgent } from './agents/personaAgent.js';
-export { ROICalculatorAgent, roiCalculator } from './agents/roiCalculator.js';
-export { OrchestratorAgent, createOrchestrator, type SimulationState, type SimulationStep } from './agents/orchestrator.js';
+export { PersonaAgent } from './agents/personaAgent.js';
+export { GoalAgent } from './agents/GoalAgent.js';
+export { ROICalculatorAgent } from './agents/roiCalculator.js';
+export { OrchestratorAgent, createOrchestrator } from './agents/orchestrator.js';
+

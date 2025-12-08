@@ -8,6 +8,7 @@ import {
   TrendingUp, BarChart3, CheckSquare, Award, Hammer, Gem, DollarSign, Globe, Anchor,
   Activity, Server, History, FileWarning, Target
 } from 'lucide-react';
+import { CostBreakdownPanel } from './CostBreakdownPanel';
 
 interface ConfigFormProps {
   frameworks: FrameworkInput[];
@@ -64,12 +65,13 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
 
       // Defaults for realism
       techDebtLevel: 'medium',
-      operationalVelocity: 'bureaucratic',
+      operationalVelocity: 'bureaucrat',
       previousFailures: false,
       scenarioMode: 'recommended',
       selectedScenarioId: 'legacy_migration',
       customScenarioText: '',
-      durationMonths: 12
+      durationMonths: 12,
+      economicProfileId: 'br_pme' // Default to Brazilian PME
     }
   });
 
@@ -102,7 +104,16 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
         <h2 className="text-3xl font-black uppercase text-brutal-black dark:text-white">
           {isComparison ? 'Parâmetros do Cenário' : 'Configuração'}
         </h2>
-        <span className="bg-brutal-black text-white font-mono px-2 py-1 text-xs">PASSO 2/3</span>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-800 p-2 border-2 border-brutal-black shadow-sm">
+            <span className="font-bold text-xs uppercase">MODO AGÊNTICO</span>
+            <div className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" className="sr-only peer" {...register('simulationMode')} value="agentic" />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
+            </div>
+          </label>
+          <span className="bg-brutal-black text-white font-mono px-2 py-1 text-xs">PASSO 2/3</span>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="bg-white dark:bg-zinc-900 border-4 border-brutal-black dark:border-zinc-700 shadow-hard p-8 space-y-10 transition-colors">
@@ -165,6 +176,29 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
                 <option value="medium">Adequado (Padrão de Mercado)</option>
                 <option value="high">Agressivo (Venture Capital/Bonança)</option>
               </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="font-bold text-sm uppercase dark:text-zinc-300">💰 Perfil Econômico</label>
+              <select
+                {...register('economicProfileId')}
+                className="w-full p-3 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green bg-white dark:bg-zinc-800 dark:text-white dark:border-zinc-600 text-sm"
+              >
+                <option value="br_interior">🇧🇷 Brasil - Interior/Região (Custo Baixo)</option>
+                <option value="br_pme">🇧🇷 Brasil - PME (Pequena/Média Empresa)</option>
+                <option value="br_startup">🇧🇷 Brasil - Startup Tech (SP/RJ)</option>
+                <option value="br_enterprise_lean">🇧🇷 Brasil - Grande Empresa (Custo Controlado)</option>
+                <option value="br_enterprise">🇧🇷 Brasil - Grande Empresa (Premium)</option>
+                <option value="latam_remote">🌎 LATAM - Remoto para Exterior (USD)</option>
+                <option value="us_faang">🇺🇸 USA - Big Tech / FAANG (USD)</option>
+                <option value="eu_western">🇪🇺 Europa Ocidental (EUR)</option>
+              </select>
+              <p className="text-xs opacity-60 font-mono">Define custos de salários, incidentes e valor de features</p>
+            </div>
+
+            {/* Cost Breakdown Panel */}
+            <div className="md:col-span-2">
+              <CostBreakdownPanel profileId={watch('economicProfileId') || 'br_pme'} />
             </div>
 
             <div className="md:col-span-2 space-y-2">

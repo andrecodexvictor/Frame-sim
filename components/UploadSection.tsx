@@ -165,7 +165,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
           Frame<span className="text-brutal-green">Sim</span>
         </h1>
         <p className="font-mono text-sm md:text-base border-l-4 border-brutal-black dark:border-white pl-4 text-left md:text-center md:border-l-0 md:inline-block md:px-2 bg-yellow-400 text-black">
-          ENGINE DE COMPARAÇÃO CORPORATIVA v2.1
+          ENGINE DE COMPARAÇÃO CORPORATIVA v6.0
         </p>
       </div>
 
