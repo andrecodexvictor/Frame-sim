@@ -5,7 +5,8 @@
 
 Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM Agentic** (Gemini, GPT-4, DeepSeek, Ollama) combinada com **RAG (Retrieval-Augmented Generation)**, **Agentes Autônomos (CriticAgent)** e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com alto grau de realismo.
 
-![Frame-Sim Banner](https://via.placeholder.com/800x400?text=Frame-Sim+v4.0)
+<img width="1507" height="223" alt="image" src="https://github.com/user-attachments/assets/ccdfdca0-eef5-4771-938f-b9a6b34ca23a" />
+
 
 ---
 
