@@ -59,7 +59,7 @@ Configure o ambiente da simulação:
 
 - **Frontend**: React, TypeScript, Vite, TailwindCSS (Design System Customizado).
 - **Charts**: Recharts (Visualização de dados complexos).
-- **AI Core**: Google Gemini 1.5 Pro (via Google AI Studio).
+- **AI Core**: Google Gemini 2.5 Pro (via Google AI Studio),Gpt4 (via Gpt free API), Deep-Seek API( via deepseek spaces)
 - **RAG**: ChromaDB (Vetorização local) + Lógica de Self-RAG.
 - **Arquitetura**: Componentização modular e serviços desacoplados.
 
