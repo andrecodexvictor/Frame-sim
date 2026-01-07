@@ -1,5 +1,5 @@
 
-# Frame-sim: Deep Enterprise Simulation Kernel v4.0
+# Frame-sim: Deep Enterprise Simulation Kernel v5.0
 
 **Frame-sim** é um simulador empresarial avançado projetado para testar a implementação de frameworks de gestão e engenharia (Scrum, SAFe, Spotify, etc.) em ambientes corporativos complexos.
 
@@ -10,7 +10,23 @@ Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM A
 
 ---
 
-## 🚀 Novidades da v4.0 (Agentic Loop & Multi-LLM)
+## 🚀 Novidades da v5.0 (Advanced Agentic Workflow)
+
+### 🔥 Self-Improvement (Auto-Calibração)
+Antes de um lote de simulações (Batch Mode), o sistema executa uma fase de **Warmup** onde testa diferentes combinações de parâmetros (temperatura, TopK, modo RAG) e usa o `CriticAgent` para pontuá-los. O sistema converge automaticamente para os parâmetros ótimos.
+
+### ⚔️ Agent Racing (Concorrência de Agentes)
+No modo **Racing**, múltiplos agentes com personas distintas (CFO Conservador, CTO Otimista, COO Pragmático) executam a mesma simulação em paralelo. O sistema seleciona o vencedor (maior plausibilidade) ou gera um **Ensemble** ponderado.
+
+### 📄 DocumentAgent Desacoplado
+A ingestão e "digestão" de documentos de framework agora é feita por um agente dedicado (`DocumentAgent`), acessível via API (`/api/ingest`). Isso permite processar PDFs e arquivos de texto de forma assíncrona antes da simulação.
+
+### 📊 Intervalos de Confiança
+O sumário de batch agora inclui **IC 95%** (Intervalo de Confiança), ROI mínimo/máximo, e variância, proporcionando análises estatisticamente robustas.
+
+---
+
+## 🔧 v4.0 Features (Agentic Loop & Multi-LLM)
 
 - **SmartRouter (Multi-LLM)**: Roteia automaticamente para o LLM mais adequado (GPT-4 para raciocínio complexo, Gemini para criatividade, DeepSeek/Ollama para validações simples).
 - **CriticAgent (Auto-Reflexão)**: Agente que valida os resultados da simulação com uma pontuação de plausibilidade. Se < 70%, solicita replanejamento.

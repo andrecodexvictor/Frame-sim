@@ -166,8 +166,46 @@ app.post('/api/simulate', async (req, res) => {
     }
 });
 
+// ========== NEW: Document Ingestion Endpoint ==========
+import { DocumentAgent } from './agents/DocumentAgent.js';
+
+const documentAgent = new DocumentAgent();
+
+app.post('/api/ingest', async (req, res) => {
+    console.log('📨 Request received for Document Ingestion');
+
+    try {
+        const { rawText, documents } = req.body;
+
+        if (!rawText && (!documents || !Array.isArray(documents))) {
+            return res.status(400).json({ error: 'Missing rawText or documents array' });
+        }
+
+        let digest;
+        if (documents && documents.length > 0) {
+            digest = await documentAgent.digestMultiple(documents);
+        } else {
+            digest = await documentAgent.digest(rawText);
+        }
+
+        console.log('✅ Document ingestion completed');
+        res.json({
+            success: true,
+            digest
+        });
+
+    } catch (error: any) {
+        console.error('❌ Ingestion failed:', error);
+        res.status(500).json({
+            error: 'Internal Server Error',
+            details: error.message
+        });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`\n🚀 Agentic Server running at http://localhost:${PORT}`);
     console.log(`   - Status: http://localhost:${PORT}/api/status`);
     console.log(`   - Simulator: http://localhost:${PORT}/api/simulate (POST)`);
+    console.log(`   - Ingest: http://localhost:${PORT}/api/ingest (POST)`);
 });

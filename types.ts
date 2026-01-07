@@ -176,3 +176,103 @@ export interface AgenticMetrics {
   total_tokens: number;
   router_choice: string;
 }
+
+// === SELF-IMPROVEMENT TYPES ===
+export interface WarmupConfig {
+  maxIterations: number;           // Max warmup iterations (default: 5)
+  targetPlausibility: number;      // Min CriticAgent score (default: 85)
+  parameterSpace: ParameterSpace;
+}
+
+export interface ParameterSpace {
+  temperatures: number[];          // [0.3, 0.5, 0.7, 0.9]
+  topKValues: number[];            // [3, 5, 10]
+  ragModes: ('full' | 'selective' | 'none')[];
+}
+
+export interface OptimizedParameters {
+  temperature: number;
+  topK: number;
+  ragMode: 'full' | 'selective' | 'none';
+  promptVariant?: string;
+}
+
+export interface WarmupResult {
+  optimalParams: OptimizedParameters;
+  iterationsUsed: number;
+  finalScore: number;
+  convergenceHistory: ConvergencePoint[];
+}
+
+export interface ConvergencePoint {
+  iteration: number;
+  params: OptimizedParameters;
+  plausibilityScore: number;
+  timestamp: number;
+}
+
+// === AGENT RACING TYPES ===
+export interface RacingConfig {
+  numAgents: number;               // How many agents compete (default: 3)
+  selectionStrategy: 'best' | 'ensemble' | 'weighted';
+  timeout: number;                 // Per-agent timeout in ms
+  diversityMode: 'temperature' | 'persona' | 'model' | 'full';
+}
+
+export interface AgentConfig {
+  id: string;
+  temperature: number;
+  model: string;
+  persona: string;                 // "CFO", "CTO", "Pessimista"
+}
+
+export interface AgentResult {
+  agentId: string;
+  agentConfig: AgentConfig;
+  result: SimulationOutput | null;
+  critiqueScore: number;
+  duration: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface RaceResult {
+  winner: AgentResult;
+  allResults: AgentResult[];
+  ensemble?: EnsembleResult;
+  metrics: RacingMetrics;
+}
+
+export interface EnsembleResult {
+  weightedROI: number;
+  weightedAdoption: number;
+  confidence: number;
+  contributingAgents: string[];
+}
+
+export interface RacingMetrics {
+  totalDuration: number;
+  agentsCompleted: number;
+  agentsFailed: number;
+  averageScore: number;
+  scoreVariance: number;
+}
+
+// === ENHANCED BATCH CONFIG ===
+export interface EnhancedBatchConfig {
+  iterations: number;
+  enableWarmup: boolean;
+  warmupConfig?: WarmupConfig;
+  enableRacing: boolean;
+  racingConfig?: RacingConfig;
+}
+
+export interface BatchSummary {
+  averageRoi: number;
+  averageAdoption: number;
+  successRate: number;
+  stdDevRoi: number;
+  minRoi: number;
+  maxRoi: number;
+  confidenceInterval95: [number, number];
+}

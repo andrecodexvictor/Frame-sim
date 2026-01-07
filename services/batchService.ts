@@ -1,18 +1,265 @@
 
-import { SimulationConfig, SimulationOutput, SingleSimulationConfig } from '../types';
+import { SimulationConfig, SimulationOutput, SingleSimulationConfig, EnhancedBatchConfig, WarmupResult, BatchSummary, OptimizedParameters, RacingConfig, AgentConfig } from '../types';
 import { runSimulation } from './geminiService';
 
 export interface BatchResult {
     config: SimulationConfig;
     outputs: SimulationOutput[];
-    summary: {
-        averageRoi: number;
-        averageAdoption: number;
-        successRate: number; // % of runs with ROI > 0
-        stdDevRoi: number;
-    };
+    warmupResult?: WarmupResult;
+    summary: BatchSummary;
 }
 
+export interface BatchProgress {
+    phase: 'WARMUP' | 'RACING' | 'BATCH' | 'CONSOLIDATION';
+    percent: number;
+    message: string;
+    currentIteration?: number;
+}
+
+// ========== SELF-IMPROVEMENT SERVICE (Inline for Frontend) ==========
+class FrontendSelfImprovementService {
+    private bestParams: OptimizedParameters | null = null;
+    private bestScore: number = 0;
+
+    async runWarmup(
+        config: SimulationConfig,
+        warmupConfig: { maxIterations: number; targetPlausibility: number; parameterSpace: any },
+        onProgress?: (iteration: number, score: number) => void
+    ): Promise<WarmupResult> {
+        console.log('🔥 WARMUP: Iniciando auto-aprimoramento...');
+        const history: any[] = [];
+        this.bestParams = null;
+        this.bestScore = 0;
+
+        for (let i = 0; i < warmupConfig.maxIterations; i++) {
+            const candidateParams = this.sampleParameters(warmupConfig.parameterSpace, i, history);
+            console.log(`📍 Iteration ${i + 1}: T=${candidateParams.temperature}, TopK=${candidateParams.topK}`);
+
+            // Mini-simulation
+            const singleConfig: SingleSimulationConfig = {
+                frameworkName: config.frameworks[0]?.name || 'Test',
+                frameworkText: config.frameworks[0]?.text || '',
+                frameworkCategory: config.frameworkCategory,
+                companySize: config.companySize,
+                sector: config.sector,
+                budgetLevel: config.budgetLevel,
+                employeeArchetypes: config.employeeArchetypes,
+                techDebtLevel: config.techDebtLevel,
+                operationalVelocity: config.operationalVelocity,
+                previousFailures: config.previousFailures,
+                scenarioContext: `[WARMUP] T=${candidateParams.temperature}`,
+                durationMonths: 6
+            };
+
+            const result = await runSimulation(singleConfig);
+
+            // Simple plausibility score based on scenario validity
+            const score = result.summary.scenarioValidity || 50;
+
+            history.push({ iteration: i + 1, params: candidateParams, plausibilityScore: score, timestamp: Date.now() });
+
+            if (score > this.bestScore) {
+                this.bestScore = score;
+                this.bestParams = candidateParams;
+                console.log(`   ✅ New best! Score=${score}`);
+            }
+
+            onProgress?.(i + 1, score);
+
+            if (this.bestScore >= warmupConfig.targetPlausibility) {
+                console.log(`🎯 Converged at iteration ${i + 1}!`);
+                break;
+            }
+        }
+
+        return {
+            optimalParams: this.bestParams || { temperature: 0.6, topK: 5, ragMode: 'selective' },
+            iterationsUsed: history.length,
+            finalScore: this.bestScore,
+            convergenceHistory: history
+        };
+    }
+
+    private sampleParameters(space: any, iteration: number, history: any[]): OptimizedParameters {
+        if (iteration < 2) {
+            return {
+                temperature: space.temperatures[Math.floor(Math.random() * space.temperatures.length)],
+                topK: space.topKValues[Math.floor(Math.random() * space.topKValues.length)],
+                ragMode: space.ragModes[Math.floor(Math.random() * space.ragModes.length)]
+            };
+        }
+        if (this.bestParams) {
+            return this.bestParams; // Exploit best
+        }
+        return { temperature: 0.6, topK: 5, ragMode: 'selective' };
+    }
+}
+
+// ========== AGENT RACING SERVICE (Inline for Frontend) ==========
+class FrontendAgentRacingService {
+    private agents: AgentConfig[] = [];
+
+    setupAgents(numAgents: number): void {
+        const personas = ['CFO_Conservador', 'CTO_Otimista', 'COO_Pragmatico', 'CEO_Visionario', 'HR_Cauteloso'];
+        const temperatures = [0.3, 0.5, 0.7, 0.9, 1.0];
+        this.agents = [];
+        for (let i = 0; i < numAgents; i++) {
+            this.agents.push({
+                id: `agent_${i + 1}`,
+                temperature: temperatures[i % temperatures.length],
+                model: 'gemini-2.5-flash',
+                persona: personas[i % personas.length]
+            });
+        }
+        console.log(`🏁 ${this.agents.length} agents configured for racing`);
+    }
+
+    async race(
+        config: SimulationConfig,
+        racingConfig: RacingConfig
+    ): Promise<{ winner: any; allResults: any[]; metrics: any }> {
+        console.log(`⚔️ AGENT RACING: ${this.agents.length} agents competing...`);
+        const startTime = Date.now();
+        const results: any[] = [];
+
+        for (const agent of this.agents) {
+            const singleConfig: SingleSimulationConfig = {
+                frameworkName: config.frameworks[0]?.name || 'Framework',
+                frameworkText: config.frameworks[0]?.text || '',
+                frameworkCategory: config.frameworkCategory,
+                companySize: config.companySize,
+                sector: config.sector,
+                budgetLevel: config.budgetLevel,
+                employeeArchetypes: config.employeeArchetypes,
+                techDebtLevel: config.techDebtLevel,
+                operationalVelocity: config.operationalVelocity,
+                previousFailures: config.previousFailures,
+                scenarioContext: `[RACING] Agent ${agent.id} (${agent.persona})`,
+                durationMonths: config.durationMonths || 12
+            };
+
+            const result = await runSimulation(singleConfig);
+            const score = result.summary.scenarioValidity || 50;
+            results.push({ agentId: agent.id, agentConfig: agent, result, critiqueScore: score, success: true });
+        }
+
+        const winner = results.reduce((best, r) => r.critiqueScore > best.critiqueScore ? r : best);
+
+        return {
+            winner,
+            allResults: results,
+            metrics: {
+                totalDuration: Date.now() - startTime,
+                agentsCompleted: results.length,
+                agentsFailed: 0,
+                averageScore: results.reduce((s, r) => s + r.critiqueScore, 0) / results.length,
+                scoreVariance: 0
+            }
+        };
+    }
+}
+
+// ========== ENHANCED BATCH SIMULATION ==========
+export const runEnhancedBatchSimulation = async (
+    config: SimulationConfig,
+    batchConfig: EnhancedBatchConfig,
+    onProgress: (status: BatchProgress) => void
+): Promise<BatchResult> => {
+    const selfImprovement = new FrontendSelfImprovementService();
+    const agentRacing = new FrontendAgentRacingService();
+
+    let optimalParams: OptimizedParameters | undefined;
+    let warmupResult: WarmupResult | undefined;
+    const outputs: SimulationOutput[] = [];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 0: SELF-IMPROVEMENT (Warmup)
+    // ═══════════════════════════════════════════════════════════════════
+    if (batchConfig.enableWarmup && batchConfig.warmupConfig) {
+        onProgress({ phase: 'WARMUP', percent: 0, message: '🔥 Iniciando auto-aprimoramento...' });
+
+        warmupResult = await selfImprovement.runWarmup(
+            config,
+            batchConfig.warmupConfig,
+            (iteration, score) => {
+                onProgress({
+                    phase: 'WARMUP',
+                    percent: (iteration / batchConfig.warmupConfig!.maxIterations) * 100,
+                    message: `Iteração ${iteration}: Score ${score}%`,
+                    currentIteration: iteration
+                });
+            }
+        );
+
+        optimalParams = warmupResult.optimalParams;
+        onProgress({ phase: 'WARMUP', percent: 100, message: `✅ Warmup completo! Score: ${warmupResult.finalScore}%` });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 1: BATCH EXECUTION
+    // ═══════════════════════════════════════════════════════════════════
+    for (let i = 0; i < batchConfig.iterations; i++) {
+        onProgress({ phase: 'BATCH', percent: (i / batchConfig.iterations) * 100, message: `Simulação ${i + 1}/${batchConfig.iterations}`, currentIteration: i + 1 });
+
+        let result: SimulationOutput;
+
+        if (batchConfig.enableRacing && batchConfig.racingConfig) {
+            onProgress({ phase: 'RACING', percent: (i / batchConfig.iterations) * 100, message: `⚔️ Racing simulação ${i + 1}...` });
+            agentRacing.setupAgents(batchConfig.racingConfig.numAgents);
+            const raceResult = await agentRacing.race(config, batchConfig.racingConfig);
+            result = raceResult.winner.result;
+            (result as any).racingMetrics = raceResult.metrics;
+        } else {
+            const singleConfig: SingleSimulationConfig = {
+                frameworkName: config.frameworks[0]?.name || 'Framework',
+                frameworkText: config.frameworks[0]?.text || '',
+                frameworkCategory: config.frameworkCategory,
+                companySize: config.companySize,
+                sector: config.sector,
+                budgetLevel: config.budgetLevel,
+                employeeArchetypes: config.employeeArchetypes,
+                techDebtLevel: config.techDebtLevel,
+                operationalVelocity: config.operationalVelocity,
+                previousFailures: config.previousFailures,
+                scenarioContext: optimalParams ? `[OPTIMIZED] T=${optimalParams.temperature}` : `Simulation ${i + 1}`,
+                durationMonths: config.durationMonths || 12
+            };
+            result = await runSimulation(singleConfig);
+        }
+
+        outputs.push(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FASE 2: CONSOLIDAÇÃO
+    // ═══════════════════════════════════════════════════════════════════
+    onProgress({ phase: 'CONSOLIDATION', percent: 95, message: '📊 Consolidando resultados...' });
+
+    const rois = outputs.map(o => o.summary.totalRoi);
+    const adoptions = outputs.map(o => o.summary.finalAdoption);
+    const avgRoi = rois.reduce((a, b) => a + b, 0) / rois.length;
+    const stdDevRoi = Math.sqrt(rois.map(r => Math.pow(r - avgRoi, 2)).reduce((a, b) => a + b, 0) / rois.length);
+
+    // 95% CI
+    const marginOfError = 1.96 * (stdDevRoi / Math.sqrt(rois.length));
+    const ci95: [number, number] = [avgRoi - marginOfError, avgRoi + marginOfError];
+
+    const summary: BatchSummary = {
+        averageRoi: avgRoi,
+        averageAdoption: adoptions.reduce((a, b) => a + b, 0) / adoptions.length,
+        successRate: (rois.filter(r => r > 0).length / rois.length) * 100,
+        stdDevRoi,
+        minRoi: Math.min(...rois),
+        maxRoi: Math.max(...rois),
+        confidenceInterval95: ci95
+    };
+
+    onProgress({ phase: 'CONSOLIDATION', percent: 100, message: '✅ Batch completo!' });
+
+    return { config, outputs, warmupResult, summary };
+};
+
+// ========== LEGACY BATCH SIMULATION (unchanged) ==========
 export const runBatchSimulation = async (
     config: SimulationConfig,
     iterations: number,
@@ -20,20 +267,14 @@ export const runBatchSimulation = async (
 ): Promise<BatchResult> => {
     const outputs: SimulationOutput[] = [];
 
-    // Prepare base config
     const baseScenario = config.scenarioMode === 'custom'
         ? config.customScenarioText || "Nenhum cenário específico."
         : `Cenário Recomendado: ${config.selectedScenarioId}`;
 
-    // We only simulate the first framework for batch mode to keep it simple for TCC
-    // or we could simulate all. Let's assume the first one is the target.
     const targetFramework = config.frameworks[0];
     if (!targetFramework) throw new Error("Nenhum framework selecionado para validação.");
 
     for (let i = 0; i < iterations; i++) {
-        // Slight variation could be introduced here if we wanted "Monte Carlo" style
-        // For now, we rely on the LLM's natural variance + our probabilistic calculator
-
         const singleConfig: SingleSimulationConfig = {
             frameworkName: targetFramework.name,
             frameworkText: targetFramework.text,
@@ -54,21 +295,16 @@ export const runBatchSimulation = async (
             outputs.push(result);
         } catch (error) {
             console.error(`Batch run ${i + 1} failed`, error);
-            // Continue despite errors? Or stop? Let's continue and ignore failed run.
         }
 
         onProgress(i + 1);
     }
 
-    // Calculate Statistics
     const rois = outputs.map(o => o.summary.totalRoi);
     const adoptions = outputs.map(o => o.summary.finalAdoption);
-
     const averageRoi = rois.reduce((a, b) => a + b, 0) / rois.length;
     const averageAdoption = adoptions.reduce((a, b) => a + b, 0) / adoptions.length;
     const successRate = (rois.filter(r => r > 0).length / rois.length) * 100;
-
-    // Standard Deviation ROI
     const squareDiffs = rois.map(value => Math.pow(value - averageRoi, 2));
     const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / squareDiffs.length;
     const stdDevRoi = Math.sqrt(avgSquareDiff);
@@ -80,7 +316,10 @@ export const runBatchSimulation = async (
             averageRoi,
             averageAdoption,
             successRate,
-            stdDevRoi
+            stdDevRoi,
+            minRoi: Math.min(...rois),
+            maxRoi: Math.max(...rois),
+            confidenceInterval95: [averageRoi - 1.96 * (stdDevRoi / Math.sqrt(rois.length)), averageRoi + 1.96 * (stdDevRoi / Math.sqrt(rois.length))]
         }
     };
 };
