@@ -5,9 +5,15 @@
  * - Extrair "Manifesto Estruturado Denso" de textos brutos
  * - Chunking inteligente para documentos grandes
  * - Preparar contexto para simulação
+ * - Indexar chunks no Vector Store para RAG dinâmico
  */
 
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { SmartChunker, ChunkingResult } from '../services/SmartChunker.js';
+import { UserFrameworkStore, IndexingResult } from '../services/UserFrameworkStore.js';
+
+// Threshold para considerar documento "grande"
+const LARGE_DOCUMENT_THRESHOLD = 50000; // 50k chars (~15-20 páginas)
 
 export interface DocumentDigest {
     manifesto: string;
@@ -19,6 +25,17 @@ export interface DocumentDigest {
     rawLength: number;
     digestedLength: number;
     compressionRatio: number;
+    // Novos campos para documentos grandes
+    isLargeDocument?: boolean;
+    chunksCreated?: number;
+    documentId?: string;
+    indexed?: boolean;
+}
+
+export interface LargeDocumentResult {
+    digest: DocumentDigest;
+    chunking: ChunkingResult;
+    indexing?: IndexingResult;
 }
 
 const DIGEST_PROMPT = `Você é um Arquiteto de Soluções Sênior. Sua tarefa é analisar este documento técnico de um Framework Corporativo e extrair um MANIFESTO ESTRUTURADO DENSO para ser usado em uma simulação.
@@ -47,6 +64,8 @@ DOCUMENTO ORIGINAL:
 
 export class DocumentAgent {
     private llm: ChatGoogleGenerativeAI;
+    private chunker: SmartChunker;
+    private vectorStore: UserFrameworkStore;
 
     constructor(apiKey?: string) {
         this.llm = new ChatGoogleGenerativeAI({
@@ -54,10 +73,32 @@ export class DocumentAgent {
             model: 'gemini-1.5-flash', // Flash for speed in ingestion
             temperature: 0.3, // Low temperature for factual extraction
         });
+        this.chunker = new SmartChunker();
+        this.vectorStore = new UserFrameworkStore();
     }
 
     /**
-     * Digest a raw document into a structured manifesto
+     * Verifica se documento é grande o suficiente para chunking
+     */
+    isLargeDocument(text: string): boolean {
+        return text.length > LARGE_DOCUMENT_THRESHOLD;
+    }
+
+    /**
+     * Processa documento automaticamente (escolhe método baseado no tamanho)
+     */
+    async process(rawText: string, indexInVectorStore: boolean = true): Promise<DocumentDigest> {
+        if (this.isLargeDocument(rawText)) {
+            console.log(`📦 DocumentAgent: Large document detected (${rawText.length} chars), using chunking...`);
+            const result = await this.digestLargeDocument(rawText, indexInVectorStore);
+            return result.digest;
+        } else {
+            return this.digest(rawText);
+        }
+    }
+
+    /**
+     * Digest a raw document into a structured manifesto (para documentos pequenos)
      */
     async digest(rawText: string): Promise<DocumentDigest> {
         console.log(`📄 DocumentAgent: Processing ${rawText.length} characters...`);
@@ -92,7 +133,8 @@ export class DocumentAgent {
                 digestedLength: parsed.manifesto?.length || 0,
                 compressionRatio: rawText.length > 0
                     ? parseFloat(((parsed.manifesto?.length || 0) / rawText.length * 100).toFixed(2))
-                    : 0
+                    : 0,
+                isLargeDocument: false
             };
 
             console.log(`✅ DocumentAgent: Digested to ${digest.digestedLength} chars (${digest.compressionRatio}% of original)`);
@@ -110,9 +152,103 @@ export class DocumentAgent {
                 adoptionStrategies: [],
                 rawLength: rawText.length,
                 digestedLength: Math.min(rawText.length, 4000),
-                compressionRatio: 100
+                compressionRatio: 100,
+                isLargeDocument: false
             };
         }
+    }
+
+    /**
+     * Processa documento grande com chunking e indexação no Vector Store
+     */
+    async digestLargeDocument(rawText: string, indexInVectorStore: boolean = true): Promise<LargeDocumentResult> {
+        console.log(`📦 DocumentAgent: Processing LARGE document (${rawText.length} chars)...`);
+
+        // 1. Chunk do documento
+        const chunkingResult = this.chunker.chunk(rawText);
+        console.log(`   Chunked into ${chunkingResult.chunks.length} segments`);
+
+        // 2. Gerar digest resumido (usando primeiros e últimos chunks + estrutura)
+        const summaryText = this.buildSummaryForDigest(chunkingResult);
+        const baseDigest = await this.digest(summaryText);
+
+        // 3. Indexar no Vector Store (se habilitado)
+        let indexingResult: IndexingResult | undefined;
+        if (indexInVectorStore) {
+            try {
+                indexingResult = await this.vectorStore.indexDocument(chunkingResult);
+                console.log(`   Indexed ${indexingResult.chunksIndexed} chunks in Vector Store`);
+            } catch (error) {
+                console.warn('   ⚠️ Vector Store indexing failed (continuing without):', error);
+            }
+        }
+
+        // 4. Enriquecer digest com informações do chunking
+        const enrichedDigest: DocumentDigest = {
+            ...baseDigest,
+            isLargeDocument: true,
+            chunksCreated: chunkingResult.chunks.length,
+            documentId: chunkingResult.documentId,
+            indexed: indexingResult?.success || false,
+            // Adicionar info de estrutura ao manifesto
+            manifesto: this.enrichManifestoWithStructure(baseDigest.manifesto, chunkingResult)
+        };
+
+        return {
+            digest: enrichedDigest,
+            chunking: chunkingResult,
+            indexing: indexingResult
+        };
+    }
+
+    /**
+     * Constrói texto resumido para digestão de documento grande
+     */
+    private buildSummaryForDigest(chunkingResult: ChunkingResult): string {
+        const { chunks, structure } = chunkingResult;
+
+        // Pegar primeiros 3 chunks (introdução)
+        const introChunks = chunks.slice(0, 3).map(c => c.content).join('\n\n');
+
+        // Pegar chunks do meio (1 de cada seção principal)
+        const middleChunks: string[] = [];
+        const seenSections = new Set<string>();
+        for (const chunk of chunks) {
+            if (!seenSections.has(chunk.metadata.section) && middleChunks.length < 5) {
+                middleChunks.push(`[${chunk.metadata.section}]\n${chunk.content.substring(0, 500)}...`);
+                seenSections.add(chunk.metadata.section);
+            }
+        }
+
+        // Pegar últimos 2 chunks (conclusão)
+        const outroChunks = chunks.slice(-2).map(c => c.content).join('\n\n');
+
+        // Estrutura detectada
+        const structureInfo = `
+ESTRUTURA DO DOCUMENTO:
+- Título: ${structure.title || 'Não detectado'}
+- Framework: ${structure.framework || 'Genérico'}
+- Páginas estimadas: ${structure.estimatedPages}
+- Seções detectadas: ${structure.sections.slice(0, 10).join(', ')}
+`;
+
+        return `${structureInfo}\n\n=== INTRODUÇÃO ===\n${introChunks}\n\n=== SEÇÕES PRINCIPAIS ===\n${middleChunks.join('\n\n')}\n\n=== CONCLUSÃO ===\n${outroChunks}`;
+    }
+
+    /**
+     * Enriquece manifesto com informações da estrutura
+     */
+    private enrichManifestoWithStructure(manifesto: string, chunkingResult: ChunkingResult): string {
+        const { structure, chunks } = chunkingResult;
+
+        const structureNote = `
+> **📦 Documento Grande Processado**
+> - ${structure.estimatedPages} páginas | ${chunks.length} chunks indexados
+> - Framework: ${structure.framework || 'Detectado automaticamente'}
+> - Seções: ${structure.sections.slice(0, 5).join(', ')}${structure.sections.length > 5 ? '...' : ''}
+
+`;
+        return structureNote + manifesto;
     }
 
     /**
@@ -122,7 +258,7 @@ export class DocumentAgent {
         console.log(`📚 DocumentAgent: Processing ${documents.length} documents...`);
 
         const digests = await Promise.all(
-            documents.map(doc => this.digest(doc))
+            documents.map(doc => this.process(doc, true)) // Usar process() que detecta tamanho
         );
 
         // Merge all digests
@@ -135,7 +271,10 @@ export class DocumentAgent {
             adoptionStrategies: [...new Set(digests.flatMap(d => d.adoptionStrategies))],
             rawLength: digests.reduce((sum, d) => sum + d.rawLength, 0),
             digestedLength: digests.reduce((sum, d) => sum + d.digestedLength, 0),
-            compressionRatio: 0
+            compressionRatio: 0,
+            isLargeDocument: digests.some(d => d.isLargeDocument),
+            chunksCreated: digests.reduce((sum, d) => sum + (d.chunksCreated || 0), 0),
+            indexed: digests.some(d => d.indexed)
         };
 
         merged.compressionRatio = merged.rawLength > 0
@@ -144,7 +283,15 @@ export class DocumentAgent {
 
         return merged;
     }
+
+    /**
+     * Busca contexto relevante do Vector Store para uma query
+     */
+    async getRelevantContext(query: string, topK: number = 5): Promise<string> {
+        return this.vectorStore.generateContext(query, topK);
+    }
 }
 
 // Export singleton for direct use
 export const documentAgent = new DocumentAgent();
+

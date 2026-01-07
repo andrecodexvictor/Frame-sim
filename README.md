@@ -21,6 +21,13 @@ No modo **Racing**, múltiplos agentes com personas distintas (CFO Conservador, 
 ### 📄 DocumentAgent Desacoplado
 A ingestão e "digestão" de documentos de framework agora é feita por um agente dedicado (`DocumentAgent`), acessível via API (`/api/ingest`). Isso permite processar PDFs e arquivos de texto de forma assíncrona antes da simulação.
 
+### 📦 Smart Chunking para Documentos Grandes (NOVO!)
+Frameworks extensos como **COBIT** (400+ páginas) agora são processados com chunking inteligente:
+- **Detecção de Estrutura**: Identifica capítulos, seções e domínios automaticamente
+- **Chunking Semântico**: Divide em segmentos de ~2000 chars respeitando sentenças
+- **Indexação no Vector Store**: Chunks são indexados no ChromaDB para busca por similaridade
+- **RAG Dinâmico**: Durante a simulação, os Top-5 chunks mais relevantes são injetados no contexto
+
 ### 📊 Intervalos de Confiança
 O sumário de batch agora inclui **IC 95%** (Intervalo de Confiança), ROI mínimo/máximo, e variância, proporcionando análises estatisticamente robustas.
 

@@ -123,12 +123,48 @@ const result = await racing.race(simulationFn, config);
 // { winner: { agentId: 'agent_2', critiqueScore: 85 }, allResults: [...] }
 ```
 
+### 8. SmartChunker
+
+**Arquivo**: `RAG/src/services/SmartChunker.ts`
+
+Chunking inteligente para documentos grandes (COBIT, SAFe full, etc.):
+
+```typescript
+import { SmartChunker } from './services/SmartChunker';
+
+const chunker = new SmartChunker({ chunkSize: 2000, chunkOverlap: 200 });
+const result = chunker.chunk(cobitFullText);
+// { documentId: 'doc_123', chunks: [{id, content, metadata}...], structure: {...} }
+```
+
+**Parâmetros de Chunking:**
+| Parâmetro | Valor Default | Descrição |
+|-----------|---------------|-----------|
+| `chunkSize` | 2000 chars | Tamanho máximo de cada chunk |
+| `chunkOverlap` | 200 chars | Overlap para manter contexto |
+| `minChunkSize` | 500 chars | Tamanho mínimo (evita fragmentos) |
+
+### 9. UserFrameworkStore
+
+**Arquivo**: `RAG/src/services/UserFrameworkStore.ts`
+
+Vector Store para documentos do usuário com busca por similaridade:
+
+```typescript
+const store = new UserFrameworkStore('user_frameworks');
+await store.indexDocument(chunkingResult);
+const context = await store.generateContext("implementar controles BAI");
+// Retorna Top-5 chunks relevantes formatados para injeção no prompt
+```
+
 ## Changelog
 
 ### v7.0 (2025-12-28) - Advanced Agentic Workflow
 - ✅ **Self-Improvement (Warmup)**: Fase de auto-calibração antes de batches.
 - ✅ **Agent Racing (Concorrência)**: Múltiplos agentes competem em paralelo.
 - ✅ **DocumentAgent Desacoplado**: Ingestão de documentos via `/api/ingest`.
+- ✅ **Smart Chunking**: Processamento de documentos grandes (COBIT, SAFe) com chunking semântico.
+- ✅ **UserFrameworkStore**: Indexação de chunks no Vector Store para RAG dinâmico.
 - ✅ **Intervalos de Confiança (IC 95%)**: Sumário estatístico robusto.
 - ✅ **runEnhancedBatchSimulation**: Nova função no frontend para workflow avançado.
 
