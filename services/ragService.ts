@@ -54,15 +54,15 @@ const ARCHETYPE_EXAMPLES: Record<string, string[]> = {
     ]
 };
 
-// Curva J - fatores de adaptação por mês
-const J_CURVE_FACTORS = [0.6, 0.6, 0.9, 0.9, 1.2, 1.2, 1.3, 1.3, 1.4, 1.4, 1.5, 1.5];
+// Curva J - fatores de adaptação por mês (mais suave para permitir resultados balanceados)
+const J_CURVE_FACTORS = [0.75, 0.8, 0.9, 0.95, 1.1, 1.15, 1.2, 1.25, 1.3, 1.3, 1.35, 1.35];
 
-// Modificadores de dívida técnica
+// Modificadores de dívida técnica (calibrados para permitir cenários positivos e negativos)
 const TECH_DEBT_MODIFIERS: Record<string, { bugs: number; velocity: number; taxa: number }> = {
     'low': { bugs: 0.8, velocity: 1.0, taxa: 0.01 },
-    'medium': { bugs: 1.0, velocity: 0.9, taxa: 0.05 },
-    'high': { bugs: 1.5, velocity: 0.7, taxa: 0.10 },
-    'critical': { bugs: 2.0, velocity: 0.5, taxa: 0.15 }
+    'medium': { bugs: 1.0, velocity: 0.95, taxa: 0.03 },
+    'high': { bugs: 1.3, velocity: 0.8, taxa: 0.07 },
+    'critical': { bugs: 1.6, velocity: 0.65, taxa: 0.12 }
 };
 
 /**
@@ -150,31 +150,48 @@ CONHECIMENTO DE PLAYBOOKS (RAG):
         const bugsMin = Math.floor(teamSize * 0.05 * debtMod.bugs);
         const bugsMax = Math.floor(teamSize * 0.2 * debtMod.bugs);
 
+        // Calculate scenario severity to guide LLM
+        const isCriticalScenario = config.techDebtLevel === 'critical' || (config.techDebtLevel === 'high' && config.previousFailures);
+        const isOptimalScenario = config.techDebtLevel === 'low' && !config.previousFailures;
+
+        const scenarioGuidance = isCriticalScenario
+            ? `⚠️ CENÁRIO CRÍTICO DETECTADO: Resultados DEVEM refletir dificuldades reais. Espera-se ROI negativo significativo nos primeiros meses.`
+            : isOptimalScenario
+                ? `✅ CENÁRIO FAVORÁVEL: Condições permitem resultados positivos com boa execução. learningCurveFactor pode iniciar em 0.85+.`
+                : `📊 CENÁRIO TÍPICO: Resultados moderados esperados. ROI pode ser ligeiramente negativo ou positivo dependendo da execução.`;
+
         metrics = `
-MODELO DE MÉTRICAS FINANCEIRAS (RAG) - REGRAS OBRIGATÓRIAS:
+MODELO DE MÉTRICAS FINANCEIRAS (RAG) - DIRETRIZES RESPONSIVAS:
 
-⚠️ FAIXAS NUMÉRICAS OBRIGATÓRIAS para rawData:
-- featuresDelivered: MÍNIMO ${featuresMin}, MÁXIMO ${featuresMax} por mês
-  → Meses 1-3 (Curva J): use valores PRÓXIMOS ao mínimo (${featuresMin}-${Math.floor(featuresMin * 1.3)})
-  → Meses 4-6: use valores médios (${Math.floor((featuresMin + featuresMax) / 2)})
-  → Meses 7+: pode subir até máximo (${featuresMax})
+${scenarioGuidance}
+
+📊 FAIXAS para rawData (variam conforme scenario):
+- featuresDelivered: ${featuresMin} a ${featuresMax} por mês
+  → Meses 1-3: ${isCriticalScenario ? 'valores baixos (' + featuresMin + ')' : 'valores moderados (' + Math.floor(featuresMin * 1.3) + ')'}
+  → Meses 4-6: progressão gradual
+  → Meses 7+: ${isOptimalScenario ? 'pode atingir máximo (' + featuresMax + ')' : 'valores médio-altos'}
   
-- bugsGenerated: MÍNIMO ${bugsMin}, MÁXIMO ${bugsMax} por mês
-  → Dívida técnica ${config.techDebtLevel.toUpperCase()}: bugs devem CRESCER com o tempo se não tratada
+- bugsGenerated: ${bugsMin} a ${bugsMax} por mês
+  → Dívida ${config.techDebtLevel.toUpperCase()}: ${isCriticalScenario ? 'bugs altos especialmente no início' : 'tendência de redução ao longo do tempo'}
 
-- learningCurveFactor: OBRIGATÓRIO seguir padrão:
-  → Meses 1-2: 0.5 a 0.7 (queda de produtividade)
-  → Meses 3-4: 0.8 a 0.95 (recuperando)
-  → Meses 5+: 1.0 a 1.3 (performando)
+- learningCurveFactor: PROGRESSÃO BASEADA NO CENÁRIO:
+  → Meses 1-2: ${isCriticalScenario ? '0.60 a 0.75' : isOptimalScenario ? '0.85 a 0.95' : '0.75 a 0.85'}
+  → Meses 3-4: ${isCriticalScenario ? '0.80 a 0.90' : isOptimalScenario ? '0.95 a 1.05' : '0.90 a 1.0'}
+  → Meses 5+: ${isCriticalScenario ? '0.95 a 1.10' : isOptimalScenario ? '1.10 a 1.30' : '1.0 a 1.20'}
 
-- criticalIncidents: 0 na maioria, máximo 1-2 por mês em cenários de dívida alta
+- criticalIncidents: ${isCriticalScenario ? '1-3 esperados nos primeiros meses' : '0-1, apenas se houver eventos adversos'}
 
-CURVA J APLICADA: [${jFactorInfo}...]
-DÍVIDA TÉCNICA (${config.techDebtLevel.toUpperCase()}):
-  * Multiplicador de bugs: ${debtMod.bugs}x
-  * Fator velocidade: ${debtMod.velocity}x
+DÍVIDA TÉCNICA (${config.techDebtLevel.toUpperCase()}): bugs ${debtMod.bugs}x | velocidade ${debtMod.velocity}x
 
-SE NÃO SEGUIR ESTAS FAIXAS, O ROI SERÁ IRREAL!
+IMPORTANTE: O ROI final deve REFLETIR as condições do cenário. Cenários ruins = ROI ruim. Cenários bons = ROI bom.
+
+🎲 ELEMENTO SURPRESA (Casos Excepcionais ~15%):
+Em casos raros, equipes demonstram ADAPTAÇÃO EXCEPCIONAL mesmo em cenários difíceis.
+Se você perceber narrativamente que a equipe está engajada, considere:
+- learningCurveFactor mais alto que o típico (1.15+)
+- efficiency acima de 85%
+- Bugs reduzidos mesmo com dívida técnica
+Isso permite projeções positivas surpreendentes em empresas pequenas ou com desafios.
 `;
     }
 

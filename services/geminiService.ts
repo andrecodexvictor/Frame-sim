@@ -2,7 +2,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { SingleSimulationConfig, SimulationOutput } from "../types";
-import { calculateMonthlyMetrics, SimulationRawData, getCostProfile } from "./metricsCalculator";
+import { calculateMonthlyMetrics, SimulationRawData, getCostProfile, calculateFrameworkFit } from "./metricsCalculator";
 import { MOCK_SIMULATION_RESULT } from "./mockData";
 import { generateRAGContext, injectRAGContext } from "./ragService";
 import { enrichArchetypesToTeam, generateTeamDescription, calculateTeamResistance } from "./personaEnricher";
@@ -420,6 +420,24 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       INSTRUÇÃO: Use esses valores como referência para cálculos de ROI e custos.
     ` : '';
 
+    // FRAMEWORK-ORGANIZATION FIT - Avalia compatibilidade
+    const frameworkFit = calculateFrameworkFit(
+      config.frameworkName,
+      config.companySize,
+      config.budgetLevel,
+      config.frameworkCategory
+    );
+    const fitContext = `
+      ANÁLISE DE FIT FRAMEWORK-ORGANIZAÇÃO:
+      ${frameworkFit.reason}
+      Nível de Compatibilidade: ${frameworkFit.fitLevel}
+      
+      ${frameworkFit.fitLevel === 'EXCELENTE' ? 'IMPACTO: Framework ideal para este contexto. Considere resultados acima da média.' : ''}
+      ${frameworkFit.fitLevel === 'PÉSSIMO' ? 'IMPACTO: Framework muito pesado. Espere overhead, custos excessivos e frustração.' : ''}
+      ${frameworkFit.fitLevel === 'RUIM' ? 'IMPACTO: Desafios de adoção esperados. ROI provavelmente negativo.' : ''}
+    `;
+
+
     // Prompt otimizado com RAG dinâmico
     const prompt = `
       Atue como uma Engine de Realidade Estendida (XRE) e CFO Virtual Multidimensional.
@@ -447,6 +465,7 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       ${categoryContext}
       ${realismContext}
       ${economicContext}
+      ${fitContext}
       
       ${isHighDensity ? "ALERTA DE ALTA DENSIDADE: Muitos arquétipos selecionados. Simule conflitos interdepartamentais." : ""}
 
@@ -456,10 +475,12 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       2. VERTENTE TÉCNICA (CTO): Foco em débito técnico, complexidade e resistência dos devs. Aplique a lógica da Curva J.
       3. VERTENTE CULTURAL (RH): Foco em burnout, política interna e "Rádio Peão". Use os perfis de exemplo para gerar personas realistas.
       
-      PROTOCOLO DE REALISMO ABSOLUTO & VALIDAÇÃO:
+      PROTOCOLO DE REALISMO RESPONSIVO:
       1. Se o cenário for implausível (ex: Scrum em fábrica de 100 anos sem computadores), o 'scenarioValidity' deve ser baixo (<40).
-      2. SE 'Dívida Técnica' for ALTA/CRÍTICA -> O ROI inicial DEVE ser fortemente negativo (refatoração forçada e CoNQ alto).
-      3. SE 'Trauma Anterior' for SIM -> Adoção começa muito lenta (abaixo de 10%) por 3-6 meses.
+      2. ⚠️ CENÁRIO CRÍTICO (Dívida ALTA/CRÍTICA + Trauma): ROI inicial negativo significativo, recuperação lenta, incidentes frequentes.
+      3. ✅ CENÁRIO FAVORÁVEL (Dívida BAIXA, sem trauma): ROI pode ser positivo já nos primeiros meses, adoção rápida.
+      4. 📊 CENÁRIO TÍPICO: ROI moderado, podendo ser ligeiramente negativo ou positivo.
+      5. O ROI FINAL DEVE REFLETIR AS CONDIÇÕES DE ENTRADA. Não force resultados negativos sempre.
       
       STAKEHOLDERS E PERSONAS:
       No array 'keyPersonas', você DEVE identificar explicitamente quem são os Stakeholders Críticos.
