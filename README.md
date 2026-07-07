@@ -10,6 +10,32 @@ Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM A
 
 ---
 
+## 🚀 Novidades da v5.1 (Calibração Responsiva)
+
+### 🎯 Sistema de Viés Responsivo
+O sistema agora detecta automaticamente o tipo de cenário e ajusta o modelo de cálculo:
+- **Cenário Crítico** (dívida alta + trauma): ROI esperado -40% a -15%
+- **Cenário Típico**: ROI esperado -15% a +10%
+- **Cenário Favorável** (dívida baixa): ROI esperado +5% a +30%
+
+### 🎲 Surprise Factor (~15% chance)
+Casos raros de **adoção excepcional** agora são possíveis:
+- Equipes com alta adaptação (`learningCurveFactor ≥ 1.1`)
+- Empresas pequenas com agilidade excepcional
+- Boost de 15-50% no valor entregue quando ativado
+
+### 🧩 Framework-Organization Fit
+Avaliação automática de compatibilidade framework vs organização:
+| Framework | Org Pequena | Org Grande |
+|-----------|-------------|------------|
+| Scrum/Kanban/XP | +20-35% 🟢 | Neutro |
+| SAFe/COBIT/ITIL | -30-40% 🔴 | +15% |
+
+### 📊 Range Realista de ROI
+O sistema agora produz resultados entre **-40% e +35%**, permitindo tanto desastres quanto sucessos excepcionais baseados nas condições de entrada.
+
+---
+
 ## 🚀 Novidades da v5.0 (Advanced Agentic Workflow)
 
 ### 🔥 Self-Improvement (Auto-Calibração)

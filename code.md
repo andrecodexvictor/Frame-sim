@@ -170,6 +170,67 @@ ROI = ((Value - CoNQ - OpEx) / OpEx) × 100
 
 ---
 
+### 6b. `calculateSurpriseFactor()` — Exceptional Adaptation Detector
+
+**Arquivo:** `services/metricsCalculator.ts`
+
+```typescript
+export function calculateSurpriseFactor(
+  rawData: SimulationRawData,
+  config: SimulationConfig
+): { multiplier: number; triggered: boolean; reason?: string }
+```
+
+**O que faz:**
+- Detecta sinais de adaptação excepcional da equipe
+- Calcula probabilidade de "surpresa" (5-20%)
+- Aplica boost de 15-50% no valor entregue quando ativado
+
+**Sinais de adaptação:**
+| Sinal | Bônus Probabilidade |
+|-------|---------------------|
+| `learningCurveFactor ≥ 1.1` | +5% |
+| Bugs < 30% das features | +3% |
+| Efficiency ≥ 85% | +4% |
+| Equipe ≤ 50 pessoas | +3% |
+
+---
+
+### 6c. `calculateFrameworkFit()` — Framework-Organization Compatibility
+
+**Arquivo:** `services/metricsCalculator.ts`
+
+```typescript
+export function calculateFrameworkFit(
+  frameworkName: string,
+  companySize: number,
+  budgetLevel: string,
+  category: string
+): { multiplier: number; fitLevel: string; reason: string }
+```
+
+**O que faz:**
+- Classifica framework por complexidade (lightweight/medium/enterprise)
+- Avalia compatibilidade com tamanho e orçamento da organização
+- Retorna multiplicador de valor (+35% a -40%)
+
+**Classificação de Frameworks:**
+```typescript
+const FRAMEWORK_COMPLEXITY = {
+  // Leves - ideais para pequenas
+  'scrum': 'lightweight',
+  'kanban': 'lightweight',
+  'xp': 'lightweight',
+  
+  // Enterprise - requerem estrutura
+  'safe': 'enterprise',
+  'cobit': 'enterprise',
+  'itil': 'enterprise',
+};
+```
+
+---
+
 ### 7. `PersonaAgent.simulateResponse()` — Behavioral Simulation
 
 **Arquivo:** `RAG/src/agents/personaAgent.ts`

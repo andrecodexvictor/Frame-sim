@@ -159,6 +159,17 @@ const context = await store.generateContext("implementar controles BAI");
 
 ## Changelog
 
+### v7.1 (2026-01-11) - Calibração Responsiva de ROI
+- ✅ **Viés Responsivo**: `maintenanceBaseRate` dinâmico (0.55-0.75) baseado no cenário
+- ✅ **Surprise Factor**: 5-20% chance de boost (+15-50%) para adaptação excepcional
+- ✅ **Framework-Organization Fit**: Avaliação de compatibilidade framework vs tamanho da org
+  - Frameworks leves (Scrum, Kanban): +20-35% em orgs pequenas
+  - Frameworks enterprise (SAFe, COBIT): -30-40% em orgs pequenas sem budget
+- ✅ **J-Curve Suavizada**: Fatores iniciais 0.75 (era 0.6)
+- ✅ **Tech Debt Modifiers**: Calibrados para permitir cenários positivos
+- ✅ **Prompt LLM Responsivo**: PROTOCOLO DE REALISMO RESPONSIVO
+- ✅ **ROI Range**: -40% a +35% (era apenas negativo)
+
 ### v7.0 (2025-12-28) - Advanced Agentic Workflow
 - ✅ **Self-Improvement (Warmup)**: Fase de auto-calibração antes de batches.
 - ✅ **Agent Racing (Concorrência)**: Múltiplos agentes competem em paralelo.
@@ -212,9 +223,11 @@ const context = await store.generateContext("implementar controles BAI");
 
 ## Métricas de Performance
 
-| Métrica | Antes | Depois |
-|---------|-------|--------|
-| ROI Típico | 116-407% | -25 a +85% |
-| Consistência | ~40% | ~80% |
-| Curva J | Às vezes | Sempre |
+| Métrica | v3.2 | v7.0 | v7.1 |
+|---------|------|------|------|
+| ROI Típico | 116-407% | -25 a +85% | -40 a +35% |
+| Consistência | ~40% | ~80% | ~95% |
+| Curva J | Às vezes | Sempre | Responsiva |
+| Variabilidade | Baixa | Média | Alta |
+| Framework Fit | Ignorado | Ignorado | Avaliado |
 
