@@ -292,6 +292,12 @@ ESTRUTURA DO DOCUMENTO:
     }
 }
 
-// Export singleton for direct use
-export const documentAgent = new DocumentAgent();
+// Lazy initialization to ensure environment variables are loaded
+let _documentAgent: DocumentAgent | null = null;
+export function getDocumentAgent(): DocumentAgent {
+    if (!_documentAgent) {
+        _documentAgent = new DocumentAgent();
+    }
+    return _documentAgent;
+}
 

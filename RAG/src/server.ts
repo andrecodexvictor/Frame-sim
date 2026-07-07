@@ -167,9 +167,7 @@ app.post('/api/simulate', async (req, res) => {
 });
 
 // ========== NEW: Document Ingestion Endpoint ==========
-import { DocumentAgent } from './agents/DocumentAgent.js';
-
-const documentAgent = new DocumentAgent();
+import { getDocumentAgent } from './agents/DocumentAgent.js';
 
 app.post('/api/ingest', async (req, res) => {
     console.log('📨 Request received for Document Ingestion');
@@ -182,6 +180,7 @@ app.post('/api/ingest', async (req, res) => {
         }
 
         let digest;
+        const documentAgent = getDocumentAgent();
         if (documents && documents.length > 0) {
             digest = await documentAgent.digestMultiple(documents);
         } else {

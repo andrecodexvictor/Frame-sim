@@ -8,7 +8,7 @@
 import { Chroma } from '@langchain/community/vectorstores/chroma';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { Document } from 'langchain/document';
-import type { DocumentChunk, ChunkingResult } from '../../services/SmartChunker.js';
+import type { DocumentChunk, ChunkingResult } from './SmartChunker.js';
 
 export interface SearchResult {
     content: string;
@@ -223,5 +223,11 @@ ${contextBlocks.join('\n\n---\n\n')}
     }
 }
 
-// Export singleton for default collection
-export const userFrameworkStore = new UserFrameworkStore();
+// Lazy initialization to ensure environment variables are loaded
+let _userFrameworkStore: UserFrameworkStore | null = null;
+export function getUserFrameworkStore(): UserFrameworkStore {
+    if (!_userFrameworkStore) {
+        _userFrameworkStore = new UserFrameworkStore();
+    }
+    return _userFrameworkStore;
+}
