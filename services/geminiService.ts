@@ -621,7 +621,8 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
     // deterministicamente, quando a persona citada em keyPersonas bate com um brain.
     if (Array.isArray(finalResult.keyPersonas)) {
       finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any) => {
-        const brain = brains.find(b => kp.role?.toLowerCase().includes(b.nome.toLowerCase()));
+        // Guard: nome vazio faria includes('') casar sempre com o primeiro brain.
+        const brain = brains.find(b => b.nome && b.nome.length >= 3 && kp.role?.toLowerCase().includes(b.nome.toLowerCase()));
         if (!brain) return kp;
         const sentiment = Math.round((brain.humor + 100) / 2);
         const statusNote = brain.status !== 'ativo' ? ` [EmployeeBrain: ${brain.status}]` : '';

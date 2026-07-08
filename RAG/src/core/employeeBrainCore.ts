@@ -217,18 +217,36 @@ export function deriveInitialBrain(profile: BrainProfileInput, seed?: number): E
 
 /** Avança o estado de um turno (pressão, humor, energia, engajamento, memória). Pura/imutável. */
 export function updateBrain(brain: EmployeeBrainState, ctx: TurnContext): EmployeeBrainState {
+    // Coerção de entradas externas: impacto_moral vem do JSON do LLM e pode chegar
+    // ausente/não-numérico — sem isso um único NaN envenena humor→moral para sempre.
+    const impactoPessoal = clamp(Number(ctx.impactoPessoal) || 0, -10, 10);
+    const moralGlobal = clamp(Number(ctx.moralGlobal) || 50, 0, 100);
+    const pressaoBase = clamp(Number(ctx.pressaoBase) || 0, 0, 1);
+
     if (brain.status === 'licenca') {
         const restante = brain.turnosAfastado - 1;
         if (restante <= 0) {
-            return { ...brain, status: 'ativo', estresse: 45, energia: 60, turnosAfastado: 0 };
+            // Retorno de afastamento: recupera também humor e zera o histórico de
+            // estresse alto — senão a pessoa volta batendo o gatilho de demissão no
+            // mesmo turno e a licença é inócua.
+            return {
+                ...brain,
+                status: 'ativo',
+                estresse: 45,
+                energia: 60,
+                humor: clamp(brain.humor + 40, -100, 100),
+                turnosEstresseAlto: 0,
+                turnosAfastado: 0,
+            };
         }
-        return { ...brain, turnosAfastado: restante };
+        // Durante a licença o humor decai lentamente rumo ao neutro.
+        return { ...brain, turnosAfastado: restante, humor: clamp(brain.humor + 10, -100, 100) };
     }
     if (brain.status === 'burnout' || brain.status === 'pediu_demissao') {
         return brain; // status terminal nesta simulação
     }
 
-    const pressaoEfetiva = ctx.pressaoBase * (100 - brain.resiliencia) / 100;
+    const pressaoEfetiva = pressaoBase * (100 - brain.resiliencia) / 100;
 
     let estresse = brain.estresse
         + pressaoEfetiva * 22
@@ -236,19 +254,22 @@ export function updateBrain(brain: EmployeeBrainState, ctx: TurnContext): Employ
         + (brain.workaholic ? 2 : 0);
     estresse = clamp(estresse, 0, 100);
 
-    let humor = brain.humor + ctx.impactoPessoal * 2 + (ctx.moralGlobal - 50) * 0.06;
+    let humor = brain.humor + impactoPessoal * 2 + (moralGlobal - 50) * 0.06;
     humor = clamp(humor, -100, 100);
 
     let perda = estresse > 70 ? 8 : 3;
     if (brain.workaholic) perda *= 1.5;
-    let energia = brain.energia - perda + (humor > 30 ? 4 : 0);
+    // Recuperação passiva quando o estresse está sob controle — sem ela, times de
+    // humor neutro drenam energia até burnout por exaustão em horizontes >18 meses.
+    const recuperacaoPassiva = estresse < 40 ? 2 : 0;
+    let energia = brain.energia - perda + (humor > 30 ? 4 : 0) + recuperacaoPassiva;
     energia = clamp(energia, 0, 100);
 
     const alvoEngajamento = (humor + 100) / 2;
     const engajamento = clamp(brain.engajamento + (alvoEngajamento - brain.engajamento) * 0.15, 0, 100);
 
     const evento = ctx.eventoTurno ?? (pressaoEfetiva > 0.6 ? 'pressão alta' : 'turno tranquilo');
-    const memoria = [...brain.memoria, { turno: ctx.turno, evento, valencia: clamp(ctx.impactoPessoal, -10, 10) }];
+    const memoria = [...brain.memoria, { turno: ctx.turno, evento, valencia: impactoPessoal }];
     if (memoria.length > 12) memoria.shift();
 
     const turnosEstresseAlto = estresse > 80 ? brain.turnosEstresseAlto + 1 : 0;
@@ -261,9 +282,10 @@ export function updateBrain(brain: EmployeeBrainState, ctx: TurnContext): Employ
 /**
  * Avalia gatilhos de decisão para o turno. No máximo 1 decisão GRAVE é aplicada
  * por turno (avaliadas em ordem — a primeira cujo gatilho e sorteio dispararem
- * "ganha"; por isso confronto_lideranca, cujo gatilho é um subconjunto do de
- * fofoca, raramente dispara já que fofoca é avaliada antes). Decisões não-graves
- * (apoiar_mudanca, pedir_ajuda) são independentes e podem coexistir com 1 grave.
+ * "ganha"). confronto_lideranca é avaliado ANTES de fofoca porque seu gatilho é
+ * um subconjunto estrito do dela — na ordem inversa nunca dispararia. Decisões
+ * não-graves (apoiar_mudanca, pedir_ajuda) são independentes e podem coexistir
+ * com 1 grave.
  */
 export function evaluateDecisions(
     brain: EmployeeBrainState,
@@ -287,6 +309,10 @@ export function evaluateDecisions(
         const narrativa = `${b.nome} passa a fazer resistência passiva, entregando o mínimo.`;
         b = { ...b, engajamento: clamp(b.engajamento - 10, 0, 100), decisoes: [...b.decisoes, narrativa] };
         decisions.push({ tipo: 'resistencia_passiva', narrativa, efeitos: {} });
+    } else if (b.humor < -50 && b.influencia > 70) {
+        const narrativa = `${b.nome} confronta a liderança abertamente sobre as condições de trabalho.`;
+        b = { ...b, decisoes: [...b.decisoes, narrativa] };
+        decisions.push({ tipo: 'confronto_lideranca', narrativa, efeitos: { confianca: -5 } });
     } else if (b.humor < -40 && b.influencia > 60) {
         const narrativa = `${b.nome} espalha insatisfação entre os colegas.`;
         b = { ...b, decisoes: [...b.decisoes, narrativa] };
@@ -295,10 +321,6 @@ export function evaluateDecisions(
             narrativa,
             efeitos: { contagio: { alvos: 3, humorDelta: -3, estresseDelta: 4 } },
         });
-    } else if (b.humor < -50 && b.influencia > 70) {
-        const narrativa = `${b.nome} confronta a liderança abertamente sobre as condições de trabalho.`;
-        b = { ...b, decisoes: [...b.decisoes, narrativa] };
-        decisions.push({ tipo: 'confronto_lideranca', narrativa, efeitos: { confianca: -5 } });
     }
 
     if (b.humor > 40 && b.engajamento > 65) {

@@ -131,7 +131,8 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
         // simulado pelo backend, quando a persona citada em keyPersonas bate com um funcionário.
         if (funcionarios.length > 0 && Array.isArray(richOutput.keyPersonas)) {
             richOutput.keyPersonas = richOutput.keyPersonas.map(kp => {
-                const f = funcionarios.find(fn => kp.role?.toLowerCase().includes(fn.nome.toLowerCase()));
+                // Guard: nome vazio faria includes('') casar sempre com o primeiro brain.
+                const f = funcionarios.find(fn => fn.nome && fn.nome.length >= 3 && kp.role?.toLowerCase().includes(fn.nome.toLowerCase()));
                 if (!f) return kp;
                 const sentiment = Math.round((f.humor + 100) / 2);
                 const statusNote = f.status !== 'ativo' ? ` [EmployeeBrain: ${f.status}]` : '';
