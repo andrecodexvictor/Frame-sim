@@ -7,6 +7,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { SingleSimulationConfig } from "../types";
+import archetypeExamplesData from '../data/archetype_examples.json';
 
 // Tipos do sistema RAG
 export type QueryMode =
@@ -30,29 +31,17 @@ export interface RAGContext {
     events: string;
 }
 
-// Few-shot examples por arquétipo (condensados para contexto)
-const ARCHETYPE_EXAMPLES: Record<string, string[]> = {
-    'CEO_CETICO': [
-        'Situação: Proposta de Scrum → "Já tentamos isso em 2019. Perdemos 3 meses e 2 Tech Leads."',
-        'Situação: ROI positivo → "Interessante, mas precisamos de 3 trimestres consecutivos para validar."'
-    ],
-    'CFO_PRAGMATICO': [
-        'Situação: Pedido de budget → "Qual o payback esperado? Preciso de cenários pessimista/realista/otimista."',
-        'Situação: Atraso em projeto → "Cada dia nos custa R$50.000. Quais opções para acelerar?"'
-    ],
-    'CTO_ENTUSIASTA': [
-        'Situação: Daily Standup → "Excelente! Vamos começar com piloto no squad de plataforma."',
-        'Situação: Resistência → "Workshops hands-on. A melhor forma de convencer é mostrar resultados."'
-    ],
-    'TECH_LEAD_CETICO': [
-        'Situação: Mais cerimônias → "Mais reuniões? Já perdemos 30% do tempo. Prefiro reviews assíncronos."',
-        'Situação: Pair programming → "Funciona para contextos específicos, obrigar em tudo reduz velocidade."'
-    ],
-    'DEV_SENIOR_AUTONOMO': [
-        'Situação: Mudança de framework → "Desde que não interfira no meu fluxo, não tenho problemas."',
-        'Situação: Retro semanal → "Prefiro a cada duas semanas. Semanal não dá tempo de ter progresso."'
-    ]
-};
+// Few-shot examples por arquétipo, carregados de data/archetype_examples.json
+// (fonte única compartilhada com RAG/src/agents/personaAgent.ts).
+// Shape unificado: Record<string, {situacao, resposta}[]>. Aqui condensamos
+// cada exemplo em uma linha "Situação: X → resposta" para o contexto RAG.
+type ArchetypeExample = { situacao: string; resposta: string };
+const ARCHETYPE_EXAMPLES_DATA = archetypeExamplesData as Record<string, ArchetypeExample[]>;
+
+function formatArchetypeExamples(archetype: string): string[] {
+    const examples = ARCHETYPE_EXAMPLES_DATA[archetype] || [];
+    return examples.map(ex => `Situação: ${ex.situacao} → "${ex.resposta}"`);
+}
 
 // Curva J - fatores de adaptação por mês (mais suave para permitir resultados balanceados)
 const J_CURVE_FACTORS = [0.75, 0.8, 0.9, 0.95, 1.1, 1.15, 1.2, 1.25, 1.3, 1.3, 1.35, 1.35];
@@ -203,19 +192,20 @@ Isso permite projeções positivas surpreendentes em empresas pequenas ou com de
         const relevantExamples: string[] = [];
 
         // Mapear arquétipos selecionados para examples
+        // ponytail: matching por substring; trocar por tags do perfil se der falso positivo
         if (archetypes.some(a => a.toLowerCase().includes('c-level') || a.toLowerCase().includes('ceo'))) {
-            relevantExamples.push(...ARCHETYPE_EXAMPLES.CEO_CETICO);
+            relevantExamples.push(...formatArchetypeExamples('CEO_CETICO'));
         }
         if (archetypes.some(a => a.toLowerCase().includes('cético') || a.toLowerCase().includes('cetico'))) {
-            relevantExamples.push(...ARCHETYPE_EXAMPLES.TECH_LEAD_CETICO);
+            relevantExamples.push(...formatArchetypeExamples('TECH_LEAD_CETICO'));
         }
         if (archetypes.some(a => a.toLowerCase().includes('sênior') || a.toLowerCase().includes('senior'))) {
-            relevantExamples.push(...ARCHETYPE_EXAMPLES.DEV_SENIOR_AUTONOMO);
+            relevantExamples.push(...formatArchetypeExamples('DEV_SENIOR_AUTONOMO'));
         }
 
         // Default se nenhum mapeado
         if (relevantExamples.length === 0) {
-            relevantExamples.push(...ARCHETYPE_EXAMPLES.CFO_PRAGMATICO);
+            relevantExamples.push(...formatArchetypeExamples('CFO_PRAGMATICO'));
         }
 
         profiles = `

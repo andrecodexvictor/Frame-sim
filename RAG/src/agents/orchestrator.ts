@@ -74,6 +74,7 @@ export class OrchestratorAgent {
     private metricsService: MetricsService;
     private personaAgent: PersonaAgent;
     private goalAgent: GoalAgent;
+    private criticAgent: CriticAgent;
     private state!: SimulationState;
     // EmployeeBrain: array ordenado é a fonte da verdade (applyContagion opera em arrays).
     // state.funcionarios aponta para este mesmo array e serializa junto com o state.
@@ -97,6 +98,7 @@ export class OrchestratorAgent {
         this.metricsService = new MetricsService();
         this.personaAgent = new PersonaAgent(apiKey);
         this.goalAgent = new GoalAgent();
+        this.criticAgent = new CriticAgent();
 
         this.resetState();
     }
@@ -413,6 +415,36 @@ export class OrchestratorAgent {
         for (const query of queries) {
             console.log(`\n📢 Situação: "${query}"`);
             await this.runTurn({ query, stakeholders, config });
+        }
+
+        // CRITIC: 1 chamada por simulação (não por turno) — valida o resultado final.
+        // CriticAgent.critique já é fail-open (score 100 em erro); o try/catch aqui só
+        // cobre falha ao montar o resumo, o que na prática nunca deveria disparar.
+        try {
+            const criticSummary = {
+                moral_time: this.state.moral_time,
+                velocidade_sprint: this.state.velocidade_sprint,
+                confianca_stakeholders: this.state.confianca_stakeholders,
+                eventos_disparados: this.state.eventos_disparados,
+                eventos_rh: this.state.eventos_rh,
+                baixas: this.brains.filter(b => b.status !== 'ativo').length
+            };
+            const critique = await this.criticAgent.critique(criticSummary, `Query original: ${queries.join(' | ')}`);
+            // ponytail: campos não declarados em SimulationState (types/index.ts fora do
+            // escopo desta mudança) — sobrevivem no JSON de resposta normalmente.
+            (this.state as any).plausibility_score = critique.plausibilityScore;
+            (this.state as any).replan_triggered = critique.replanRequired;
+
+            if (critique.replanRequired) {
+                // Replan barato (máx 1 ajuste, sem re-rodar turnos nem LLM extra):
+                // anexa a crítica ao scratchpad e registra o evento.
+                this.state.scratchpad += ` [CRÍTICA: ${critique.justification}${critique.replanSuggestion ? ' → ' + critique.replanSuggestion : ''}]`;
+                this.state.eventos_disparados.push('Replan solicitado pelo Critic');
+            }
+        } catch (error) {
+            console.error('CriticAgent falhou ao montar o resumo final (bypass):', error);
+            (this.state as any).plausibility_score = 100;
+            (this.state as any).replan_triggered = false;
         }
 
         let roi;

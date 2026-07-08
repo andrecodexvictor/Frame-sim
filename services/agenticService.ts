@@ -150,12 +150,13 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
         // Add Agentic Metrics to the output (for developer observability)
         // metricas_agenticas ainda não é retornado pelo backend (integração em andamento) —
         // usa fallback quando ausente, mas o tempo de execução é sempre medido de verdade.
+        // plausibility_score vem do CriticAgent (orchestrator.runSimulation), 1x por simulação.
         const backendMetrics = agenticData.metricas_agenticas || agenticData.state?.metricas_agenticas;
         return {
             ...richOutput,
             ...(emergentEvents.length > 0 ? { emergentEvents } : {}),
             agenticMetrics: {
-                quality_per_cycle: backendMetrics?.quality_per_cycle ?? 100,
+                quality_per_cycle: backendMetrics?.quality_per_cycle ?? agenticData.state?.plausibility_score ?? 100,
                 time_to_solve_ms: timeToSolveMs,
                 cost_estimate_usd: backendMetrics?.cost_estimate_usd ?? 0.05,
                 total_tokens: backendMetrics?.total_tokens ?? 5000,

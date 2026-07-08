@@ -4,6 +4,8 @@
  */
 
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { readFileSync } from 'fs';
+import path from 'path';
 import { geminiModel } from '../services/LLMProvider.js';
 import type {
     PersonaProfile,
@@ -13,59 +15,33 @@ import type {
 } from '../types/index.js';
 import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
 
-// Few-shot examples por arquétipo (expandir conforme necessário)
-const ARCHETYPE_EXAMPLES: Record<string, FewShotExample[]> = {
-    'CEO_CETICO': [
-        {
-            situacao: 'Proposta de migração para Scrum',
-            resposta: 'Já tentamos isso em 2019. Perdemos 3 meses e 2 Tech Leads. Me mostre dados concretos antes de qualquer decisão.'
-        },
-        {
-            situacao: 'ROI positivo após 6 meses de implementação',
-            resposta: 'Interessante, mas precisamos de 3 trimestres consecutivos para validar. Um resultado isolado não significa tendência.'
+// Few-shot examples por arquétipo, carregados de data/archetype_examples.json
+// (fonte única compartilhada com services/ragService.ts no frontend).
+// ponytail: lazy + cached module-level var em vez de import assertion — evita
+// atrito de JSON import no tsc/tsx deste pacote ESM.
+let _archetypeExamples: Record<string, FewShotExample[]> | null = null;
+
+function loadArchetypeExamples(): Record<string, FewShotExample[]> {
+    if (_archetypeExamples) return _archetypeExamples;
+
+    const candidates = [
+        path.join(process.cwd(), 'data', 'archetype_examples.json'),
+        path.join(process.cwd(), '..', 'data', 'archetype_examples.json')
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            _archetypeExamples = JSON.parse(readFileSync(candidate, 'utf-8'));
+            return _archetypeExamples!;
+        } catch {
+            // try next candidate
         }
-    ],
-    'CFO_PRAGMATICO': [
-        {
-            situacao: 'Pedido de budget para ferramentas ágeis',
-            resposta: 'Qual o payback esperado? Preciso ver uma projeção de ROI com cenários pessimista, realista e otimista antes de aprovar.'
-        },
-        {
-            situacao: 'Atraso em projeto crítico',
-            resposta: 'Cada dia de atraso nos custa R$50.000 em oportunidade perdida. Quais são as opções para acelerar a entrega?'
-        }
-    ],
-    'CTO_ENTUSIASTA': [
-        {
-            situacao: 'Proposta de Daily Standup de 15 minutos',
-            resposta: 'Excelente! Isso vai melhorar a comunicação do time. Sugiro começarmos com um piloto no squad de plataforma.'
-        },
-        {
-            situacao: 'Resistência do time à mudança',
-            resposta: 'Vamos fazer workshops hands-on. A melhor forma de convencer é mostrar resultados rápidos em um projeto real.'
-        }
-    ],
-    'TECH_LEAD_CETICO': [
-        {
-            situacao: 'Implementação de novas cerimônias ágeis',
-            resposta: 'Mais reuniões? Já perdemos 30% do tempo com meetings. Prefiro code reviews assíncronos e documentação clara.'
-        },
-        {
-            situacao: 'Proposta de pair programming obrigatório',
-            resposta: 'Funciona para contextos específicos, mas obrigar em tudo vai reduzir nossa velocidade pela metade.'
-        }
-    ],
-    'DEV_SENIOR_AUTONOMO': [
-        {
-            situacao: 'Mudança de framework de gestão',
-            resposta: 'Desde que não interfira no meu fluxo de trabalho e eu continue entregando, não tenho problemas.'
-        },
-        {
-            situacao: 'Retrospectiva semanal',
-            resposta: 'Prefiro fazer isso a cada duas semanas. Semanal é muito, não dá tempo de ter progresso significativo.'
-        }
-    ]
-};
+    }
+
+    console.warn('⚠️  archetype_examples.json não encontrado (tentado em data/ e ../data/). Few-shot examples ficarão vazios.');
+    _archetypeExamples = {};
+    return _archetypeExamples;
+}
 
 // Viéses Cognitivos para maior realismo
 const COGNITIVE_BIASES = [
@@ -281,7 +257,8 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
      * Retorna few-shot examples para o arquétipo
      */
     private getExamples(archetype: string): FewShotExample[] {
-        return ARCHETYPE_EXAMPLES[archetype] || ARCHETYPE_EXAMPLES['DEV_SENIOR_AUTONOMO'];
+        const examples = loadArchetypeExamples();
+        return examples[archetype] || examples['DEV_SENIOR_AUTONOMO'] || [];
     }
 
     /**
