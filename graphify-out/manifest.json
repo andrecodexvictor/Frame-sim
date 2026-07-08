@@ -1,0 +1,392 @@
+{
+  "App.tsx": {
+    "mtime": 1765131428.6353111,
+    "ast_hash": "8a8d5152caa34382062388a88981129c",
+    "semantic_hash": ""
+  },
+  "RAG/framework_playbooks.json": {
+    "mtime": 1764550256.1610544,
+    "ast_hash": "336c7083bf0d3f562427d73384d27693",
+    "semantic_hash": ""
+  },
+  "RAG/generate_profiles.py": {
+    "mtime": 1764549691.6968696,
+    "ast_hash": "c8901cf9ac0d25b0ce9900d4fde79770",
+    "semantic_hash": ""
+  },
+  "RAG/package.json": {
+    "mtime": 1765131281.1807914,
+    "ast_hash": "2647d20bae0d42969e0d4865a501c7e5",
+    "semantic_hash": ""
+  },
+  "RAG/profiles.json": {
+    "mtime": 1764549697.971204,
+    "ast_hash": "26da2f8285f04a06d52b8fc7b282273e",
+    "semantic_hash": ""
+  },
+  "RAG/simulation_config.json": {
+    "mtime": 1764550239.8632185,
+    "ast_hash": "a003a737286052beb20597097d1ff64a",
+    "semantic_hash": ""
+  },
+  "RAG/simulation_events.json": {
+    "mtime": 1764550356.7616062,
+    "ast_hash": "db7f504e3d1e650d44dbe5ed74aedc71",
+    "semantic_hash": ""
+  },
+  "RAG/src/agents/CriticAgent.ts": {
+    "mtime": 1765126897.4970863,
+    "ast_hash": "3e3f568751ae7f57c6e7288d396e0d86",
+    "semantic_hash": ""
+  },
+  "RAG/src/agents/DocumentAgent.ts": {
+    "mtime": 1768127900.762392,
+    "ast_hash": "d81b659a1a28a70e6a32640734bf9143",
+    "semantic_hash": ""
+  },
+  "RAG/src/agents/GoalAgent.ts": {
+    "mtime": 1765129721.5515478,
+    "ast_hash": "df67c8da90603271988e898624f710cc",
+    "semantic_hash": ""
+  },
+  "RAG/src/agents/orchestrator.ts": {
+    "mtime": 1765129884.8550594,
+    "ast_hash": "fb9fa78287710c8082cb92d68721d31c",
+    "semantic_hash": ""
+  },
+  "RAG/src/agents/personaAgent.ts": {
+    "mtime": 1765128662.9447923,
+    "ast_hash": "0347ab916f221c9cdb8e903f97d79141",
+    "semantic_hash": ""
+  },
+  "RAG/src/agents/roiCalculator.ts": {
+    "mtime": 1765128881.1505291,
+    "ast_hash": "f46b24c62aa6f9be3ad6b3066ef0815a",
+    "semantic_hash": ""
+  },
+  "RAG/src/index.ts": {
+    "mtime": 1765129745.9280374,
+    "ast_hash": "8228f93d2607f80ccb56bd79b75b0914",
+    "semantic_hash": ""
+  },
+  "RAG/src/main.ts": {
+    "mtime": 1765128601.9058661,
+    "ast_hash": "836d9db9e8f3bb6931ebd8f5bbf7b232",
+    "semantic_hash": ""
+  },
+  "RAG/src/server.ts": {
+    "mtime": 1768127938.2708194,
+    "ast_hash": "def0c1574ea7432688965358c1e8cedb",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/AgentRacingService.ts": {
+    "mtime": 1767826300.510662,
+    "ast_hash": "2fc103943eacf1f8f9ef1a56cab1ca2b",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/LLMProvider.ts": {
+    "mtime": 1765126809.5948083,
+    "ast_hash": "b654a1be5d5df49fdb6adfa4e774ca0b",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/MetricsService.ts": {
+    "mtime": 1765126995.865883,
+    "ast_hash": "458bf73c7dcc7b8ac87ac33a638d24fb",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/SelfImprovementService.ts": {
+    "mtime": 1767826300.510662,
+    "ast_hash": "b5ceecf71ca44611b421d05fef9096fc",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/SmartChunker.ts": {
+    "mtime": 1767826301.0359375,
+    "ast_hash": "0c0bc146890625f68253b3ec3018ec17",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/SmartRouter.ts": {
+    "mtime": 1765129118.8037002,
+    "ast_hash": "e9d1bfb70deffc7a48b50853c1ad7b01",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/UserFrameworkStore.ts": {
+    "mtime": 1768127887.3398416,
+    "ast_hash": "4d6c212b28d9f69d02f322495634e38b",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/documentLoader.ts": {
+    "mtime": 1764954566.074938,
+    "ast_hash": "cb35c4e60c7f2d02c3f3b826308ac03d",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/queryRouter.ts": {
+    "mtime": 1764954482.7858462,
+    "ast_hash": "a6deeaa0c849d6a8e6d4d8a9c9a1e150",
+    "semantic_hash": ""
+  },
+  "RAG/src/services/vectorStore.ts": {
+    "mtime": 1765127892.3372068,
+    "ast_hash": "a27aa33aabda69c89f5f2a0cfac9ffa4",
+    "semantic_hash": ""
+  },
+  "RAG/src/types/index.ts": {
+    "mtime": 1767826300.510662,
+    "ast_hash": "866008e42e424e75cb5c2d9fbefbd819",
+    "semantic_hash": ""
+  },
+  "RAG/tsconfig.json": {
+    "mtime": 1764954411.893643,
+    "ast_hash": "2966d10a2c1a5d76484bed3b1ee9bb2b",
+    "semantic_hash": ""
+  },
+  "components/AuthScreen.tsx": {
+    "mtime": 1764551173.4569435,
+    "ast_hash": "4e15eb29b44f58ba96bddebc39a946d3",
+    "semantic_hash": ""
+  },
+  "components/BatchResultsChart.tsx": {
+    "mtime": 1765146616.62369,
+    "ast_hash": "b4bfcd2ff965842f384bcc09c2784495",
+    "semantic_hash": ""
+  },
+  "components/BatchSimulationPanel.tsx": {
+    "mtime": 1764552737.2707536,
+    "ast_hash": "d46f1bad3801668ef085fbf8af3a0ad5",
+    "semantic_hash": ""
+  },
+  "components/ComparisonDashboard.tsx": {
+    "mtime": 1765152297.1497853,
+    "ast_hash": "d2b113d349063956362c796842b70c4b",
+    "semantic_hash": ""
+  },
+  "components/ConfigForm.tsx": {
+    "mtime": 1765153321.3065572,
+    "ast_hash": "d1f01360787e4609642aa666ec8eb3f6",
+    "semantic_hash": ""
+  },
+  "components/CostBreakdownPanel.tsx": {
+    "mtime": 1765153274.3838696,
+    "ast_hash": "7e021add4120acfe7a9e24c348b7ad43",
+    "semantic_hash": ""
+  },
+  "components/Dashboard.tsx": {
+    "mtime": 1765153006.819098,
+    "ast_hash": "67ca5562e76130c2422529ac9cbcbc5a",
+    "semantic_hash": ""
+  },
+  "components/LandingPage.tsx": {
+    "mtime": 1764551173.4630597,
+    "ast_hash": "14dc428b71eca737ac2ecffb736e9b9e",
+    "semantic_hash": ""
+  },
+  "components/SimulationLoader.tsx": {
+    "mtime": 1764551173.4630597,
+    "ast_hash": "dbdfd1d1043001be8cdb889381dc3f4a",
+    "semantic_hash": ""
+  },
+  "components/UploadSection.tsx": {
+    "mtime": 1765154241.9167078,
+    "ast_hash": "c81c8748d6494965e26bbff577d6879a",
+    "semantic_hash": ""
+  },
+  "components/ui/BrutalButton.tsx": {
+    "mtime": 1764551173.4630597,
+    "ast_hash": "c2486e61f6658ad4ba4c635e92f7fb89",
+    "semantic_hash": ""
+  },
+  "data/cost_profiles.json": {
+    "mtime": 1768130867.7165463,
+    "ast_hash": "a3e482a9461c951068ce31be815b4987",
+    "semantic_hash": ""
+  },
+  "data/profiles_compact.json": {
+    "mtime": 1765153863.4127233,
+    "ast_hash": "cbc0416be5e841f370e457294f515ce0",
+    "semantic_hash": ""
+  },
+  "index.tsx": {
+    "mtime": 1764551173.4691985,
+    "ast_hash": "3a866db25e5c89ac2bf494f2e1aa30cf",
+    "semantic_hash": ""
+  },
+  "legacy_v1/services/geminiService.ts": {
+    "mtime": 1764551887.4928794,
+    "ast_hash": "5322440d2789b1e48b4c74f4d4b7f74d",
+    "semantic_hash": ""
+  },
+  "legacy_v1/types.ts": {
+    "mtime": 1764551885.0161097,
+    "ast_hash": "87600b5dc6b75f00f9b5d38be59904f8",
+    "semantic_hash": ""
+  },
+  "metadata.json": {
+    "mtime": 1764551173.4708457,
+    "ast_hash": "68a6b79ee17c4ff2322323748722ad03",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1764963471.9223254,
+    "ast_hash": "5643d96e179e6e91f969a2ebb45fa937",
+    "semantic_hash": ""
+  },
+  "services/SmartChunker.ts": {
+    "mtime": 1767826301.0359375,
+    "ast_hash": "0c0bc146890625f68253b3ec3018ec17",
+    "semantic_hash": ""
+  },
+  "services/agenticService.ts": {
+    "mtime": 1765145327.1469407,
+    "ast_hash": "d51133e9e71e55700b9885ef9d360bce",
+    "semantic_hash": ""
+  },
+  "services/batchService.ts": {
+    "mtime": 1767826300.656965,
+    "ast_hash": "2b659625548e774d4e2db55d4f8f2689",
+    "semantic_hash": ""
+  },
+  "services/geminiService.ts": {
+    "mtime": 1768131716.382495,
+    "ast_hash": "f7d5a4c2ddee8eba5bae8ce29fd51525",
+    "semantic_hash": ""
+  },
+  "services/metricsCalculator.ts": {
+    "mtime": 1768131556.6821258,
+    "ast_hash": "8c801d2405d46693901e4a06b3202fa4",
+    "semantic_hash": ""
+  },
+  "services/mockData.ts": {
+    "mtime": 1764552418.8832908,
+    "ast_hash": "e58d7aa0ab23b537a99dfa61b3e2bf5b",
+    "semantic_hash": ""
+  },
+  "services/personaEnricher.ts": {
+    "mtime": 1765153794.336139,
+    "ast_hash": "21f57edf45c470f4324a907737fa029f",
+    "semantic_hash": ""
+  },
+  "services/ragService.ts": {
+    "mtime": 1768131390.6862872,
+    "ast_hash": "69a84b1cc12c382e92bbcd4476a26bd7",
+    "semantic_hash": ""
+  },
+  "tsconfig.json": {
+    "mtime": 1764551173.4740534,
+    "ast_hash": "d85c3835f14e6fb1b5a6e7b1a66d3f63",
+    "semantic_hash": ""
+  },
+  "types.ts": {
+    "mtime": 1767826300.693828,
+    "ast_hash": "050548816e7fcaf593110429f88504a2",
+    "semantic_hash": ""
+  },
+  "vite.config.ts": {
+    "mtime": 1765157559.238365,
+    "ast_hash": "0522532cc550756949289a5eeb344795",
+    "semantic_hash": ""
+  },
+  "Arquiteture examples.md": {
+    "mtime": 1767826300.33949,
+    "ast_hash": "d607bc53f9724f454e01c40e8fc75971",
+    "semantic_hash": ""
+  },
+  "RAG/business_metrics_model.md": {
+    "mtime": 1764550562.1399698,
+    "ast_hash": "2447c75049721d469a0ba0292732e689",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1768132815.3630383,
+    "ast_hash": "9b7a4481382e4aba2426ae37dbc78d58",
+    "semantic_hash": ""
+  },
+  "accuracy.md": {
+    "mtime": 1767826301.0359375,
+    "ast_hash": "f67c4f86a54a3cfcedf698c8fc35252a",
+    "semantic_hash": ""
+  },
+  "code.md": {
+    "mtime": 1768132847.042791,
+    "ast_hash": "82d882235387ccba07d52d0e52fe08e0",
+    "semantic_hash": ""
+  },
+  "documentacao.md": {
+    "mtime": 1768132868.3125403,
+    "ast_hash": "c4f4645e58ee3f2b704dd0603a2e0842",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1764553365.489873,
+    "ast_hash": "f278400e09692fa338585b8e16dd8935",
+    "semantic_hash": ""
+  },
+  "next_steps/An\u00e1lise e Recomenda\u00e7\u00e3o para a Transforma\u00e7\u00e3o Ag\u00eantica de Frameworks.md": {
+    "mtime": 1765125530.1790836,
+    "ast_hash": "ea23405be8d3eab65c6f35b8cd046320",
+    "semantic_hash": ""
+  },
+  "next_steps/Documento de Especifica\u00e7\u00e3o de Arquitetura Ag\u00eantica - Completo (Fases 1, 2 e 3).md": {
+    "mtime": 1765125514.1375382,
+    "ast_hash": "4dd593dad9cd46daf63b41851e3b878f",
+    "semantic_hash": ""
+  },
+  "next_steps/Documento de Especifica\u00e7\u00e3o de Arquitetura Ag\u00eantica - Fase 1.md": {
+    "mtime": 1765125520.4482093,
+    "ast_hash": "f1c5f8c9d2eef90fcc2699927846d49c",
+    "semantic_hash": ""
+  },
+  "next_steps/Documento de Especifica\u00e7\u00e3o de Arquitetura Ag\u00eantica - Vers\u00e3o Final (1).md": {
+    "mtime": 1765125504.0381124,
+    "ast_hash": "0b8ac335be95c3d3ea8b2d512b157ab4",
+    "semantic_hash": ""
+  },
+  "next_steps/Documento de Especifica\u00e7\u00e3o de Arquitetura Ag\u00eantica - Vers\u00e3o Final.md": {
+    "mtime": 1765125495.311664,
+    "ast_hash": "951be6be712b400a757d715c1b02c749",
+    "semantic_hash": ""
+  },
+  "next_steps/implementation_plan.md": {
+    "mtime": 1765125502.7588785,
+    "ast_hash": "d66690a394d03abf8938a595c298a224",
+    "semantic_hash": ""
+  },
+  "roadmap.md": {
+    "mtime": 1767826732.798642,
+    "ast_hash": "8c43f9c5104e85644cdf6a6104e34d49",
+    "semantic_hash": ""
+  },
+  "architecture_images/agentic_functions_architecture_v2_1765208576496.png": {
+    "mtime": 1767826300.5262897,
+    "ast_hash": "21cba656b9412ae584f9e22ea969e2a1",
+    "semantic_hash": ""
+  },
+  "architecture_images/architecture_diagram_1765208063344.png": {
+    "mtime": 1767826300.5860863,
+    "ast_hash": "f112530ecc8aee2fe6053537417108a8",
+    "semantic_hash": ""
+  },
+  "architecture_images/framesim_architecture_21_9_ultrawide_1765208834392.png": {
+    "mtime": 1767826300.5900915,
+    "ast_hash": "82ee7efabea76909e3c972d148d2f12c",
+    "semantic_hash": ""
+  },
+  "architecture_images/framesim_system_architecture_16_9_v2_1765208284608.png": {
+    "mtime": 1767826300.6056015,
+    "ast_hash": "7e57f1e6cf7dbc62a2e92c7e0f9e89dd",
+    "semantic_hash": ""
+  },
+  "architecture_images/roi_calculator_flow_legible_try3_1765209082095.png": {
+    "mtime": 1767826300.614601,
+    "ast_hash": "8ce336138a769e3a27b1db4b724ab709",
+    "semantic_hash": ""
+  },
+  "architecture_images/roi_calculator_flow_v3_1765208429628.png": {
+    "mtime": 1767826300.6311054,
+    "ast_hash": "db34b44ea48d09649f8de0d868ec4905",
+    "semantic_hash": ""
+  },
+  "architecture_images/smart_router_critic_legible_1765208956887.png": {
+    "mtime": 1767826300.6508298,
+    "ast_hash": "516bb93d5a83a83c4182b4cbecf467ba",
+    "semantic_hash": ""
+  }
+}
