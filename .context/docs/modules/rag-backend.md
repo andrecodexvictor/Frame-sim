@@ -11,17 +11,35 @@ RAG real via ChromaDB, cálculo determinístico de ROI, ingestão de documentos.
 - `RAG/src/server.ts` — endpoints:
   - `GET /api/status` — health check (usado por `checkAgenticStatus` no
     frontend).
-  - `POST /api/simulate` — body `{query, stakeholders, config}` → resposta
-    `{state, roi}`.
+  - `POST /api/simulate` — body `{query, stakeholders, config, teamSample}`
+    → resposta `{state, roi}`. Hidrata `stakeholders` (aceita `[{id}]` novo,
+    `string[]` antigo) e `teamSample` (ids) contra as 350 personas reais de
+    `RAG/profiles.json` carregadas na subida; fallback sintético só quando o
+    id não existe. `state` inclui `funcionarios[]` (brains) e `eventos_rh[]`.
+    Conecta o ChromaDB em fail-open (`initVectorStore`, timeout 3s).
   - `POST /api/ingest` — body `{rawText|documents[]}` → `{digest}`.
 - `RAG/src/main.ts` — CLI de simulação (`npm run dev` dentro de `RAG/`).
 
+### Core (`RAG/src/core/`)
+- `employeeBrainCore.ts` — EmployeeBrain: estado determinístico por
+  funcionário (puro, zero imports). Ver
+  [simulation-model.md](./simulation-model.md). Testes em
+  `RAG/src/tests/brain.test.ts` (6 testes).
+
 ### Agentes (`RAG/src/agents/`)
 - `orchestrator.ts` — `OrchestratorAgent`. Loop de turnos
-  Act → Critique → Replan. God node do grafo (18 arestas).
-- `personaAgent.ts` — gera reações/decisões de personas individuais.
+  Act → Critique → Replan. Cria brains para stakeholders + teamSample
+  (`ensureBrains`); `consolidateTurn` commita moral/velocidade via
+  `aggregate(brains)` ANTES do LLM (LLM só narra + confiança ±5);
+  `runSimulation` chama o `CriticAgent` 1x por simulação e grava
+  `state.plausibility_score`. God node do grafo (18 arestas).
+- `personaAgent.ts` — gera reações/decisões de personas individuais; recebe
+  o estado interno do brain no prompt e usa o viés cognitivo do perfil (não
+  mais aleatório quando há brain). Modelo via `geminiModel()`.
 - `CriticAgent.ts` — checa plausibilidade da narrativa via GPT-4;
-  **fail-open** (erro na checagem não bloqueia o turno).
+  **fail-open** (erro na checagem não bloqueia o turno). Chamado 1x por
+  simulação pelo `orchestrator.runSimulation`; a `plausibility_score` chega
+  ao frontend como `quality_per_cycle` (antes hardcoded 100).
 - `GoalAgent.ts` — aumenta dificuldade da simulação a cada 3 turnos.
 - `roiCalculator.ts` — `ROICalculatorAgent`, cálculo determinístico do ROI
   (nunca delega ao LLM). God node (15 arestas).
@@ -29,7 +47,9 @@ RAG real via ChromaDB, cálculo determinístico de ROI, ingestão de documentos.
 
 ### Serviços (`RAG/src/services/`)
 - `LLMProvider.ts` — factory multi-LLM (Gemini/GPT-4/DeepSeek/Ollama).
-  Round-robin em `GOOGLE_API_KEY` .. `GOOGLE_API_KEY_3`.
+  Round-robin em `GOOGLE_API_KEY` .. `GOOGLE_API_KEY_3`. Exporta
+  `geminiModel()`: modelo Gemini de env `GEMINI_MODEL`, default
+  `gemini-2.5-flash` (os `gemini-1.5-*` foram aposentados pela API — 404).
 - `SmartRouter.ts` — usa Ollama para classificar a query e rotear para o
   provedor/estratégia certa.
 - `vectorStore.ts` — `VectorStoreService`, cliente ChromaDB (porta 8000).
@@ -67,8 +87,8 @@ RAG real via ChromaDB, cálculo determinístico de ROI, ingestão de documentos.
 
 - Não fundir `services/SmartChunker.ts` (frontend) com
   `RAG/src/services/SmartChunker.ts` (backend) sem avaliar o impacto —
-  hoje são independentes por design (frontend não importa código do RAG/).
-- `EmployeeBrain` (`RAG/src/core/employeeBrainCore.ts`) ainda **não existe**
-  no repo — está em implementação. Ver
-  [simulation-model.md](./simulation-model.md) antes de assumir que já
-  existe.
+  hoje são independentes por design (a exceção deliberada é
+  `RAG/src/core/employeeBrainCore.ts`, módulo puro sem imports que o
+  frontend importa diretamente em `services/geminiService.ts`).
+- Não adicionar imports em `employeeBrainCore.ts` — a pureza (zero imports)
+  é o que permite o compartilhamento backend/frontend acima.

@@ -10,7 +10,7 @@
 4. [Pipeline RAG](#4-pipeline-rag)
 5. [Multi-LLM (providers, chaves, fallback)](#5-multi-llm-providers-chaves-fallback)
 6. [Modelo Matemático Determinístico](#6-modelo-matemático-determinístico)
-7. [EmployeeBrain (arquitetura alvo / em implementação)](#7-employeebrain-arquitetura-alvo--em-implementação)
+7. [EmployeeBrain](#7-employeebrain)
 8. [Mapa de Diretórios e Arquivos-Chave](#8-mapa-de-diretórios-e-arquivos-chave)
 9. [Variáveis de Ambiente](#9-variáveis-de-ambiente)
 10. [Grafo do Código](#10-grafo-do-código)
@@ -38,17 +38,19 @@ graph TD
     Agentic -->|"POST /api/simulate"| Server["RAG/src/server.ts<br/>:3002"]
     Server --> Orchestrator["OrchestratorAgent<br/>runSimulation() por turnos"]
 
-    Orchestrator --> PersonaAgent["PersonaAgent<br/>gemini-1.5-pro"]
+    Orchestrator --> PersonaAgent["PersonaAgent<br/>gemini-2.5-flash (GEMINI_MODEL)"]
+    Orchestrator --> Brain["EmployeeBrain<br/>estado determinístico por funcionário"]
     Orchestrator --> SmartRouter["SmartRouter<br/>classifica intenção"]
     Orchestrator --> GoalAgent["GoalAgent<br/>a cada 3 turnos"]
     Orchestrator --> ROICalc["ROICalculatorAgent<br/>projeção financeira"]
+    Orchestrator --> Critic["CriticAgent<br/>1x por simulação"]
 
     SmartRouter -->|"COMPLEX_REASONING"| GPT4["GPT-4"]
     SmartRouter -->|"CREATIVE_GENERATION"| GeminiW["Gemini"]
     SmartRouter -->|"SIMPLE_VALIDATION"| DeepSeek["DeepSeek"]
     SmartRouter -->|"classificação de intenção"| Ollama["Ollama llama3<br/>localhost:11434"]
 
-    Orchestrator -.->|"opcional, hoje não conectado no server.ts"| VectorStore["VectorStoreService<br/>ChromaDB :8000"]
+    Orchestrator -.->|"fail-open: conecta se ChromaDB estiver de pé, senão segue sem RAG"| VectorStore["VectorStoreService<br/>ChromaDB :8000"]
 
     Server -->|"state + roi"| Agentic
     Agentic -->|"2ª chamada, injeta state como texto"| Standard
@@ -86,6 +88,8 @@ sequenceDiagram
     Enricher-->>Gemini: team, keyStakeholders, archetypeDistribution
     Gemini->>Enricher: generateTeamDescription / calculateTeamResistance
 
+    Gemini->>Gemini: simulateTeamOffline(team[0..30], meses, seed)<br/>EmployeeBrain pré-LLM, ZERO chamadas de API —<br/>eventos humanos emergentes viram fatos no prompt
+
     Gemini->>RAG: generateRAGContext(config)
     RAG-->>Gemini: playbooks + metrics + profiles + events (few-shot)
     Gemini->>Gemini: injectRAGContext() concatena tudo no prompt
@@ -106,7 +110,8 @@ sequenceDiagram
     end
 
     Gemini->>Gemini: summary.totalRoi = recalculado a partir dos acumulados
-    Gemini-->>App: SimulationOutput (roi real, narrativa do LLM)
+    Gemini->>Gemini: keyPersonas[].sentiment = humor determinístico do brain<br/>emergentEvents = eventos do EmployeeBrain
+    Gemini-->>App: SimulationOutput (roi real, narrativa do LLM, emergentEvents)
     App-->>Usuário: Dashboard
 ```
 
@@ -126,7 +131,7 @@ sequenceDiagram
     participant Agentic as agenticService
     participant Server as RAG/src/server.ts<br/>:3002
     participant Orch as OrchestratorAgent
-    participant Persona as PersonaAgent<br/>gemini-1.5-pro
+    participant Persona as PersonaAgent<br/>gemini-2.5-flash (GEMINI_MODEL)
     participant Router as SmartRouter
     participant Ollama as Ollama llama3<br/>:11434
     participant LLM as LLM escolhido<br/>GPT-4 / Gemini / DeepSeek
@@ -135,17 +140,22 @@ sequenceDiagram
     participant Std as geminiService.runSimulation<br/>(2ª chamada, fluxo da seção 2)
 
     App->>Agentic: runAgenticSimulation(config)
-    Agentic->>Server: POST /api/simulate {query, stakeholders, config}
-    Server->>Server: generatePersonaFromArchetype()<br/>hidrata IDs de arquétipo em PersonaProfile sintético
+    Agentic->>Server: POST /api/simulate {query, stakeholders, config, teamSample}
+    Server->>Server: hidrata stakeholders/teamSample: id real → RAG/profiles.json<br/>(fallback generatePersonaFromArchetype() só se o id não existir no banco de 350)
     Server->>Server: generateBackendConfig()<br/>hidrata SimulationConfig do frontend
-    Server->>Orch: runSimulation([query], stakeholders, config)
+    Server->>Orch: runSimulation([query], stakeholders, config, teamProfiles)
+
+    Orch->>Orch: ensureBrains(stakeholders + teamProfiles)<br/>1 EmployeeBrain por persona (idempotente, deriveInitialBrain)
 
     loop 1 turno (runSimulation roda 1 query por padrão)
         loop por stakeholder
-            Orch->>Persona: simulateResponse(persona, situacao, config)
-            Persona->>Persona: few-shot por arquétipo + viés cognitivo aleatório
+            Orch->>Persona: simulateResponse(persona, situacao, config, brain)
+            Persona->>Persona: few-shot por arquétipo + estado interno do brain no prompt<br/>(viés cognitivo do perfil; aleatório só se o brain não tiver um)
             Persona-->>Orch: resposta_persona, emocao_detectada, impacto_moral
+            Orch->>Orch: updateBrain(brain, {pressaoBase, impacto_moral, moral_time})
         end
+        Orch->>Orch: updateBrain() nas personas de fundo (teamSample, sem resposta LLM no turno)
+        Orch->>Orch: evaluateDecisions() por brain ativo (RNG semeado por persona+turno)<br/>+ applyContagion() quando a decisão gera contágio social
 
         Orch->>Router: route(prompt de consolidação do turno)
         Router->>Ollama: classifyIntent(prompt)
@@ -155,20 +165,24 @@ sequenceDiagram
             Ollama-->>Router: COMPLEX_REASONING / CREATIVE_GENERATION / SIMPLE_VALIDATION
         end
         Router-->>Orch: LLMProvider (GPT-4, Gemini ou DeepSeek conforme intenção)
-        Orch->>LLM: generate(prompt consolidação)
-        LLM-->>Orch: moral_time_delta, velocidade_delta, confianca_delta, scratchpad_update, eventos_disparados
+        Orch->>Orch: moral_time/velocidade_sprint = aggregate(brains)<br/>(determinístico — não vem mais do LLM)
+        Orch->>LLM: generate(prompt de narrativa/consolidação)
+        LLM-->>Orch: confianca_delta (±5), scratchpad_update, resumo_turno, eventos_disparados
 
-        Orch->>Orch: aplica deltas e clampa (moral 0-100, velocidade 20-150, confiança 0-100)
+        Orch->>Orch: aplica confianca_delta e clampa (moral/velocidade/confiança 0-100)
 
         alt turno % 3 == 0
             Orch->>Goal: evaluate(state)
             Goal-->>Orch: difficulty_scalar (0.8 crise de moral alta / 1.2 recuperação de moral baixa) + nova diretiva
+            Orch->>Orch: reflect() em todos os brains (mesma cadência do GoalAgent)
         end
     end
 
+    Orch->>Critic: critique(resumo final) — 1x por simulação, não por turno
+    Critic-->>Orch: plausibility_score, replan_required (fail-open: score 100 se falhar)
     Orch->>ROI: calculateROI(config)
     ROI-->>Orch: projecao_mensal, roi_final, break_even_mes, confianca_estimativa
-    Orch-->>Server: {state, roi}
+    Orch-->>Server: {state (com funcionarios[], eventos_rh[], plausibility_score), roi}
     Server-->>Agentic: {success, state, roi}
 
     Agentic->>Std: runSimulation(singleConfig com scenarioContext = resumo do state agentic)
@@ -179,9 +193,8 @@ sequenceDiagram
 
 **Limitações confirmadas no código atual (não no README/roadmap):**
 
-- `server.ts` cria o orquestrador com `createOrchestrator()` **sem** passar um `VectorStoreService`. `OrchestratorAgent.processQuery()` (que faria `hybridSearch` no ChromaDB) nunca é chamado pelo endpoint `/api/simulate` — quem é chamado é `runSimulation()` → `runTurn()` direto. Ou seja, no caminho HTTP real, RAG vetorial é um **no-op**; só o CLI (`RAG/src/main.ts --query`) usa o `QueryRouter`/`VectorStoreService` de fato.
-- `CriticAgent` é importado por `orchestrator.ts` mas nunca instanciado nem chamado dentro do loop principal (`runTurn`/`consolidateTurn`). Ele só é usado hoje por `AgentRacingService` e `SelfImprovementService` (serviços do backend RAG que, por sua vez, não são chamados por `server.ts` — ficam disponíveis via CLI/uso programático).
-- `generatePersonaFromArchetype()` em `server.ts` gera personas **sintéticas** (nomes de uma lista fixa, cargos derivados do próprio ID de arquétipo) — não usa as 350 personas reais de `RAG/profiles.json`.
+- `server.ts` carrega `RAG/profiles.json` (350 personas reais) num `Map` na subida e resolve `stakeholders`/`teamSample` por `id` nesse mapa; `generatePersonaFromArchetype()` só é usado como **fallback sintético** quando o `id` recebido não bate com nenhuma persona real. `server.ts` também tenta conectar o `VectorStoreService` (`initVectorStore()`, fail-open com timeout de 3s) e passa a instância para `createOrchestrator().setVectorStore()`. Ainda assim, `OrchestratorAgent.processQuery()` (que faria `hybridSearch` no ChromaDB) **não** é chamado pelo endpoint `/api/simulate` — quem é chamado é `runSimulation()` → `runTurn()` direto; o efeito prático do vector store conectado nesse caminho é `consolidateTurn()` conseguir salvar memória de turno (`saveMemory`) e o `ROICalculatorAgent` conseguir puxar métricas extras (`findMetrics`) — a busca híbrida por persona/playbook continua só no CLI (`RAG/src/main.ts --query`).
+- `CriticAgent` agora é instanciado e chamado dentro de `OrchestratorAgent.runSimulation()` — **1 vez por simulação** (não por turno), depois do último turno e antes do `ROICalculatorAgent`. O resultado (`plausibilityScore`, `replanRequired`) é gravado em `state.plausibility_score`/`state.replan_triggered` e propagado ao frontend como `agenticMetrics.quality_per_cycle` (antes hardcoded em 100). `CriticAgent` continua sendo usado também por `AgentRacingService` e `SelfImprovementService`.
 - `GoalAgent.evaluate` roda a cada 3 turnos, mas como `/api/simulate` só executa 1 query por request (`orchestrator.runSimulation([query], ...)`), na prática o `GoalAgent` quase nunca dispara pelo caminho HTTP atual — ele é pensado para simulações de múltiplos turnos como as do CLI (`main.ts --simulate`, que roda 3 queries fixas).
 
 ---
@@ -216,7 +229,7 @@ flowchart LR
 
     Emb --> Chroma["ChromaDB :8000<br/>collections: profiles / metrics / events / playbooks / history"]
 
-    Query["Query do usuário/agente"] --> QR["QueryRouter (Self-RAG)<br/>gemini-1.5-flash + Zod schema"]
+    Query["Query do usuário/agente"] --> QR["QueryRouter (Self-RAG)<br/>geminiModel() + Zod schema"]
     QR -->|"PERSONA_PURA"| NoRAG["sem retrieval<br/>few-shot direto no PersonaAgent"]
     QR -->|"CALCULO_ROI / CENARIO_COMPARATIVO / EVENTO_SIMULACAO / HIBRIDO"| Hybrid["VectorStoreService.hybridSearch<br/>topK=5, ordenado por score"]
     Hybrid --> Chroma
@@ -231,7 +244,7 @@ Endpoint `POST /api/ingest` (`RAG/src/server.ts`) → `DocumentAgent` (`RAG/src/
 ```mermaid
 flowchart TD
     Raw["rawText (documento do usuário)"] --> Size{"length > 50.000 chars?"}
-    Size -->|"não (documento pequeno)"| Digest["digest()<br/>gemini-1.5-flash extrai<br/>Manifesto Estruturado Denso (JSON)"]
+    Size -->|"não (documento pequeno)"| Digest["digest()<br/>geminiModel() extrai<br/>Manifesto Estruturado Denso (JSON)"]
     Size -->|"sim (documento grande)"| Chunk["SmartChunker.chunk()<br/>~2000 chars/chunk, overlap 200<br/>detecta seções (markdown, COBIT EDM/APO/BAI/DSS/MEA, capítulos)"]
     Chunk --> Summary["buildSummaryForDigest()<br/>intro + 1 chunk/seção + conclusão"]
     Summary --> Digest2["digest() sobre o resumo"]
@@ -252,15 +265,15 @@ flowchart TD
 | Camada | Provider | Modelo | Chave(s) de env | Uso |
 |---|---|---|---|---|
 | Frontend (`services/geminiService.ts`) | Google Gemini | `gemini-2.5-flash` | `VITE_API_KEY` .. `VITE_API_KEY_7` (round-robin, 7 chaves) | Simulação principal (schema JSON estrito) |
-| Frontend (`digestFrameworkDocument`) | Google Gemini | `gemini-1.5-flash` | `VITE_API_KEY` | Digestão rápida de documento (fetch direto à API REST) |
+| Frontend (`digestFrameworkDocument`) | Google Gemini | `gemini-2.5-flash` | `VITE_API_KEY` | Digestão rápida de documento (fetch direto à API REST) — antes `gemini-1.5-flash`, aposentado pela API (404) |
 | Frontend fallback | OpenAI | `gpt-4-turbo-preview` | `VITE_OPENAI_API_KEY` | Fallback se as 7 chaves Gemini estourarem quota |
 | Frontend fallback | DeepSeek | `deepseek-chat` | `VITE_DEEPSEEK_API_KEY` | Fallback final antes do mock |
 | Frontend fallback final | — | — | — | `services/mockData.ts` (`MOCK_SIMULATION_RESULT`) |
-| Backend RAG (`LLMProvider.ts`) | Google Gemini | `gemini-1.5-pro` | `GOOGLE_API_KEY`, `GOOGLE_API_KEY_2`, `GOOGLE_API_KEY_3` (round-robin, 3 clientes) | Worker LLM do `SmartRouter`, `PersonaAgent`, `ROICalculatorAgent` (via `@langchain/google-genai`) |
+| Backend RAG (`LLMProvider.ts:geminiModel()`) | Google Gemini | `gemini-2.5-flash` (default), configurável via `GEMINI_MODEL` | `GOOGLE_API_KEY`, `GOOGLE_API_KEY_2`, `GOOGLE_API_KEY_3` (round-robin, 3 clientes) | Worker LLM do `SmartRouter`, `PersonaAgent`, `ROICalculatorAgent`, `queryRouter.ts` (via `@langchain/google-genai`) — antes hardcoded em `gemini-1.5-pro`/`gemini-1.5-flash`, aposentados pela API (404) |
 | Backend RAG | OpenAI | `gpt-4` | `OPENAI_API_KEY` | Primary LLM do `SmartRouter`, `CriticAgent` |
 | Backend RAG | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_KEY` | Rota `SIMPLE_VALIDATION` do `SmartRouter` |
 | Backend RAG | Ollama (local) | `llama3` (configurável) | `OLLAMA_BASE_URL` (default `http://localhost:11434`) | "Cérebro" do `SmartRouter` — classifica intenção antes de rotear, gratuito |
-| Query classification (`queryRouter.ts`) | Google Gemini | `gemini-1.5-flash` | `GOOGLE_API_KEY` | Self-RAG: decide modo (`PERSONA_PURA`/`CALCULO_ROI`/...) |
+| Query classification (`queryRouter.ts`) | Google Gemini | `geminiModel()` (default `gemini-2.5-flash`) | `GOOGLE_API_KEY` | Self-RAG: decide modo (`PERSONA_PURA`/`CALCULO_ROI`/...) |
 | Embeddings (`vectorStore.ts`, `UserFrameworkStore.ts`) | Google | `text-embedding-004` | `GOOGLE_API_KEY` | Embeddings para ChromaDB |
 
 ### Cascata de fallback do frontend
@@ -346,64 +359,71 @@ O frontend (`ragService.ts`) usa o **mesmo conceito** de Curva J (`J_CURVE_FACTO
 
 ---
 
-## 7. EmployeeBrain (arquitetura alvo / em implementação)
+## 7. EmployeeBrain
 
-> Esta seção descreve um design **planejado**, ainda não presente em `RAG/src/`. Hoje o estado emocional dos funcionários é inteiramente decidido pelo LLM (`keyPersonas[].sentiment`, `emocao_detectada` do `PersonaAgent`) a cada chamada, sem estado persistente entre turnos. O objetivo do EmployeeBrain é inverter isso: estado determinístico por funcionário, com o LLM apenas dando "voz" ao estado já calculado.
+Módulo puro e implementado em `RAG/src/core/employeeBrainCore.ts` (zero imports, nem node builtins — importável tanto pelo backend RAG quanto pelo frontend Vite), com 6 testes em `RAG/src/tests/brain.test.ts` (`npx tsx src/tests/brain.test.ts` dentro de `RAG/`). Antes desta implementação, o estado emocional dos funcionários era inteiramente decidido pelo LLM a cada chamada (`keyPersonas[].sentiment`, `emocao_detectada` do `PersonaAgent`), sem estado persistente entre turnos. O EmployeeBrain inverte isso: estado determinístico por funcionário, com o LLM apenas dando "voz" ao estado já calculado.
 
 ### Ideia de design
 
-Módulo puro (`RAG/src/core/employeeBrainCore.ts`, planejado) mantendo, por funcionário simulado, um estado interno:
+Estado interno por funcionário simulado (`EmployeeBrainState`):
 
-- `estresse` (0-100), `humor` (-100..100), `energia`, `engajamento`
-- `status`: `ativo | licenca | burnout | pediu_demissao`
-- `memoria`: buffer FIFO dos últimos 12 eventos
-- `reflexao`: gerada a cada 3 turnos (`reflect()`)
-- Traços derivados do perfil real (`resiliencia`, `adaptabilidade`, `influencia`), calculados a partir dos campos já existentes em `PersonaProfile` (`psicologia_comportamento`, `gestao_estresse`)
+- `estresse` (0-100), `humor` (-100..100), `energia` (0-100), `engajamento` (0-100)
+- `status`: `ativo | licenca | burnout | pediu_demissao` (ver nota abaixo — `'burnout'` é um valor de tipo que hoje nunca é atribuído em runtime)
+- `memoria`: buffer FIFO dos últimos 12 eventos (`{turno, evento, valencia}`)
+- `reflexao`: gerada a cada 3 turnos (`reflect()`), a partir das 3 memórias de maior `|valência|`
+- Traços derivados do perfil real (`resiliencia`, `adaptabilidade`, `influencia`, `workaholic`, humor/engajamento iniciais) via `deriveTraits()`, calculados deterministicamente a partir de campos de texto de `PersonaProfile` (`gestao_estresse`, `abordagem_trabalho`, `opiniao_agil`, `cargo`/`senioridade`, `estilo_comunicacao`) + um jitter ±8 semeado por `id` para variar entre personas com o mesmo texto de perfil.
 
-Atualização **determinística por turno**, com RNG semeado (mulberry32) — ou seja, dada a mesma seed e a mesma sequência de eventos, o estado final é reproduzível (diferente do `Math.random()` não semeado usado hoje em `metricsCalculator`/`roiCalculator`).
+Atualização **determinística por turno** (`updateBrain()`), com RNG semeado (`mulberry32` + `hashString`) — dada a mesma seed e a mesma sequência de eventos, o estado final é reproduzível (diferente do `Math.random()` não semeado em `metricsCalculator`/`roiCalculator`). Decisões (`evaluateDecisions()`) usam um RNG derivado de `hashString(personaId:turno)`.
 
-`aggregate()` deriva as métricas agregadas que hoje o LLM inventa livremente: `moral_time`, `velocidade_sprint`, `sentiment` de cada `keyPersona` (`keyPersonas[].sentiment` viria do `humor` real do funcionário, não mais de um número solto do LLM).
+`aggregate()` deriva as métricas que antes o LLM inventava livremente:
+- `moral` = média de `(humor+100)/2` sobre os brains não-desistentes.
+- `velocidadeMod` (0-1) = `1 - 0.5*(fração afastados+desistentes) - 0.3*(1 - engajamento médio dos ativos)`.
+- `sentimentPorPersona[id]` = `(humor+100)/2` de cada funcionário — é isso que sobrescreve `keyPersonas[].sentiment` no modo standard e alimenta o state agentic.
 
-O `PersonaAgent` continua chamando o LLM, mas o prompt passa a incluir o estado interno já calculado (estresse, humor, memória recente) — o LLM só transforma esse estado em uma frase em primeira pessoa (`resposta_persona`). **Nenhuma chamada extra de LLM é necessária** — o cálculo de estado é local/determinístico.
+O `PersonaAgent` continua chamando o LLM, mas o prompt agora inclui uma seção "ESTADO INTERNO ATUAL" (estresse, humor, energia, engajamento, memórias recentes, reflexão) — o LLM só transforma esse estado em uma frase em primeira pessoa (`resposta_persona`); os números nunca são revelados na resposta. O viés cognitivo também deixou de ser sorteado: `personaAgent.buildPrompt` usa `brain.viesCognitivo` (derivado do perfil) e só sorteia aleatoriamente quando o brain não tem um. **Nenhuma chamada extra de LLM é necessária** — o cálculo de estado é local/determinístico.
 
-### Ciclo de vida do funcionário (planejado)
+### Ciclo de vida do funcionário (implementado)
 
 ```mermaid
 stateDiagram-v2
     [*] --> ativo
 
-    ativo --> estressado: estresse acumulado sobe<br/>(eventos negativos, incidentes, dívida técnica)
-    estressado --> ativo: reflect() a cada 3 turnos<br/>reduz estresse se contexto melhora
+    ativo --> pediu_demissao: turnosEstresseAlto>=2 & humor<-40<br/>(sorteio 35%, RNG semeado por persona+turno) — terminal
+    ativo --> licenca: estresse>90 ou energia<15<br/>(decisão tipo "burnout"; turnosAfastado=2)
+    licenca --> licenca: turnosAfastado--<br/>humor recupera +10/turno rumo ao neutro
+    licenca --> ativo: turnosAfastado chega a 0<br/>estresse=45, energia=60, humor+40, turnosEstresseAlto=0
 
-    estressado --> licenca: estresse muito alto +<br/>baixa resiliência do perfil
-    estressado --> burnout: estresse crítico sustentado<br/>por vários turnos sem alívio
-    estressado --> pediu_demissao: humor muito negativo +<br/>engajamento zerado + sem intervenção
-
-    licenca --> ativo: retorno após recuperação
-    burnout --> licenca: afastamento forçado
-    burnout --> pediu_demissao: sem recuperação após burnout
-
-    pediu_demissao --> [*]
-
-    estressado --> estressado: resistencia_passiva / fofoca (contágio social)<br/>propaga estresse para colegas próximos
-    ativo --> ativo: champion / pedir_ajuda / confronto_lideranca<br/>ações que não mudam o status mas geram eventos
+    ativo --> ativo: resistencia_passiva (humor<-30 & adaptabilidade<45)<br/>confronto_lideranca (humor<-50 & influencia>70, avaliado ANTES de fofoca)<br/>fofoca (humor<-40 & influencia>60, contágio social)<br/>— no máx. 1 decisão "grave" destas por turno, ordem fixa
+    ativo --> ativo: apoiar_mudanca / pedir_ajuda<br/>(não-graves, independentes, podem coexistir com 1 decisão grave)
 ```
 
-### Catálogo de decisões humanas (planejado)
+> **Nota de precisão:** `EmployeeStatus` inclui `'burnout'` como valor válido, e `updateBrain()`/`aggregate()` tratam esse status como terminal/afastado — mas nenhum caminho do código hoje atribui `status: 'burnout'`. A decisão de tipo `"burnout"` (estresse>90 ou energia<15) leva o funcionário direto a `status: 'licenca'` com `turnosAfastado=2`. Na prática só existem 3 estados alcançáveis em runtime: `ativo`, `licenca`, `pediu_demissao`.
 
-| Decisão | Gatilho previsto | Efeito |
+### Catálogo de decisões humanas (implementado, `evaluateDecisions()`)
+
+Avaliadas em ordem fixa; a primeira cujo gatilho **e** sorteio dispararem "ganha" — no máximo 1 decisão grave por turno. `apoiar_mudanca` e `pedir_ajuda` são independentes e podem coexistir com 1 grave.
+
+| Decisão | Gatilho real | Efeito |
 |---|---|---|
-| `pedido_demissao` | Humor muito negativo + engajamento baixo sustentado, sem intervenção da liderança | Status → `pediu_demissao`; sai da simulação; impacto negativo em moral do time |
-| `burnout` | Estresse crítico mantido por vários turnos consecutivos sem `reflect()` positivo | Status → `burnout`; produtividade zerada temporariamente |
-| `resistencia_passiva` | Baixa adaptabilidade do perfil + mudança de framework recente + estresse moderado/alto | Reduz velocidade de entrega sem gerar conflito aberto |
-| `fofoca` / contágio social | Funcionário com `humor` muito negativo e alta `influencia` no time | Propaga parte do próprio estresse/humor negativo para colegas próximos (rede social simplificada) |
-| `confronto_lideranca` | Estresse alto + traço de baixa tolerância a conflito ou alta assertividade | Gera evento visível de conflito; pode subir ou derrubar confiança dependendo da resposta da liderança |
-| `champion` | Humor muito positivo + alta influência + baixo estresse | Vira multiplicador positivo de moral para o time — o oposto da fofoca negativa |
-| `pedir_ajuda` | Estresse alto mas resiliência/engajamento ainda razoáveis | Sinaliza necessidade de suporte antes de escalar para burnout/demissão — janela de intervenção |
+| `pedido_demissao` (grave) | `turnosEstresseAlto>=2 && humor<-40`, sorteio 35% | `status → pediu_demissao` (terminal); `moralGlobal -8` |
+| `burnout` (grave) | `estresse>90 \|\| energia<15` | `status → licenca`, `turnosAfastado=2` (recupera humor +40 e zera `turnosEstresseAlto` no retorno) |
+| `resistencia_passiva` (grave) | `humor<-30 && adaptabilidade<45` | `engajamento -10` |
+| `confronto_lideranca` (grave, avaliado antes de fofoca — seu gatilho é subconjunto estrito do dela) | `humor<-50 && influencia>70` | `confianca -5` |
+| `fofoca` / contágio social (grave) | `humor<-40 && influencia>60` | `applyContagion`: 3 alvos ativos sorteados (nunca o próprio), `humor -3`, `estresse +4` |
+| `apoiar_mudanca` (não-grave) | `humor>40 && engajamento>65` | `moralGlobal +3`; contágio positivo: 2 alvos, `humor +2` |
+| `pedir_ajuda` (não-grave) | `estresse` entre 60 e 80 `&& humor>0` | `estresse -10` — janela de intervenção antes de escalar |
+
+### Modo standard (offline, zero LLM): `simulateTeamOffline()`
+
+Usado por `services/geminiService.ts:runSimulation` antes da chamada ao Gemini: roda o time inteiro (`team.slice(0, 30)`) por `durationMonths` meses com `impactoPessoal=0` e pressão default por mês (`1-2 → 0.7, 3-4 → 0.5, 5+ → 0.35`), reflexão a cada 3 meses. Os eventos emergentes (`emergentEvents`) entram no prompt do LLM como fatos já ocorridos, e `keyPersonas[].sentiment` é sobrescrito pelo humor determinístico do brain correspondente (match por nome). `SimulationOutput.emergentEvents?` carrega esses eventos para a UI.
+
+### Integração no modo agentic (`OrchestratorAgent`)
+
+`ensureBrains()` cria 1 `EmployeeBrainState` por stakeholder + `teamProfiles` (idempotente por `id`), guardado em `this.brains` e espelhado em `state.funcionarios`. A cada turno: `updateBrain()` roda para stakeholders (com `impacto_moral` da resposta do `PersonaAgent`) e para o time de fundo (com o delta de moral do turno anterior amortecido); `evaluateDecisions()` roda para todo brain ativo e acumula `state.eventos_rh` (todas as narrativas) e `state.eventos_disparados` (só as graves: `pedido_demissao`, `burnout`, `confronto_lideranca`). `consolidateTurn()` computa `moral_time`/`velocidade_sprint` via `aggregate(brains)` **antes** de chamar o LLM — o LLM só ajusta `confianca_delta` (clampado ±5) e narra (`scratchpad_update`, `resumo_turno`, `eventos_disparados`); se a chamada ao LLM falhar, o estado numérico já foi commitado e nada precisa reverter.
 
 ### Por que este design (determinístico + LLM só narra)
 
-O mesmo princípio da seção 6 se aplica aqui: **números vêm de fórmulas, não de geração de texto livre**. Isso resolve dois problemas do estado atual — (1) inconsistência entre turnos (o LLM "esquece" o estado emocional de um funcionário de uma chamada para outra, porque cada chamada é stateless) e (2) custo — hoje cada turno já faz 1 chamada de LLM por stakeholder (`PersonaAgent.simulateResponse`); o EmployeeBrain não adiciona chamadas, apenas enriquece o prompt existente com estado real.
+O mesmo princípio da seção 6 se aplica aqui: **números vêm de fórmulas, não de geração de texto livre**. Isso resolve dois problemas do estado anterior — (1) inconsistência entre turnos (o LLM "esquecia" o estado emocional de um funcionário de uma chamada para outra, porque cada chamada era stateless) e (2) custo — cada turno já fazia 1 chamada de LLM por stakeholder (`PersonaAgent.simulateResponse`); o EmployeeBrain não adiciona chamadas, apenas enriquece o prompt existente com estado real.
 
 ---
 
@@ -442,11 +462,15 @@ Frame-sim/
 ├── RAG/                            # Backend Node/Express independente (porta 3002)
 │   ├── src/server.ts                # Express app: /api/status, /api/simulate, /api/ingest
 │   ├── src/main.ts                  # CLI: --index, --query, --simulate, --test
+│   ├── src/core/
+│   │   └── employeeBrainCore.ts      # EmployeeBrain — estado determinístico por funcionário (puro, zero imports)
+│   ├── src/tests/
+│   │   └── brain.test.ts             # 6 testes do employeeBrainCore (npx tsx src/tests/brain.test.ts)
 │   ├── src/agents/
-│   │   ├── orchestrator.ts           # OrchestratorAgent — loop de turnos
-│   │   ├── personaAgent.ts           # Simula resposta de stakeholder (gemini-1.5-pro)
+│   │   ├── orchestrator.ts           # OrchestratorAgent — loop de turnos + EmployeeBrain + CriticAgent 1x/simulação
+│   │   ├── personaAgent.ts           # Simula resposta de stakeholder (geminiModel(), default gemini-2.5-flash)
 │   │   ├── GoalAgent.ts              # Ajusta dificuldade a cada 3 turnos
-│   │   ├── CriticAgent.ts            # Plausibilidade 0-100 (usado só por Racing/SelfImprovement)
+│   │   ├── CriticAgent.ts            # Plausibilidade 0-100 — 1x por simulação em runSimulation(), também usado por Racing/SelfImprovement
 │   │   ├── roiCalculator.ts          # ROICalculatorAgent — projeção financeira determinística
 │   │   └── DocumentAgent.ts          # Digestão + chunking de documentos do usuário
 │   ├── src/services/
@@ -485,6 +509,7 @@ Frame-sim/
 | Servidor Express do backend agentic | `RAG/src/server.ts` |
 | Loop de turnos multi-stakeholder | `RAG/src/agents/orchestrator.ts` |
 | Simulação de stakeholder individual | `RAG/src/agents/personaAgent.ts` |
+| EmployeeBrain (estado determinístico por funcionário) | `RAG/src/core/employeeBrainCore.ts` |
 | ROI determinístico (backend) | `RAG/src/agents/roiCalculator.ts` |
 | Roteamento multi-LLM por intenção | `RAG/src/services/SmartRouter.ts` |
 | Factory de providers LLM | `RAG/src/services/LLMProvider.ts` |
@@ -506,8 +531,7 @@ Frame-sim/
 | `DEEPSEEK_API_KEY` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:LLMFactory.getDeepSeek()` (rota `SIMPLE_VALIDATION` do `SmartRouter`) | Ativa |
 | `OLLAMA_BASE_URL` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:OllamaProvider` (default `http://localhost:11434`) | Ativa |
 | `CHROMA_URL` | `RAG/.env` | `RAG/src/services/UserFrameworkStore.ts` (default `http://localhost:8000`) | Ativa, **porém** `RAG/src/services/vectorStore.ts` hardcoda `http://localhost:8000` e não lê essa variável — inconsistência a corrigir se o Chroma mudar de endereço |
-| `GEMINI_MODEL` | — | — | **Planejada**: não existe nenhuma leitura de `process.env.GEMINI_MODEL` no código hoje; os modelos estão hardcoded (`gemini-2.5-flash` no frontend, `gemini-1.5-pro`/`gemini-1.5-flash` no backend). Faz parte da melhoria prevista "modelos → gemini-2.5-flash via env" |
-| `BATCH_PERSONAS` | — | — | **Planejada**: não referenciada no código atual |
+| `GEMINI_MODEL` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:geminiModel()` (default `gemini-2.5-flash`), consumida por `GeminiProvider`, `personaAgent.ts`, `queryRouter.ts` | Ativa (opcional) — lida de forma lazy (dentro da função, não no import) para que o `dotenv` já tenha carregado o `.env` |
 | `CHROMA_DB_PATH` | `RAG/.env.example` | `RAG/src/services/vectorStore.ts` constructor (`dbPath`), mas o valor não é de fato usado nas chamadas `Chroma.fromExistingCollection`/`Chroma.fromDocuments` (que usam a `url` fixa acima) | Documentada no `.env.example`, efeito limitado no código atual |
 
 ---

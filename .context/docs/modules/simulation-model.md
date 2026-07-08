@@ -28,20 +28,33 @@ Implementado em:
 - **Ruído gaussiano** — aplicado para evitar resultados determinísticos
   demais entre rodadas (mas o cálculo em si é determinístico dado o seed).
 
-## Em implementação: EmployeeBrain
+## Implementado: EmployeeBrain
 
-`RAG/src/core/employeeBrainCore.ts` — **ainda não existe no repo** (pasta
-`RAG/src/core/` não existe hoje). Quando implementado, será:
+`RAG/src/core/employeeBrainCore.ts` — módulo puro (zero imports, importável
+por backend e frontend), testado em `RAG/src/tests/brain.test.ts`
+(6 testes, `npx tsx src/tests/brain.test.ts` dentro de `RAG/`):
 
-- Puro, determinístico, RNG semeado (mesmo seed → mesmo resultado).
-- Estado individual por persona: estresse, humor, energia, engajamento,
-  status, memória.
-- Catálogo de decisões humanas com triggers (condições que disparam
-  decisões).
-- Contágio social entre personas (estado de uma persona influencia
-  vizinhas).
-- O LLM só dá voz ao estado calculado — **zero chamadas extras de LLM** para
-  o cálculo em si.
+- Puro, determinístico, RNG semeado mulberry32 (mesmo seed → mesmo
+  resultado).
+- Estado individual por persona: estresse (0-100), humor (-100..100),
+  energia, engajamento, status (`ativo|licenca|burnout|pediu_demissao`),
+  memória FIFO de 12 eventos, reflexão a cada 3 turnos, traços derivados
+  do perfil (resiliencia/adaptabilidade/influencia).
+- Catálogo de decisões humanas com triggers (`evaluateDecisions`, máx. 1
+  grave por turno, ordem fixa): pedido_demissao, burnout→licença (o retorno
+  recupera humor +40 e zera o streak de estresse alto), resistencia_passiva,
+  confronto_lideranca (avaliado ANTES de fofoca — gatilho subconjunto
+  estrito), fofoca, apoiar_mudanca, pedir_ajuda.
+- Contágio social entre personas (`applyContagion` — fofoca/apoio propagam
+  humor/estresse a N alvos ativos sorteados, nunca o próprio).
+- **moral/velocidade vêm de `aggregate()`; o LLM só narra e ajusta a
+  confiança ±5** — `orchestrator.consolidateTurn` commita o estado
+  determinístico antes de chamar o LLM (o fallback "moral -= 5" foi
+  removido).
+- Modo standard: `simulateTeamOffline()` roda o time inteiro pré-LLM com
+  **zero chamadas LLM**; os eventos emergentes entram no prompt do Gemini
+  como fatos e `keyPersonas[].sentiment` é sobrescrito pelo humor
+  determinístico (`SimulationOutput.emergentEvents?`).
 
 ## Invariantes
 
@@ -49,12 +62,15 @@ Implementado em:
   não estruturado do LLM — sempre de campos numéricos/estruturados
   (`rawData`) que a matemática processa.
 - Estados clamped 0–100 (ver [conventions.md](../conventions.md)).
-- Qualquer novo modelo de cálculo (ex.: EmployeeBrain) deve permanecer puro
-  e testável sem chamar LLM.
+- Qualquer novo modelo de cálculo deve permanecer puro e testável sem chamar
+  LLM — o EmployeeBrain é o exemplo canônico (roda os 6 testes sem rede).
 
 ## O que NÃO tocar
 
 - Não deixar o LLM "sugerir" um ROI final que é aceito sem passar por
   `metricsCalculator.ts` / `roiCalculator.ts`.
-- Não adicionar chamadas de LLM dentro do cálculo do EmployeeBrain quando
-  ele for implementado — a regra é zero chamadas extras.
+- Não adicionar chamadas de LLM dentro do cálculo do EmployeeBrain
+  (`employeeBrainCore.ts` deve continuar com zero imports) — a regra é zero
+  chamadas extras.
+- Não voltar a deixar o LLM emitir `moral_time_delta`/`velocidade_delta` no
+  `consolidateTurn` — esses números agora vêm de `aggregate(brains)`.

@@ -239,13 +239,15 @@ const FRAMEWORK_COMPLEXITY = {
 async simulateResponse(
   persona: PersonaProfile,
   situacao: string,
-  config?: SimulationConfig
+  config?: SimulationConfig,
+  brain?: EmployeeBrainState
 ): Promise<PersonaResponse>
 ```
 
 **O que faz:**
-- Injeta **viés cognitivo** aleatório (Confirmação, Status Quo, Aversão à Perda)
-- Usa **few-shot examples** por arquétipo para consistência
+- Injeta **viés cognitivo** derivado do perfil (`brain.viesCognitivo`); aleatório só na ausência de brain
+- Injeta o **estado interno do EmployeeBrain** no prompt (estresse, humor, energia, engajamento, memórias, reflexão) — os números guiam o tom, nunca são revelados
+- Usa **few-shot examples** por arquétipo (fonte única: `data/archetype_examples.json`, deduplicada com o frontend)
 - Gera resposta em primeira pessoa com emoção detectada
 - Retorna impacto na moral do time (-10 a +10)
 
@@ -260,16 +262,58 @@ async runTurn(step: SimulationStep): Promise<OrchestratorOutput[]>
 ```
 
 **O que faz:**
-- Coleta respostas de cada stakeholder
-- Consolida impactos em `SimulationState`
-- Atualiza **Scratchpad** (memória de curto prazo)
-- Persiste turno em **Vector Store** (memória de longo prazo)
-- Avalia **GoalAgent** a cada 3 turnos
+- Garante 1 EmployeeBrain por persona (`ensureBrains`, idempotente) e roda `updateBrain()` para stakeholders (com o `impacto_moral` da resposta LLM) e para as personas de fundo
+- Roda `evaluateDecisions()` por brain ativo (RNG semeado por persona+turno) e `applyContagion()` quando há contágio; acumula `state.eventos_rh` e as decisões graves em `state.eventos_disparados`
+- Consolida via `consolidateTurn()` (ver 8b)
+- Avalia **GoalAgent** e roda `reflect()` nos brains a cada 3 turnos
 
 **Agentic Loop:**
 ```
 Thought → Route → Act → Observe → Critique → Commit → Save Memory
 ```
+
+---
+
+### 8b. `OrchestratorAgent.consolidateTurn()` — Deltas Determinísticos
+
+**Arquivo:** `RAG/src/agents/orchestrator.ts`
+
+**O que faz:**
+- **Commit determinístico primeiro**: `moral_time` e `velocidade_sprint` vêm de `aggregate(brains)` + efeitos das decisões do turno — não do LLM
+- O LLM só narra (`scratchpad_update`, `resumo_turno`, `eventos_disparados`) e ajusta `confianca_delta`, clampado em ±5
+- Sem fallback catastrófico: se a chamada LLM falhar, o estado numérico já foi aplicado (o antigo "moral -= 5" foi removido)
+- Persiste o resumo do turno no Vector Store quando conectado
+
+---
+
+### 8c. `OrchestratorAgent.runSimulation()` — Critique 1x por simulação
+
+**Arquivo:** `RAG/src/agents/orchestrator.ts`
+
+**O que faz:**
+- Inicializa brains de stakeholders + `teamProfiles` (time de fundo hidratado de `RAG/profiles.json`), roda os turnos
+- Chama `CriticAgent.critique()` **1 vez por simulação** (não por turno) sobre o resumo final; grava `state.plausibility_score`/`state.replan_triggered` — o frontend usa como `quality_per_cycle` (antes hardcoded 100)
+- Replan barato: se `replanRequired`, anexa a crítica ao scratchpad (sem re-rodar turnos nem LLM extra); CriticAgent é fail-open (score 100 em erro)
+- Fecha com `ROICalculatorAgent.calculateROI()`
+
+---
+
+### 8d. EmployeeBrain — `updateBrain` / `evaluateDecisions` / `aggregate` / `simulateTeamOffline`
+
+**Arquivo:** `RAG/src/core/employeeBrainCore.ts` — módulo puro, zero imports, usado pelo backend e pelo frontend. Testes: `RAG/src/tests/brain.test.ts` (6 testes; `npx tsx src/tests/brain.test.ts` em `RAG/`).
+
+```typescript
+function updateBrain(brain: EmployeeBrainState, ctx: TurnContext): EmployeeBrainState
+function evaluateDecisions(brain, ctx, rng): { brain; decisions: DecisionResult[] }
+function aggregate(brains: EmployeeBrainState[]): AggregateResult
+function simulateTeamOffline(profiles, meses, seedBase, pressaoPorMes?): { brains; emergentEvents }
+```
+
+**O que fazem:**
+- `updateBrain` — avança 1 turno de estado (estresse, humor, energia, engajamento, memória FIFO de 12), pura/imutável; retorno de licença recupera humor (+40) e zera o streak de estresse alto; coage entradas externas (um NaN vindo do JSON do LLM não envenena o estado)
+- `evaluateDecisions` — catálogo de decisões humanas em ordem fixa, máx. 1 grave por turno: `pedido_demissao` (streak>=2 + humor<-40, sorteio 35%), `burnout`→licença, `resistencia_passiva`, `confronto_lideranca` (avaliado ANTES de `fofoca` porque seu gatilho é subconjunto estrito), `fofoca` com contágio social; `apoiar_mudanca`/`pedir_ajuda` são independentes
+- `aggregate` — deriva `moral` (média de humor dos não-desistentes), `velocidadeMod` (penaliza baixas e falta de engajamento dos ativos) e `sentimentPorPersona` — as métricas que o LLM inventava antes
+- `simulateTeamOffline` — modo standard: roda o time inteiro por N meses com **zero chamadas LLM** (RNG semeado, reflexão a cada 3 meses); os `emergentEvents` entram no prompt do Gemini como fatos já ocorridos e `keyPersonas[].sentiment` é sobrescrito pelo humor determinístico (`SimulationOutput.emergentEvents?`)
 
 ---
 
@@ -372,4 +416,4 @@ async generateContext(query: string, topK: number = 5): Promise<string>
 
 ---
 
-*Última atualização: Janeiro 2026*
+*Última atualização: Julho 2026 (v8.0 — EmployeeBrain, CriticAgent no loop principal, personas reais ponta a ponta)*

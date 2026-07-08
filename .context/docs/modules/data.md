@@ -10,11 +10,14 @@ eventos de simulação.
 - `RAG/profiles.json` — **FONTE DA VERDADE**. 350 personas ricas, cada uma
   com `psicologia_comportamento`. Usado pelo backend (indexado no Chroma via
   `npm run index`).
-- `data/profiles_compact.json` — projeção **gerada** a partir de
-  `RAG/profiles.json`, usada pelo frontend (`personaEnricher.ts`). Hoje é
-  uma versão reduzida; será regenerada para cobrir as 350 personas via
-  `scripts/build_profiles_compact.mjs` (script em implementação — ainda não
-  existe no repo).
+- `data/profiles_compact.json` — projeção **GERADA** a partir de
+  `RAG/profiles.json` (cobre as 350 personas), usada pelo frontend
+  (`personaEnricher.ts`). Regenerar com `npm run build:profiles`
+  (`scripts/build_profiles_compact.mjs`) — o viés cognitivo de cada persona
+  é derivado deterministicamente do perfil no build. Nunca editar à mão.
+- `data/archetype_examples.json` — few-shot examples por arquétipo, fonte
+  única compartilhada entre `RAG/src/agents/personaAgent.ts` e
+  `services/ragService.ts` (deduplicados nesta unificação).
 - `data/cost_profiles.json` — perfis econômicos regionais, usado por
   `components/CostBreakdownPanel.tsx` / services de custo.
 - `RAG/framework_playbooks.json` — playbooks por framework de gestão,

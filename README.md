@@ -35,8 +35,12 @@ Painéis para eficiência, redução de retrabalho, agilidade, crescimento do ti
 ### 5. Cenários Dinâmicos
 Tamanho (Startups a Enterprises 2000+ FTEs), cultura ("Startup Caótica" vs "Corporação Fossilizada"), contexto (Fusão & Aquisição, IPO, Corte de Custos...) e contexto econômico (país/moeda/perfil salarial).
 
-### 🔧 Em implementação (v8): EmployeeBrain
-Cada funcionário simulado passará a ter estado interno individual (estresse, humor, energia, memória) e tomará decisões humanas realistas — pedido de demissão, burnout, resistência passiva, contágio social — a partir das ~350 personas reais de `RAG/profiles.json` conectadas ao backend, com sentiment determinístico derivado do perfil.
+### 6. EmployeeBrain (v8): estado humano determinístico
+- Estado interno por funcionário (estresse, humor, energia, engajamento, memória de 12 eventos, reflexão), derivado do perfil real e atualizado por turno com RNG semeado.
+- Catálogo de decisões humanas determinísticas: pedido de demissão, burnout→licença (com recuperação de humor no retorno), resistência passiva, confronto com liderança, fofoca com contágio social, apoiar mudança, pedir ajuda.
+- `moral_time`/`velocidade_sprint` do time e `sentiment` de cada persona vêm do agregado desse estado — o LLM só narra e ajusta a confiança (±5).
+- As ~350 personas reais de `RAG/profiles.json` estão conectadas ponta a ponta: hidratadas no `/api/simulate` do backend e usadas pelo `EmployeeBrain`/`PersonaAgent`.
+- `CriticAgent` roda 1x por simulação e sua `plausibility_score` chega ao frontend como `quality_per_cycle` (antes fixo em 100).
 
 ---
 
@@ -151,6 +155,7 @@ Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`
 | v5 | Self-Improvement (warmup de auto-calibração), Agent Racing (personas concorrentes + ensemble), DocumentAgent desacoplado, Smart Chunking para documentos grandes (COBIT etc.), Intervalos de Confiança (IC 95%) no batch |
 | v5.1 | Viés Responsivo por tipo de cenário, Surprise Factor (~15%), Framework-Organization Fit, range de ROI realista (-40% a +35%) |
 | v7 | Self-RAG, Hierarchical Retrieval, recalibração do modelo determinístico de ROI (-40% a +35%) |
+| v8.0 | EmployeeBrain (estado humano determinístico por funcionário), personas reais (350) conectadas ponta a ponta no backend, CriticAgent ativo no loop principal, modelos Gemini migrados para `gemini-2.5-flash`/`GEMINI_MODEL` |
 
 ## 🤝 Contribuindo
 
