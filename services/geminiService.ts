@@ -6,6 +6,7 @@ import { calculateMonthlyMetrics, SimulationRawData, getCostProfile, calculateFr
 import { MOCK_SIMULATION_RESULT } from "./mockData";
 import { generateRAGContext, injectRAGContext } from "./ragService";
 import { enrichArchetypesToTeam, generateTeamDescription, calculateTeamResistance } from "./personaEnricher";
+import { simulateTeamOffline, hashString } from "../RAG/src/core/employeeBrainCore";
 
 
 // === NEW: Document Digestion Service (Gemini Flash) ===
@@ -396,6 +397,22 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
     console.log(`[PersonaEnricher] Team of ${team.length} personas, resistance score: ${teamResistance}%`);
     console.log(`[PersonaEnricher] Key stakeholders:`, keyStakeholders.map(p => `${p.nome} (${p.cargo})`).join(', '));
 
+    // EMPLOYEE BRAIN: simulação offline (zero-LLM) de estresse/humor/burnout por pessoa.
+    // team já contém keyStakeholders como prefixo (ver enrichArchetypesToTeam) — cap 30 para
+    // manter o custo de simulação baixo e o prompt enxuto.
+    const brainSeed = hashString(`${config.frameworkName}:${config.companySize}`);
+    const { brains, emergentEvents: brainEvents } = simulateTeamOffline(
+      team.slice(0, 30),
+      config.durationMonths || 12,
+      brainSeed
+    );
+    const brainsAtivos = brains.filter(b => b.status === 'ativo').length;
+    const brainsAfastados = brains.filter(b => b.status === 'licenca' || b.status === 'burnout').length;
+    const brainsDesistentes = brains.filter(b => b.status === 'pediu_demissao').length;
+    const brainEventsSummary = brainEvents.length > 0
+      ? brainEvents.slice(0, 12).map(e => `- Mês ${e.mes}: ${e.nome} — ${e.narrativa}`).join('\n')
+      : 'nenhum evento crítico previsto';
+
     const isHighDensity = archetypes.length > 5;
 
     // Realism Factors Calculation
@@ -466,7 +483,11 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       ${realismContext}
       ${economicContext}
       ${fitContext}
-      
+
+      EVENTOS HUMANOS PREVISTOS PELO MODELO DE EQUIPE (trate como fatos da simulação):
+      ${brainEventsSummary}
+      Resumo final do modelo de equipe: ${brainsAtivos} ativos, ${brainsAfastados} afastados (licença/burnout), ${brainsDesistentes} pediram demissão.
+
       ${isHighDensity ? "ALERTA DE ALTA DENSIDADE: Muitos arquétipos selecionados. Simule conflitos interdepartamentais." : ""}
 
       PROCESSAMENTO MULTI-VERTENTE (SIMULAÇÃO PARALELA):
@@ -595,6 +616,19 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       },
       frameworkName: config.frameworkName
     };
+
+    // EMPLOYEE BRAIN: substitui o sentimento inventado pelo LLM pelo humor simulado
+    // deterministicamente, quando a persona citada em keyPersonas bate com um brain.
+    if (Array.isArray(finalResult.keyPersonas)) {
+      finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any) => {
+        const brain = brains.find(b => kp.role?.toLowerCase().includes(b.nome.toLowerCase()));
+        if (!brain) return kp;
+        const sentiment = Math.round((brain.humor + 100) / 2);
+        const statusNote = brain.status !== 'ativo' ? ` [EmployeeBrain: ${brain.status}]` : '';
+        return { ...kp, sentiment, impact: `${kp.impact}${statusNote}` };
+      });
+    }
+    finalResult.emergentEvents = brainEvents.map(e => ({ month: e.mes, persona: e.nome, type: e.tipo, event: e.narrativa }));
 
     return finalResult as SimulationOutput;
 

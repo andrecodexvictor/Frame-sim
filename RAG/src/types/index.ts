@@ -2,6 +2,8 @@
  * Tipos centrais do sistema RAG para simulação de cenários
  */
 
+import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
+
 // ===== QUERY ROUTING =====
 
 export type QueryMode =
@@ -162,6 +164,11 @@ export interface SimulationState {
     historico: OrchestratorOutput[];
     difficulty_scalar: number;
     current_objective: string;
+    /** Estado do EmployeeBrain por funcionário (stakeholders + team sample). Opcional
+     *  para não quebrar callers/testes que ainda constroem SimulationState à mão. */
+    funcionarios?: EmployeeBrainState[];
+    /** Narrativas de decisões emergentes do EmployeeBrain (demissões, burnout, etc). */
+    eventos_rh?: string[];
 }
 
 export interface SimulationStep {

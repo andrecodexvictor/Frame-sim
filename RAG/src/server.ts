@@ -204,9 +204,6 @@ app.post('/api/simulate', async (req, res) => {
         if (teamProfiles.length > 0) {
             console.log(`👥 Team sample resolvido: ${teamProfiles.length} perfis`);
         }
-        // TODO(brain): passar teamProfiles ao orchestrator na integração do EmployeeBrain
-        void teamProfiles;
-
         // HYDRATION STEP: Convert Frontend Config to Backend Config
         const hydratedConfig = generateBackendConfig(config);
 
@@ -216,7 +213,8 @@ app.post('/api/simulate', async (req, res) => {
         const result = await orchestrator.runSimulation(
             [query], // Run single query for now, or multiple if passed array
             hydratedStakeholders,
-            hydratedConfig
+            hydratedConfig,
+            teamProfiles // EmployeeBrain: time de fundo simulado deterministicamente
         );
 
         console.log('✅ Simulation completed successfully');

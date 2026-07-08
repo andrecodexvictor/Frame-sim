@@ -167,6 +167,9 @@ export interface SimulationOutput {
 
   // Agentic Observability (Developer Only)
   agenticMetrics?: AgenticMetrics;
+
+  // EmployeeBrain: eventos emergentes (demissões, burnout, etc) previstos pelo modelo de equipe
+  emergentEvents?: Array<{ month: number; persona: string; type: string; event: string }>;
 }
 
 export interface AgenticMetrics {

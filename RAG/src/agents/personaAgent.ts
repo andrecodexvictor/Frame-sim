@@ -11,6 +11,7 @@ import type {
     FewShotExample,
     SimulationConfig
 } from '../types/index.js';
+import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
 
 // Few-shot examples por arquétipo (expandir conforme necessário)
 const ARCHETYPE_EXAMPLES: Record<string, FewShotExample[]> = {
@@ -98,7 +99,7 @@ Motivação Principal: {motivacao}
 ## VIÉS COGNITIVO DOMINANTE
 ⚠️ **APLIQUE ESTE VIÉS NA RESPOSTA:**
 {bias}
-
+{estado_interno}
 ## EXEMPLOS DE COMPORTAMENTO (mantenha consistência)
 {examples}
 
@@ -142,9 +143,10 @@ export class PersonaAgent {
     async simulateResponse(
         persona: PersonaProfile,
         situacao: string,
-        config?: SimulationConfig
+        config?: SimulationConfig,
+        brain?: EmployeeBrainState
     ): Promise<PersonaResponse> {
-        const prompt = this.buildPrompt(persona, situacao, config);
+        const prompt = this.buildPrompt(persona, situacao, config, brain);
 
         try {
             const response = await this.llm.invoke(prompt);
@@ -177,7 +179,8 @@ export class PersonaAgent {
     private buildPrompt(
         persona: PersonaProfile,
         situacao: string,
-        config?: SimulationConfig
+        config?: SimulationConfig,
+        brain?: EmployeeBrainState
     ): string {
         const { informacoes_basicas: info, psicologia_comportamento: psych, contexto } = persona;
 
@@ -185,9 +188,25 @@ export class PersonaAgent {
         const archetype = this.determineArchetype(persona);
         const examples = this.getExamples(archetype);
 
-        // Selecionar Viés Cognitivo (Simples randomização ponderada pelo arquétipo no futuro)
-        // Por enquanto, randomico para garantir variedade
-        const randomBias = COGNITIVE_BIASES[Math.floor(Math.random() * COGNITIVE_BIASES.length)];
+        // Viés Cognitivo: prioriza o do brain (derivado do perfil); aleatório só na ausência
+        const bias = brain?.viesCognitivo
+            || COGNITIVE_BIASES[Math.floor(Math.random() * COGNITIVE_BIASES.length)];
+
+        // Estado interno do EmployeeBrain (números guiam o tom, nunca são revelados)
+        let estadoInterno = '';
+        if (brain) {
+            const memorias = [...brain.memoria]
+                .sort((a, b) => Math.abs(b.valencia) - Math.abs(a.valencia))
+                .slice(0, 3)
+                .map(m => `"${m.evento}" (impacto ${m.valencia})`)
+                .join(', ') || 'nenhuma';
+            estadoInterno = `
+## ESTADO INTERNO ATUAL (não revele números, apenas aja de acordo)
+Estresse: ${Math.round(brain.estresse)}/100 | Humor: ${Math.round(brain.humor)} (-100..100) | Energia: ${Math.round(brain.energia)}/100 | Engajamento: ${Math.round(brain.engajamento)}/100
+MEMÓRIAS RECENTES: ${memorias}
+REFLEXÃO: ${brain.reflexao || 'nenhuma ainda'}
+`;
+        }
 
         // Formatar exemplos
         const examplesText = examples
@@ -203,7 +222,8 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
             : 'Contexto padrão de simulação';
 
         return PERSONA_PROMPT
-            .replace('{bias_instruction}', `⚠️ ATENÇÃO: Esta persona está sob efeito de **${randomBias.split(':')[0]}**.`)
+            .replace('{bias_instruction}', `⚠️ ATENÇÃO: Esta persona está sob efeito de **${bias.split(':')[0]}**.`)
+            .replace('{estado_interno}', estadoInterno)
             .replace('{nome}', info.nome)
             .replace('{cargo}', info.cargo)
             .replace('{area}', info.area)
@@ -216,7 +236,7 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
             .replace('{opiniao_agil}', contexto.opiniao_agil)
             .replace('{desafio}', contexto.desafio_atual)
             .replace('{motivacao}', contexto.motivacao_atual)
-            .replace('{bias}', randomBias)
+            .replace('{bias}', bias)
             .replace('{examples}', examplesText || 'Nenhum exemplo específico disponível')
             .replace('{contexto}', contextoText)
             .replace('{situacao}', situacao);

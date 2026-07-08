@@ -49,6 +49,7 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
         config: config
     };
 
+    const startedAt = Date.now();
     try {
         // STEP 1: Run Agentic Simulation (Multi-turn with Critic/Goal)
         const response = await fetch(`${API_URL}/simulate`, {
@@ -63,6 +64,26 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
 
         const agenticData = await response.json();
         console.log('✅ Agentic simulation completed, generating rich output...');
+
+        // EMPLOYEE BRAIN: estado individual da equipe (fatos), quando o backend o fornece.
+        // Campo é opcional (integração em andamento no backend) — degrada graciosamente.
+        const funcionarios: Array<{ personaId: string; nome: string; cargo: string; estresse: number; humor: number; status: string; decisoes: string[] }> = agenticData.state?.funcionarios || [];
+        const eventosRh: string[] = agenticData.state?.eventos_rh || [];
+
+        let employeeBrainSection = '';
+        if (funcionarios.length > 0) {
+            const rows = funcionarios.slice(0, 15).map(f => {
+                const ultimaDecisao = f.decisoes?.[f.decisoes.length - 1] || '-';
+                return `${f.nome} | ${f.cargo} | ${f.estresse} | ${f.humor} | ${f.status} | ${ultimaDecisao}`;
+            }).join('\n');
+            employeeBrainSection = `
+                [ESTADO INDIVIDUAL DA EQUIPE (fatos, via EmployeeBrain)]
+                nome | cargo | estresse | humor | status | última decisão
+                ${rows}
+
+                Eventos de RH do período: ${eventosRh.length > 0 ? eventosRh.join(', ') : 'nenhum evento crítico'}
+            `;
+        }
 
         // STEP 2: Use Normal Simulation Logic for Rich Output
         // This ensures the same visual quality as the normal mode
@@ -96,7 +117,7 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
                 
                 ROI Calculado pelo Agente:
                 ${agenticData.roi?.roi_final ? agenticData.roi.roi_final.toFixed(2) + '%' : 'Pendente cálculo detalhado'}
-                
+                ${employeeBrainSection}
                 INSTRUÇÃO: Use estes dados da simulação agêntica como BASE para gerar números e narrativas consistentes.
             `,
             durationMonths: config.durationMonths || 12
@@ -104,16 +125,41 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
 
         // Run the normal simulation with the Agentic context injected
         const richOutput = await runSimulation(singleConfig);
+        const timeToSolveMs = Date.now() - startedAt;
+
+        // EMPLOYEE BRAIN: sobrescreve o sentimento inventado pelo LLM com o humor real
+        // simulado pelo backend, quando a persona citada em keyPersonas bate com um funcionário.
+        if (funcionarios.length > 0 && Array.isArray(richOutput.keyPersonas)) {
+            richOutput.keyPersonas = richOutput.keyPersonas.map(kp => {
+                const f = funcionarios.find(fn => kp.role?.toLowerCase().includes(fn.nome.toLowerCase()));
+                if (!f) return kp;
+                const sentiment = Math.round((f.humor + 100) / 2);
+                const statusNote = f.status !== 'ativo' ? ` [EmployeeBrain: ${f.status}]` : '';
+                return { ...kp, sentiment, impact: `${kp.impact}${statusNote}` };
+            });
+        }
+
+        // EMPLOYEE BRAIN: eventos de RH + decisões graves viram emergentEvents (month ≈ turno atual)
+        const turno = agenticData.state?.turno || (config.durationMonths || 12);
+        const gravesDecisoes = funcionarios
+            .filter(f => f.status !== 'ativo')
+            .map(f => ({ month: turno, persona: f.nome, type: f.status, event: f.decisoes?.[f.decisoes.length - 1] || `${f.nome} mudou de status para ${f.status}` }));
+        const eventosRhMapped = eventosRh.map(e => ({ month: turno, persona: '-', type: 'evento_rh', event: e }));
+        const emergentEvents = [...gravesDecisoes, ...eventosRhMapped];
 
         // Add Agentic Metrics to the output (for developer observability)
+        // metricas_agenticas ainda não é retornado pelo backend (integração em andamento) —
+        // usa fallback quando ausente, mas o tempo de execução é sempre medido de verdade.
+        const backendMetrics = agenticData.metricas_agenticas || agenticData.state?.metricas_agenticas;
         return {
             ...richOutput,
+            ...(emergentEvents.length > 0 ? { emergentEvents } : {}),
             agenticMetrics: {
-                quality_per_cycle: 100, // Critic didn't trigger replan
-                time_to_solve_ms: Date.now(), // Placeholder, would be tracked in real implementation
-                cost_estimate_usd: 0.05,
-                total_tokens: 5000,
-                router_choice: 'Gemini Pro (via Agentic Router)'
+                quality_per_cycle: backendMetrics?.quality_per_cycle ?? 100,
+                time_to_solve_ms: timeToSolveMs,
+                cost_estimate_usd: backendMetrics?.cost_estimate_usd ?? 0.05,
+                total_tokens: backendMetrics?.total_tokens ?? 5000,
+                router_choice: backendMetrics?.router_choice ?? 'Gemini Pro (via Agentic Router)'
             }
         };
 
