@@ -24,6 +24,13 @@ export interface LLMProvider {
     name(): string;
 }
 
+/**
+ * Modelo Gemini padrão do backend. Lido de forma lazy (na chamada, não no
+ * import) para que o dotenv já tenha carregado o .env — mesmo motivo do
+ * lazy-init dos singletons. gemini-1.5-* foi desativado pela API (404).
+ */
+export const geminiModel = (): string => process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
 // --- Gemini Provider with Rotation ---
 export class GeminiProvider implements LLMProvider {
     private clients: ChatGoogleGenerativeAI[] = [];
@@ -43,7 +50,7 @@ export class GeminiProvider implements LLMProvider {
         keys.forEach(key => {
             this.clients.push(new ChatGoogleGenerativeAI({
                 apiKey: key,
-                model: 'gemini-1.5-pro',
+                model: geminiModel(),
                 temperature: 0.7,
                 maxRetries: 1
             }));
@@ -67,7 +74,7 @@ export class GeminiProvider implements LLMProvider {
             const response = await client.invoke(messages);
             return {
                 content: response.content as string,
-                modelUsed: 'gemini-1.5-pro'
+                modelUsed: geminiModel()
             };
         } catch (error) {
             console.error('Gemini Error (Rotating key...):', error);

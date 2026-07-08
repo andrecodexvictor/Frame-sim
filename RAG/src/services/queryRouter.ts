@@ -5,6 +5,7 @@
 
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { z } from 'zod';
+import { geminiModel } from './LLMProvider.js';
 import type { QueryClassification, QueryMode } from '../types/index.js';
 
 // Schema Zod para validação do output
@@ -57,7 +58,7 @@ export class QueryRouter {
     constructor(apiKey?: string) {
         this.llm = new ChatGoogleGenerativeAI({
             apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: 'gemini-1.5-flash', // Usar Flash para classificação rápida
+            model: geminiModel(), // classificação rápida
             temperature: 0, // Determinístico
         });
     }

@@ -4,6 +4,7 @@
  */
 
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { geminiModel } from '../services/LLMProvider.js';
 import type {
     PersonaProfile,
     PersonaResponse,
@@ -130,7 +131,7 @@ export class PersonaAgent {
     constructor(apiKey?: string) {
         this.llm = new ChatGoogleGenerativeAI({
             apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: 'gemini-1.5-pro',
+            model: geminiModel(),
             temperature: 0.7, // Alguma variação para respostas naturais
         });
     }

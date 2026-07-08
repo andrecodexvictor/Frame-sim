@@ -9,6 +9,7 @@
  */
 
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { geminiModel } from '../services/LLMProvider.js';
 import { SmartChunker, ChunkingResult } from '../services/SmartChunker.js';
 import { UserFrameworkStore, IndexingResult } from '../services/UserFrameworkStore.js';
 
@@ -70,7 +71,7 @@ export class DocumentAgent {
     constructor(apiKey?: string) {
         this.llm = new ChatGoogleGenerativeAI({
             apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: 'gemini-1.5-flash', // Flash for speed in ingestion
+            model: geminiModel(),
             temperature: 0.3, // Low temperature for factual extraction
         });
         this.chunker = new SmartChunker();

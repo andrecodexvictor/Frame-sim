@@ -11,6 +11,7 @@ import type {
     SimulationEvent
 } from '../types/index.js';
 import { VectorStoreService, SearchResult } from '../services/vectorStore.js';
+import { geminiModel } from '../services/LLMProvider.js';
 
 // Variáveis base por tipo de empresa
 const BASE_VARIABLES = {
@@ -85,7 +86,7 @@ export class ROICalculatorAgent {
     constructor(apiKey?: string, vectorStore?: VectorStoreService) {
         this.llm = new ChatGoogleGenerativeAI({
             apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: 'gemini-1.5-pro',
+            model: geminiModel(),
             temperature: 0, // Determinístico para cálculos
         });
         this.vectorStore = vectorStore;

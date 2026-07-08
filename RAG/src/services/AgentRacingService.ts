@@ -39,7 +39,7 @@ export class AgentRacingService {
         ];
 
         const temperatures = [0.3, 0.5, 0.7, 0.9, 1.0];
-        const models = ['gemini-2.5-flash', 'gemini-1.5-pro'];
+        const models = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 
         for (let i = 0; i < config.numAgents; i++) {
             this.agents.push({
