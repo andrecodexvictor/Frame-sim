@@ -2,6 +2,7 @@
 import { SimulationConfig, SimulationOutput } from '../types';
 import { runSimulation } from './geminiService';
 import { SingleSimulationConfig } from '../types';
+import { enrichArchetypesToTeam } from './personaEnricher';
 
 const API_URL = 'http://localhost:3002/api';
 
@@ -25,10 +26,26 @@ export const checkAgenticStatus = async (): Promise<AgenticStatus> => {
 export const runAgenticSimulation = async (config: SimulationConfig): Promise<SimulationOutput> => {
     console.log('🚀 Starting Agentic Simulation via API...');
 
-    // Convert Frontend Config to Backend Orchestrator Input
+    // Convert Frontend Config to Backend Orchestrator Input.
+    // Send real persona ids (from profiles_compact.json) so the backend can
+    // hydrate the full 350-persona profiles instead of synthetic ones.
+    let stakeholders: Array<{ id: string; archetype?: string }> | string[];
+    let teamSample: string[] = [];
+    try {
+        const archetypes = config.employeeArchetypes || [];
+        const { team, keyStakeholders } = enrichArchetypesToTeam(archetypes, config.companySize);
+        stakeholders = keyStakeholders.map(p => ({ id: p.id }));
+        teamSample = team.slice(0, 30).map(p => p.id);
+        if (stakeholders.length === 0) stakeholders = archetypes;
+    } catch (e) {
+        console.warn('Persona enrichment failed, falling back to archetype names', e);
+        stakeholders = config.employeeArchetypes || [];
+    }
+
     const payload = {
         query: `Simulate adoption of ${config.frameworks[0].name} for a ${config.companySize} company in ${config.sector}. Context: ${config.customScenarioText || config.selectedScenarioId}`,
-        stakeholders: config.employeeArchetypes || [],
+        stakeholders,
+        teamSample,
         config: config
     };
 

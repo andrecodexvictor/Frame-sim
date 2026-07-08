@@ -6,7 +6,9 @@ console.log("🚀 Server script starting...");
 import cors from 'cors';
 import { config } from 'dotenv';
 import path from 'path';
+import { readFile } from 'fs/promises';
 import { createOrchestrator } from './agents/orchestrator.js';
+import { createVectorStore } from './services/vectorStore.js';
 import type { SimulationConfig, PersonaProfile } from './types/index.js';
 
 // Load .env
@@ -30,6 +32,50 @@ app.use(express.json());
 // Initialize Orchestrator
 // Ideally we should persist state per session/request, but for MVP we use a singleton or per-request instance
 const orchestrator = createOrchestrator();
+
+// ========== Real Personas: load RAG/profiles.json into a lookup Map ==========
+// The server can be started from repo root or from RAG/, so try both locations.
+const realPersonasById = new Map<string, PersonaProfile>();
+
+async function loadRealPersonas(): Promise<void> {
+    const candidates = [
+        path.join(process.cwd(), 'profiles.json'),
+        path.join(process.cwd(), 'RAG', 'profiles.json')
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            const raw = await readFile(candidate, 'utf-8');
+            const profiles: PersonaProfile[] = JSON.parse(raw);
+            for (const p of profiles) {
+                realPersonasById.set(p.id, p);
+            }
+            console.log(`✅ Personas reais carregadas: ${realPersonasById.size} (de ${candidate})`);
+            return;
+        } catch {
+            // try next candidate
+        }
+    }
+
+    console.warn('⚠️  profiles.json não encontrado (tentado na raiz e em RAG/). Fallback sintético permanece ativo.');
+}
+
+// ========== RAG: connect ChromaDB if available (fail-open, matches src/main.ts pattern) ==========
+async function initVectorStore(): Promise<void> {
+    try {
+        const vectorStore = await Promise.race([
+            createVectorStore(),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        ]);
+        orchestrator.setVectorStore(vectorStore);
+        console.log('✅ ChromaDB conectado — RAG ativo');
+    } catch {
+        console.warn('⚠️  ChromaDB offline — RAG desativado (fail-open)');
+    }
+}
+
+loadRealPersonas();
+initVectorStore();
 
 app.get('/api/status', (req, res) => {
     res.json({ status: 'ok', mode: 'agentic', timestamp: new Date().toISOString() });
@@ -123,20 +169,43 @@ app.post('/api/simulate', async (req, res) => {
     console.log('📨 Request received for Agentic Simulation');
 
     try {
-        const { query, stakeholders, config } = req.body;
+        const { query, stakeholders, config, teamSample } = req.body;
 
         if (!query || !stakeholders) {
             return res.status(400).json({ error: 'Missing query or stakeholders' });
         }
 
-        // HYDRATION STEP: Convert string strings to PersonaProfile objects
+        // HYDRATION STEP: accepts two shapes (retrocompat):
+        // (a) new: [{ id, archetype? }] → real persona by id, fallback synthetic
+        // (b) old: string[] of archetype names → synthetic personas
+        let realCount = 0;
+        let syntheticCount = 0;
         const hydratedStakeholders: PersonaProfile[] = Array.isArray(stakeholders)
-            ? stakeholders.map((id: string, idx: number) => generatePersonaFromArchetype(id, idx))
+            ? stakeholders.map((s: string | { id?: string; archetype?: string }, idx: number) => {
+                const id = typeof s === 'string' ? s : s?.id;
+                const real = id ? realPersonasById.get(id) : undefined;
+                if (real) { realCount++; return real; }
+                syntheticCount++;
+                const archetype = typeof s === 'string' ? s : (s?.archetype || s?.id || 'mid_level');
+                return generatePersonaFromArchetype(archetype, idx);
+            })
             : [];
 
         if (hydratedStakeholders.length === 0) {
             return res.status(400).json({ error: 'No valid stakeholders provided' });
         }
+
+        console.log(`👥 Personas hidratadas: ${realCount} reais, ${syntheticCount} sintéticas — ${hydratedStakeholders.map(p => p.informacoes_basicas.nome).join(', ')}`);
+
+        // Resolve background team sample (ids → real profiles)
+        const teamProfiles: PersonaProfile[] = Array.isArray(teamSample)
+            ? teamSample.map((id: string) => realPersonasById.get(id)).filter((p): p is PersonaProfile => !!p)
+            : [];
+        if (teamProfiles.length > 0) {
+            console.log(`👥 Team sample resolvido: ${teamProfiles.length} perfis`);
+        }
+        // TODO(brain): passar teamProfiles ao orchestrator na integração do EmployeeBrain
+        void teamProfiles;
 
         // HYDRATION STEP: Convert Frontend Config to Backend Config
         const hydratedConfig = generateBackendConfig(config);
