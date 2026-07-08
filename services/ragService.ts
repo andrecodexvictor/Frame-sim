@@ -90,7 +90,7 @@ Retorne JSON: {"mode": "TIPO", "confidence": 0.0-1.0, "collections": ["profiles"
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
+            model: "gemini-2.5-flash",
             contents: prompt,
             config: { responseMimeType: "application/json" }
         });
