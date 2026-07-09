@@ -1,16 +1,16 @@
-# Graph Report - Frame-sim  (2026-07-07)
+# Graph Report - Frame-sim  (2026-07-08)
 
 ## Corpus Check
-- 70 files · ~308,691 words
+- 85 files · ~336,053 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 684 nodes · 1058 edges · 33 communities (29 shown, 4 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 7 edges (avg confidence: 0.8)
+- 806 nodes · 1276 edges · 45 communities (41 shown, 4 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 9 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `aabb8733`
+- Built from commit: `cbbe8234`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -47,63 +47,75 @@
 - [[_COMMUNITY_Community 29|Community 29]]
 - [[_COMMUNITY_Community 30|Community 30]]
 - [[_COMMUNITY_Community 31|Community 31]]
+- [[_COMMUNITY_Community 33|Community 33]]
+- [[_COMMUNITY_Community 34|Community 34]]
+- [[_COMMUNITY_Community 35|Community 35]]
+- [[_COMMUNITY_Community 36|Community 36]]
+- [[_COMMUNITY_Community 37|Community 37]]
+- [[_COMMUNITY_Community 38|Community 38]]
+- [[_COMMUNITY_Community 39|Community 39]]
+- [[_COMMUNITY_Community 40|Community 40]]
+- [[_COMMUNITY_Community 41|Community 41]]
+- [[_COMMUNITY_Community 42|Community 42]]
+- [[_COMMUNITY_Community 43|Community 43]]
+- [[_COMMUNITY_Community 44|Community 44]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `VectorStoreService` - 24 edges
-2. `OrchestratorAgent` - 18 edges
+2. `OrchestratorAgent` - 22 edges
 3. `SimulationConfig` - 18 edges
 4. `compilerOptions` - 16 edges
 5. `SimulationConfig` - 16 edges
-6. `ROICalculatorAgent` - 15 edges
-7. `compilerOptions` - 15 edges
-8. `DocumentLoader` - 13 edges
-9. `PersonaProfile` - 13 edges
-10. `🧠 Funções-Chave` - 13 edges
+6. `🧠 Funções-Chave` - 16 edges
+7. `ROICalculatorAgent` - 15 edges
+8. `PersonaProfile` - 15 edges
+9. `compilerOptions` - 15 edges
+10. `runSimulation()` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `runSimulation()` --calls--> `hashString()`  [INFERRED]
+  services/geminiService.ts → RAG/src/core/employeeBrainCore.ts
+- `runSimulation()` --calls--> `simulateTeamOffline()`  [INFERRED]
+  services/geminiService.ts → RAG/src/core/employeeBrainCore.ts
 - `BatchResultsChartProps` --references--> `BatchResult`  [EXTRACTED]
   components/BatchResultsChart.tsx → services/batchService.ts
 - `BatchSimulationPanelProps` --references--> `SimulationConfig`  [EXTRACTED]
   components/BatchSimulationPanel.tsx → types.ts
 - `UploadSectionProps` --references--> `FrameworkInput`  [EXTRACTED]
   components/UploadSection.tsx → types.ts
-- `ComparisonDashboardProps` --references--> `SimulationConfig`  [EXTRACTED]
-  components/ComparisonDashboard.tsx → types.ts
-- `ComparisonDashboardProps` --references--> `SimulationOutput`  [EXTRACTED]
-  components/ComparisonDashboard.tsx → types.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (33 total, 4 thin omitted)
+## Communities (45 total, 4 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.05
-Nodes (44): GoalAgent, createOrchestrator(), OrchestratorAgent, ARCHETYPE_EXAMPLES, COGNITIVE_BIASES, PersonaAgent, BASE_VARIABLES, J_CURVE_FACTORS (+36 more)
+Cohesion: 0.09
+Nodes (36): GoalAgent, GRAVE_DECISION_TYPES, OrchestratorAgent, COGNITIVE_BIASES, loadArchetypeExamples(), PersonaAgent, aggregate(), AggregateResult (+28 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.06
-Nodes (48): Step, BatchResultsChart(), BatchResultsChartProps, BatchSimulationPanel(), BatchSimulationPanelProps, ComparisonDashboard(), ComparisonDashboardProps, ARCHETYPES (+40 more)
+Cohesion: 0.05
+Nodes (55): Step, BatchResultsChart(), BatchResultsChartProps, BatchSimulationPanel(), BatchSimulationPanelProps, ComparisonDashboard(), ComparisonDashboardProps, ARCHETYPES (+47 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.07
-Nodes (37): digestFrameworkDocument(), getApiKeys(), getNextApiKey(), runSimulationWithDeepSeek(), runSimulationWithOpenAI(), runSimulation(), SIMULATION_SCHEMA, CalculatedMetrics (+29 more)
+Nodes (38): getApiKeys(), getNextApiKey(), runSimulationWithDeepSeek(), runSimulationWithOpenAI(), runSimulation(), SIMULATION_SCHEMA, CalculatedMetrics, calculateFrameworkFit() (+30 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.14
-Nodes (16): CriticAgent, AgentRacingService, SelfImprovementService, AgentConfig, AgentResult, BatchSummary, ConvergencePoint, EnhancedBatchConfig (+8 more)
+Cohesion: 0.10
+Nodes (18): CriticAgent, AgentRacingService, MetricsService, SelfImprovementService, AgentConfig, AgenticMetrics, AgentResult, BatchSummary (+10 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.09
-Nodes (9): DocumentAgent, DocumentDigest, getDocumentAgent(), LargeDocumentResult, IndexingResult, SearchResult, UserFrameworkStore, app (+1 more)
+Cohesion: 0.12
+Nodes (7): DocumentAgent, DocumentDigest, getDocumentAgent(), LargeDocumentResult, IndexingResult, SearchResult, UserFrameworkStore
 
 ### Community 5 - "Community 5"
 Cohesion: 0.06
 Nodes (31): dependencies, chromadb, chromadb-default-embed, cors, dotenv, express, langchain, @langchain/community (+23 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.07
-Nodes (29): 1. Clone o repositório, 1. Simulação Multi-Agente & Persona Enrichment, 2. Configure as Variáveis de Ambiente, 2. Roteamento de Cenário Econômico (NOVO 💰), 3. Engine Financeira Determinística + Estocástica, 3. Instale as Dependências, 4. Execute o Projeto, 4. Métricas de Negócio e Evolução (NOVO 📊) (+21 more)
+Cohesion: 0.04
+Nodes (47): 10. Grafo do Código, 1. Visão Geral, 2. Fluxo Standard (browser-only), 3. Fluxo Agentic (backend Node), 4. Pipeline RAG, 5. Multi-LLM, 6. Modelo Matemático Determinístico, 7. EmployeeBrain (+39 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.10
@@ -114,16 +126,16 @@ Cohesion: 0.08
 Nodes (24): 1. Gemini 2.0 + Deep Research, 2. MCP (Model Context Protocol), 3. Agentes Autônomos (Computer Use), 4. Fine-tuning Domain-Specific, 5. Multimodalidade, 6. Voice Interface, Análise Competitiva, 🎓 Destaques para TCC (+16 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.09
-Nodes (22): dependencies, @google/genai, lucide-react, mammoth, pdfjs-dist, react, react-dom, react-hook-form (+14 more)
+Cohesion: 0.08
+Nodes (23): dependencies, @google/genai, lucide-react, mammoth, pdfjs-dist, react, react-dom, react-hook-form (+15 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.10
 Nodes (20): 5. DocumentAgent, 6. SelfImprovementService, 7. AgentRacingService, 8. SmartChunker, 9. UserFrameworkStore, Arquitetura Agentic v7.0, Arquivos Modificados, Changelog (+12 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.11
-Nodes (18): 10. `UserFrameworkStore.generateContext()` — Dynamic RAG for User Docs, 1. `runSimulation()` — Core Simulation Engine, 2. `runEnhancedBatchSimulation()` — Advanced Workflow Orchestrator, 3. `DocumentAgent.digest()` — Intelligent Document Ingestion, 4. `SelfImprovementService.runWarmup()` — Auto-Calibration, 5. `AgentRacingService.race()` — Competitive Multi-Agent, 6. `calculateMonthlyMetrics()` — Deterministic Financial Engine, 6b. `calculateSurpriseFactor()` — Exceptional Adaptation Detector (+10 more)
+Cohesion: 0.09
+Nodes (21): 10. `UserFrameworkStore.generateContext()` — Dynamic RAG for User Docs, 1. `runSimulation()` — Core Simulation Engine, 2. `runEnhancedBatchSimulation()` — Advanced Workflow Orchestrator, 3. `DocumentAgent.digest()` — Intelligent Document Ingestion, 4. `SelfImprovementService.runWarmup()` — Auto-Calibration, 5. `AgentRacingService.race()` — Competitive Multi-Agent, 6. `calculateMonthlyMetrics()` — Deterministic Financial Engine, 6b. `calculateSurpriseFactor()` — Exceptional Adaptation Detector (+13 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.11
@@ -177,9 +189,13 @@ Nodes (9): 1.1. Justificativa para o Multi-LLM, 1.2. O Papel do Orquestrador (Sm
 Cohesion: 0.28
 Nodes (6): SIMULATION_SCHEMA, CorporateArchetype, FrameworkInput, SimulationConfig, SimulationOutput, SingleSimulationConfig
 
+### Community 26 - "Community 26"
+Cohesion: 0.24
+Nodes (8): BASE_VARIABLES, J_CURVE_FACTORS, ROICalculatorAgent, TECH_DEBT_MODIFIERS, ROIProjection, ROIResult, SimulationConfig, SimulationEvent
+
 ### Community 27 - "Community 27"
-Cohesion: 0.33
-Nodes (6): CostBreakdownPanel(), CostBreakdownPanelProps, CostProfile, formatCurrency(), SalaryTier, tierColors
+Cohesion: 0.20
+Nodes (6): geminiModel(), classifyQuery(), QueryClassificationSchema, QueryRouter, QueryClassification, QueryMode
 
 ### Community 28 - "Community 28"
 Cohesion: 0.53
@@ -189,25 +205,69 @@ Nodes (5): generate_ace_params(), generate_profile(), get_age_and_exp(), main(),
 Cohesion: 0.40
 Nodes (4): Agentic Engine, Frame-sim Principal examples, Main archteture, ROI calculator
 
+### Community 33 - "Community 33"
+Cohesion: 0.29
+Nodes (13): createOrchestrator(), CONFIG, findPersonaFromQuery(), indexDocuments(), loadConfig(), loadProfiles(), main(), parseArgs() (+5 more)
+
+### Community 35 - "Community 35"
+Cohesion: 0.22
+Nodes (10): BIASES, compact, deriveBias(), djb2(), full, OUT, ROOT, RULES (+2 more)
+
+### Community 36 - "Community 36"
+Cohesion: 0.20
+Nodes (10): Agentes (`RAG/src/agents/`), Arquivos-chave, Core (`RAG/src/core/`), Invariantes, Módulo: RAG Backend (`RAG/`), O que NÃO tocar, Pontos de entrada, Propósito (+2 more)
+
+### Community 37 - "Community 37"
+Cohesion: 0.22
+Nodes (5): createVectorStore(), app, initVectorStore(), orchestrator, realPersonasById
+
+### Community 38 - "Community 38"
+Cohesion: 0.33
+Nodes (3): Arquitetura — resumo, Diagrama de dependências entre módulos, Convenções do projeto
+
+### Community 39 - "Community 39"
+Cohesion: 0.29
+Nodes (6): Arquivos-chave, Invariantes, Módulo: Frontend, O que NÃO tocar, Pontos de entrada, Propósito
+
+### Community 40 - "Community 40"
+Cohesion: 0.29
+Nodes (7): Componentes do modelo, Implementado: EmployeeBrain, Invariante central, Invariantes, Módulo: Modelo de simulação (matemática determinística), O que NÃO tocar, Propósito
+
+### Community 41 - "Community 41"
+Cohesion: 0.52
+Nodes (4): DATA_PATHS, LoadedDocuments, HybridSearchOptions, SearchResult
+
+### Community 42 - "Community 42"
+Cohesion: 0.33
+Nodes (6): Comandos, Dois modos de execução, Frame-sim — índice de contexto, Mapa de módulos, Onde começar a ler, Variáveis de ambiente
+
+### Community 43 - "Community 43"
+Cohesion: 0.33
+Nodes (5): Arquivos-chave, Invariantes, Módulo: Dados, O que NÃO tocar, Propósito
+
+### Community 44 - "Community 44"
+Cohesion: 0.33
+Nodes (6): Arquivos-chave, Invariantes, Módulo: Services (frontend, `services/`), O que NÃO tocar, Pontos de entrada, Propósito
+
 ## Knowledge Gaps
-- **293 isolated node(s):** `Step`, `name`, `version`, `description`, `type` (+288 more)
+- **360 isolated node(s):** `Step`, `name`, `version`, `description`, `type` (+355 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
+- **Why does `hashString()` connect `Community 0` to `Community 2`?**
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
+- **Why does `VectorStoreService` connect `Community 34` to `Community 0`, `Community 33`, `Community 37`, `Community 41`, `Community 26`, `Community 27`?**
+  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+- **Why does `SimulationOutput` connect `Community 1` to `Community 2`?**
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
 - **What connects `Step`, `Generates ACE (Attributes, Context, Execution) parameters for RAG optimization.`, `name` to the rest of the system?**
-  _294 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _361 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.05193319606497369 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08813559322033898 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.06377204884667571 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.054414414414414414 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.07246376811594203 - nodes in this community are weakly interconnected._
-- **Should `Community 3` be split into smaller, more focused modules?**
-  _Cohesion score 0.13949579831932774 - nodes in this community are weakly interconnected._
-- **Should `Community 4` be split into smaller, more focused modules?**
-  _Cohesion score 0.0946969696969697 - nodes in this community are weakly interconnected._
-- **Should `Community 5` be split into smaller, more focused modules?**
-  _Cohesion score 0.0625 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07123034227567067 - nodes in this community are weakly interconnected._
