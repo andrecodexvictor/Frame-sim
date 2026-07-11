@@ -192,7 +192,6 @@ Isso permite projeções positivas surpreendentes em empresas pequenas ou com de
         const relevantExamples: string[] = [];
 
         // Mapear arquétipos selecionados para examples
-        // ponytail: matching por substring; trocar por tags do perfil se der falso positivo
         if (archetypes.some(a => a.toLowerCase().includes('c-level') || a.toLowerCase().includes('ceo'))) {
             relevantExamples.push(...formatArchetypeExamples('CEO_CETICO'));
         }

@@ -430,8 +430,6 @@ export class OrchestratorAgent {
                 baixas: this.brains.filter(b => b.status !== 'ativo').length
             };
             const critique = await this.criticAgent.critique(criticSummary, `Query original: ${queries.join(' | ')}`);
-            // ponytail: campos não declarados em SimulationState (types/index.ts fora do
-            // escopo desta mudança) — sobrevivem no JSON de resposta normalmente.
             (this.state as any).plausibility_score = critique.plausibilityScore;
             (this.state as any).replan_triggered = critique.replanRequired;
 

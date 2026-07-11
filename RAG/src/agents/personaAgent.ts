@@ -15,10 +15,7 @@ import type {
 } from '../types/index.js';
 import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
 
-// Few-shot examples por arquétipo, carregados de data/archetype_examples.json
-// (fonte única compartilhada com services/ragService.ts no frontend).
-// ponytail: lazy + cached module-level var em vez de import assertion — evita
-// atrito de JSON import no tsc/tsx deste pacote ESM.
+// Carregamento dinâmico dos exemplos de poucas tentativas (few-shots).
 let _archetypeExamples: Record<string, FewShotExample[]> | null = null;
 
 function loadArchetypeExamples(): Record<string, FewShotExample[]> {

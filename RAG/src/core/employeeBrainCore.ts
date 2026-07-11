@@ -374,7 +374,6 @@ export function applyContagion(
 // ===== REFLEXÃO =====
 
 /** Reflexão determinística a partir das 3 memórias de maior |valência|. */
-// ponytail: reflexão determinística; trocar por 1 call LLM batch se ficar rasa
 export function reflect(brain: EmployeeBrainState): EmployeeBrainState {
     if (brain.memoria.length === 0) {
         return { ...brain, reflexao: `${brain.nome} não tem memórias recentes marcantes.` };
@@ -443,8 +442,6 @@ export function simulateTeamOffline(
     seedBase: number,
     pressaoPorMes?: (mes: number) => number
 ): { brains: EmployeeBrainState[]; emergentEvents: EmergentEvent[] } {
-    // ponytail: array local mutado por índice dentro da função (não escapa) — evita
-    // realocar o array inteiro a cada persona/turno; cada elemento continua imutável.
     const brains = profiles.map((p) => deriveInitialBrain(p, seedBase));
     const rng = mulberry32(seedBase);
     const emergentEvents: EmergentEvent[] = [];
