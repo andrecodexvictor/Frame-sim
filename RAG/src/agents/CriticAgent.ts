@@ -1,21 +1,26 @@
-import { LLMFactory, LLMProvider, LLMResponse } from '../services/LLMProvider.js';
+import type { LLMResponse } from '../services/LLMProvider.js';
+import { SmartRouter } from '../services/SmartRouter.js';
+import { applySimulationRules, loadSimulationRules, type SimulationRules } from '../services/simulationRulesLoader.js';
 
 export interface CritiqueResult {
     plausibilityScore: number;
     justification: string;
     replanRequired: boolean;
     replanSuggestion?: string;
+    degraded?: boolean;
 }
 
 export class CriticAgent {
-    private llm: LLMProvider;
+    private readonly rules: SimulationRules;
 
-    constructor() {
-        // Critical thinking => Uses GPT-4 (or Gemini if not available)
-        this.llm = LLMFactory.getGPT4();
+    constructor(
+        private readonly router: Pick<SmartRouter, 'route'> = new SmartRouter(),
+        rules: SimulationRules = loadSimulationRules()
+    ) {
+        this.rules = rules;
     }
 
-    async critique(simulationOutput: any, context: string): Promise<CritiqueResult> {
+    async critique(simulationOutput: any, context: string, options: { signal?: AbortSignal } = {}): Promise<CritiqueResult> {
         console.log('🧐 CriticAgent: Reviewing simulation results...');
 
         const prompt = `
@@ -24,8 +29,11 @@ export class CriticAgent {
         **Instructions:**
         1. Analyze the 'Simulation Result' and 'Context'.
         2. Calculate a 'Plausibility_Score' (0-100).
-        3. If score < 70, you MUST provide a 'Replan_Suggestion' (what to change in parameters).
+        3. If score < ${this.rules.plausibilityThreshold}, you MUST provide a 'Replan_Suggestion' (what to change in parameters).
         4. Output JSON ONLY.
+
+        **Versioned deterministic validation rules:**
+        ${JSON.stringify(this.rules.rules)}
 
         **Context:**
         ${context}
@@ -43,27 +51,33 @@ export class CriticAgent {
         `;
 
         try {
-            const response: LLMResponse = await this.llm.generate(prompt);
+            const llm = await this.router.route('Critique ROI plausibility, causal risk and replan requirements.');
+            const response: LLMResponse = await llm.generate(prompt, undefined, { signal: options.signal });
             const content = response.content.replace(/```json/g, '').replace(/```/g, '').trim();
             const json = JSON.parse(content);
+            const proposedScore = Number(json.Plausibility_Score);
+            const roiResult = simulationOutput?.roi_result ?? simulationOutput?.roi ?? simulationOutput;
+            const validation = applySimulationRules(this.rules, roiResult || {}, proposedScore);
 
-            console.log(`🧐 Critique Score: ${json.Plausibility_Score}/100`);
-            if (json.Replan_Necessario) console.warn(`⚠️ REPLAN REQUESTED: ${json.Replan_Suggestion}`);
+            console.log(`🧐 Critique Score: ${validation.score}/100`);
+            if (validation.triggered.length > 0) console.warn(`⚠️ Validation rules triggered: ${validation.triggered.join(', ')}`);
 
             return {
-                plausibilityScore: json.Plausibility_Score,
-                justification: json.Justificativa,
-                replanRequired: json.Plausibility_Score < 70,
+                plausibilityScore: validation.score,
+                justification: typeof json.Justificativa === 'string' ? json.Justificativa : 'Justificativa indisponível.',
+                replanRequired: validation.score < this.rules.plausibilityThreshold,
                 replanSuggestion: json.Replan_Suggestion
             };
 
         } catch (error) {
-            console.error('CriticAgent failed (bypass):', error);
+            if (options.signal?.aborted) throw error;
+            console.error(`CriticAgent failed; continuing in degraded mode (${error instanceof Error ? error.name : 'Unavailable'}).`);
             // Fail open: assume it's fine if critic breaks
             return {
-                plausibilityScore: 100,
+                plausibilityScore: 0,
                 justification: "Critic failed to validate.",
-                replanRequired: false
+                replanRequired: false,
+                degraded: true
             };
         }
     }

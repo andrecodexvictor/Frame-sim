@@ -7,10 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:profiles": "node scripts/build_profiles_compact.mjs"
+    "dev:api": "npm --prefix RAG run server",
+    "build:profiles": "node scripts/build_profiles_compact.mjs",
+    "test:keys": "node scripts/api_key_health_check.test.mjs",
+    "health:keys": "node scripts/api_key_health_check.mjs",
+    "health:keys:generate": "node scripts/api_key_health_check.mjs --generate",
+    "test:offline": "tsx scripts/root_offline.test.ts",
+    "test:browser": "node scripts/browser_smoke.mjs",
+    "typecheck": "tsc --noEmit --pretty false && npm --prefix RAG exec tsc -- --noEmit --pretty false",
+    "test": "npm run test:offline && npm run test:keys && npm --prefix RAG test",
+    "build:all": "npm run build && npm --prefix RAG run build",
+    "audit:all": "npm audit --audit-level=moderate && npm --prefix RAG audit --audit-level=moderate",
+    "quality": "npm run typecheck && npm test && npm run build:all && npm run audit:all"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
     "lucide-react": "^0.555.0",
     "mammoth": "^1.11.0",
     "pdfjs-dist": "^5.4.449",
@@ -22,6 +32,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "tsx": "^4.23.13",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

@@ -6,38 +6,51 @@ console.log("🚀 Server script starting...");
 import cors from 'cors';
 import { config } from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
 import { readFile } from 'fs/promises';
 import { createOrchestrator } from './agents/orchestrator.js';
-import { createVectorStore } from './services/vectorStore.js';
+import { createVectorStore, VectorStoreService } from './services/vectorStore.js';
+import { ProviderGateway, ProviderGatewayError } from './services/ProviderGateway.js';
 import type { SimulationConfig, PersonaProfile } from './types/index.js';
 
 // Load .env
 config({ path: path.join(process.cwd(), '../.env') });
 config({ path: path.join(process.cwd(), '.env') });
 
-const app = express();
+export const app = express();
 const PORT = 3002;
-
-// Keep process alive
-setInterval(() => { }, 1000);
 
 // Log exit
 process.on('exit', (code) => {
     console.log(`❌ Process exiting with code ${code}`);
 });
 
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = new Set((process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean));
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+        return callback(new Error('Origin not allowed'));
+    }
+}));
+app.use(express.json({ limit: '2mb' }));
 
-// Initialize Orchestrator
-// Ideally we should persist state per session/request, but for MVP we use a singleton or per-request instance
-const orchestrator = createOrchestrator();
+const providerGateway = new ProviderGateway();
+
+// Dependencies are initialized once, while mutable simulation state is always
+// created per request. This prevents concurrent POSTs from sharing brains/history.
+let sharedVectorStore: VectorStoreService | undefined;
+let personasReady = false;
+let vectorStoreReady = false;
+let vectorStoreDegraded = false;
 
 // ========== Real Personas: load RAG/profiles.json into a lookup Map ==========
 // The server can be started from repo root or from RAG/, so try both locations.
 const realPersonasById = new Map<string, PersonaProfile>();
 
-async function loadRealPersonas(): Promise<void> {
+async function loadRealPersonas(): Promise<boolean> {
     const candidates = [
         path.join(process.cwd(), 'profiles.json'),
         path.join(process.cwd(), 'RAG', 'profiles.json')
@@ -51,34 +64,95 @@ async function loadRealPersonas(): Promise<void> {
                 realPersonasById.set(p.id, p);
             }
             console.log(`✅ Personas reais carregadas: ${realPersonasById.size} (de ${candidate})`);
-            return;
+            personasReady = true;
+            return true;
         } catch {
             // try next candidate
         }
     }
 
     console.warn('⚠️  profiles.json não encontrado (tentado na raiz e em RAG/). Fallback sintético permanece ativo.');
+    personasReady = true;
+    return false;
 }
 
 // ========== RAG: connect ChromaDB if available (fail-open, matches src/main.ts pattern) ==========
-async function initVectorStore(): Promise<void> {
+async function initVectorStore(): Promise<boolean> {
     try {
         const vectorStore = await Promise.race([
             createVectorStore(),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
         ]);
-        orchestrator.setVectorStore(vectorStore);
+        sharedVectorStore = vectorStore;
+        vectorStoreReady = true;
         console.log('✅ ChromaDB conectado — RAG ativo');
+        return true;
     } catch {
+        vectorStoreDegraded = true;
         console.warn('⚠️  ChromaDB offline — RAG desativado (fail-open)');
+        return false;
     }
 }
 
-loadRealPersonas();
-initVectorStore();
+export const startupPromise = Promise.all([loadRealPersonas(), initVectorStore()]);
 
 app.get('/api/status', (req, res) => {
-    res.json({ status: 'ok', mode: 'agentic', timestamp: new Date().toISOString() });
+    const providers = providerGateway.capabilities();
+    const providerConfigured = Object.values(providers).some(Boolean);
+    // Agentic simulation retains a deterministic fail-open path without an LLM;
+    // generation endpoints require a configured provider. Reachability is kept
+    // explicitly unknown here instead of treating the presence of a key as proof.
+    const simulationReady = personasReady && (vectorStoreReady || vectorStoreDegraded);
+    const ready = simulationReady;
+    const degraded = ready && (vectorStoreDegraded || !providerConfigured);
+    res.status(ready ? 200 : 503).json({
+        status: ready ? (degraded ? 'degraded' : 'ok') : 'starting',
+        mode: 'agentic',
+        ready,
+        degraded,
+        graph: 'langgraph-stategraph-v1',
+        providers,
+        providerConfigured,
+        providerReachable: 'unknown',
+        capabilities: {
+            simulation: simulationReady,
+            generation: providerConfigured,
+            realPersonas: personasReady,
+            vectorStore: vectorStoreReady
+        },
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.post('/api/generate', async (req, res) => {
+    const controller = new AbortController();
+    const abortIfDisconnected = () => {
+        if (!res.writableEnded) controller.abort('client-disconnected');
+    };
+    res.once('close', abortIfDisconnected);
+    try {
+        await startupPromise;
+        const result = await providerGateway.generate({
+            task: req.body?.task,
+            prompt: req.body?.prompt,
+            responseSchema: req.body?.responseSchema,
+            temperature: req.body?.temperature,
+            seed: req.body?.seed,
+            modelPreference: req.body?.modelPreference,
+            agentPersona: req.body?.agentPersona,
+            signal: controller.signal
+        });
+        res.json(result);
+    } catch (error) {
+        const gatewayError = error instanceof ProviderGatewayError ? error : undefined;
+        res.status(gatewayError?.status || 500).json({
+            error: gatewayError?.message || 'Provider gateway failed.',
+            retryable: gatewayError?.retryable ?? false,
+            failureCodes: gatewayError?.failureCodes || []
+        });
+    } finally {
+        res.removeListener('close', abortIfDisconnected);
+    }
 });
 
 // Helper to hydrate Front-end IDs into Back-end PersonaProfiles
@@ -137,7 +211,20 @@ const generatePersonaFromArchetype = (archetypeId: string, index: number): Perso
 
 // Helper to hydrate Front-end Config into Back-end SimulationConfig
 const generateBackendConfig = (frontendConfig: any): SimulationConfig => {
+    const frameworkName = String(frontendConfig.frameworks?.[0]?.name || frontendConfig.frameworkName || 'Framework personalizado').slice(0, 160);
+    const frameworkId = String(frontendConfig.frameworks?.[0]?.id || frameworkName)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        .slice(0, 80) || 'custom';
+    const seed = Number.isFinite(Number(frontendConfig.simulationSeed))
+        ? (Number(frontendConfig.simulationSeed) >>> 0)
+        : 0;
     return {
+        framework_config: {
+            id: frameworkId,
+            name: frameworkName,
+            source: frontendConfig.frameworks?.[0]?.text ? 'uploaded' : 'inferred',
+            description: String(frontendConfig.frameworks?.[0]?.text || '').slice(0, 4_000)
+        },
         contexto_estrutural: {
             categoria_cenario: { valor: frontendConfig.frameworkCategory || 'Management', opcoes: [] },
             setor_atuacao: { valor: frontendConfig.sector || 'Tech', opcoes: [] },
@@ -157,22 +244,39 @@ const generateBackendConfig = (frontendConfig: any): SimulationConfig => {
             cenario_atual: frontendConfig.customScenarioText || frontendConfig.selectedScenarioId || 'Generic Scenario',
             opcoes: []
         },
+        contexto_economico: {
+            profile_id: String(frontendConfig.economicProfileId || 'br_pme').slice(0, 80),
+            scenario_id: String(frontendConfig.economicScenarioId || 'base').slice(0, 32),
+            seed
+        },
         parametros_simulacao: {
-            duracao_meses: frontendConfig.durationMonths || 12,
+            duracao_meses: Math.min(Math.max(Number(frontendConfig.durationMonths) || 12, 1), 60),
             acuracia_alvo: 'High',
-            adaptacao_pme: (frontendConfig.companySize || 100) < 500
+            adaptacao_pme: (frontendConfig.companySize || 100) < 500,
+            seed
         }
     };
 };
 
 app.post('/api/simulate', async (req, res) => {
     console.log('📨 Request received for Agentic Simulation');
+    const controller = new AbortController();
+    const abortIfDisconnected = () => {
+        if (!res.writableEnded) controller.abort('client-disconnected');
+    };
+    res.once('close', abortIfDisconnected);
 
     try {
+        await startupPromise;
         const { query, stakeholders, config, teamSample } = req.body;
 
-        if (!query || !stakeholders) {
-            return res.status(400).json({ error: 'Missing query or stakeholders' });
+        const queries = (Array.isArray(query) ? query : [query])
+            .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+            .map(item => item.trim());
+        if (queries.length === 0 || queries.length > 12 || queries.some(item => item.length > 10_000)
+            || !Array.isArray(stakeholders) || stakeholders.length === 0 || stakeholders.length > 50
+            || !config || typeof config !== 'object' || Array.isArray(config)) {
+            return res.status(400).json({ error: 'Missing query, stakeholders, or config' });
         }
 
         // HYDRATION STEP: accepts two shapes (retrocompat):
@@ -199,7 +303,7 @@ app.post('/api/simulate', async (req, res) => {
 
         // Resolve background team sample (ids → real profiles)
         const teamProfiles: PersonaProfile[] = Array.isArray(teamSample)
-            ? teamSample.map((id: string) => realPersonasById.get(id)).filter((p): p is PersonaProfile => !!p)
+            ? teamSample.slice(0, 100).map((id: string) => realPersonasById.get(id)).filter((p): p is PersonaProfile => !!p)
             : [];
         if (teamProfiles.length > 0) {
             console.log(`👥 Team sample resolvido: ${teamProfiles.length} perfis`);
@@ -207,29 +311,34 @@ app.post('/api/simulate', async (req, res) => {
         // HYDRATION STEP: Convert Frontend Config to Backend Config
         const hydratedConfig = generateBackendConfig(config);
 
-        // Reset state for new simulation (simulating a fresh run)
-        orchestrator.resetState();
-
+        // Mutable state is intentionally request-scoped. The vector store is the
+        // only shared dependency and is initialized before requests are accepted.
+        const orchestrator = createOrchestrator(undefined, sharedVectorStore);
         const result = await orchestrator.runSimulation(
-            [query], // Run single query for now, or multiple if passed array
+            queries,
             hydratedStakeholders,
             hydratedConfig,
-            teamProfiles // EmployeeBrain: time de fundo simulado deterministicamente
+            teamProfiles, // EmployeeBrain: time de fundo simulado deterministicamente
+            { signal: controller.signal }
         );
 
         console.log('✅ Simulation completed successfully');
         res.json({
             success: true,
             state: result.state,
-            roi: result.roi
+            roi: result.roi,
+            metricas_agenticas: result.state.metricas_agenticas
         });
 
     } catch (error: any) {
-        console.error('❌ Simulation failed:', error);
+        const aborted = controller.signal.aborted || error?.name === 'AbortError';
+        console.error(`❌ Simulation failed: ${aborted ? 'cancelled' : (error instanceof Error ? error.name : 'unknown')}`);
+        if (res.writableEnded || res.destroyed) return;
         res.status(500).json({
-            error: 'Internal Server Error',
-            details: error.message
+            error: aborted ? 'Simulation cancelled' : 'Internal Server Error'
         });
+    } finally {
+        res.removeListener('close', abortIfDisconnected);
     }
 });
 
@@ -240,15 +349,22 @@ app.post('/api/ingest', async (req, res) => {
     console.log('📨 Request received for Document Ingestion');
 
     try {
+        await startupPromise;
         const { rawText, documents } = req.body;
 
-        if (!rawText && (!documents || !Array.isArray(documents))) {
-            return res.status(400).json({ error: 'Missing rawText or documents array' });
+        const validRawText = typeof rawText === 'string' && rawText.trim().length > 0 && rawText.length <= 500_000;
+        const validDocuments = Array.isArray(documents)
+            && documents.length > 0
+            && documents.length <= 10
+            && documents.every((document: unknown) => typeof document === 'string' && document.trim().length > 0 && document.length <= 500_000)
+            && documents.reduce((total: number, document: string) => total + document.length, 0) <= 1_000_000;
+        if (!validRawText && !validDocuments) {
+            return res.status(400).json({ error: 'Provide rawText (up to 500k chars) or 1-10 bounded documents.' });
         }
 
         let digest;
         const documentAgent = getDocumentAgent();
-        if (documents && documents.length > 0) {
+        if (validDocuments) {
             digest = await documentAgent.digestMultiple(documents);
         } else {
             digest = await documentAgent.digest(rawText);
@@ -261,17 +377,26 @@ app.post('/api/ingest', async (req, res) => {
         });
 
     } catch (error: any) {
-        console.error('❌ Ingestion failed:', error);
+        console.error(`❌ Ingestion failed (${error instanceof Error ? error.name : 'unknown'}).`);
         res.status(500).json({
-            error: 'Internal Server Error',
-            details: error.message
+            error: 'Internal Server Error'
         });
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`\n🚀 Agentic Server running at http://localhost:${PORT}`);
-    console.log(`   - Status: http://localhost:${PORT}/api/status`);
-    console.log(`   - Simulator: http://localhost:${PORT}/api/simulate (POST)`);
-    console.log(`   - Ingest: http://localhost:${PORT}/api/ingest (POST)`);
-});
+export async function startServer() {
+    await startupPromise;
+    return app.listen(PORT, () => {
+        console.log(`\n🚀 Agentic Server running at http://localhost:${PORT}`);
+        console.log(`   - Status: http://localhost:${PORT}/api/status`);
+        console.log(`   - Simulator: http://localhost:${PORT}/api/simulate (POST)`);
+        console.log(`   - Ingest: http://localhost:${PORT}/api/ingest (POST)`);
+    });
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+    startServer().catch((error) => {
+        console.error('❌ Server startup failed:', error);
+        process.exitCode = 1;
+    });
+}

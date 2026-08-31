@@ -3,7 +3,7 @@
 
 **Frame-sim** é um simulador empresarial avançado projetado para testar a implementação de frameworks de gestão e engenharia (Scrum, SAFe, Spotify, COBIT, ITIL...) em ambientes corporativos complexos.
 
-Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM Agentic** (Gemini, GPT-4, DeepSeek, Ollama) combinada com **RAG (Retrieval-Augmented Generation via ChromaDB)**, **Agentes Autônomos** (CriticAgent, DocumentAgent) e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com alto grau de realismo.
+Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM Agentic** (Gemini, GPT-4, DeepSeek, Ollama) combinada com **RAG (Retrieval-Augmented Generation via ChromaDB)**, **Agentes Autônomos** (CriticAgent, DocumentAgent) e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com variabilidade controlada.
 
 <img width="1507" height="223" alt="image" src="https://github.com/user-attachments/assets/ccdfdca0-eef5-4771-938f-b9a6b34ca23a" />
 
@@ -49,16 +49,16 @@ Tamanho (Startups a Enterprises 2000+ FTEs), cultura ("Startup Caótica" vs "Cor
 - **Frontend**: React 19, TypeScript, Vite, TailwindCSS.
 - **Charts**: Recharts.
 - **AI Core**: Google Gemini (via Google AI Studio), GPT-4, DeepSeek, Ollama (local).
-- **RAG**: LangChain.js + ChromaDB (vetorização local), com Self-RAG e Hierarchical Retrieval.
+- **RAG**: adaptador direto do ChromaDB + embeddings Google opcionais, com roteamento Self-RAG determinístico e fail-open.
 - **Backend agentic**: Node/Express (`RAG/`), independente do frontend.
 
 ## 📦 Instalação e Uso
 
-Frame-sim roda em **dois modos**, do mais simples ao mais completo. O frontend detecta automaticamente se o backend agentic está no ar e cai para o modo standard caso não esteja.
+Frame-sim roda em **dois modos**. O frontend detecta automaticamente se o backend agentic está pronto; sem ele, a interface permanece utilizável com o caminho offline/degradado. As credenciais dos provedores ficam exclusivamente no backend Node.
 
-### Modo Standard (browser-only, sem backend)
+### Modo Standard (frontend, sem credenciais no browser)
 
-O jeito mais rápido de rodar: só o frontend, chamando a API do Gemini direto do browser.
+O frontend pode ser iniciado sozinho para explorar a interface e os resultados offline/degradados. Chamadas a provedores passam pelo endpoint server-side `/api/generate`; sem backend ou provedor configurado, a simulação usa o fallback disponível.
 
 ```bash
 git clone https://github.com/andrecodexvictor/Frame-sim.git
@@ -66,28 +66,24 @@ cd Frame-sim
 npm install
 ```
 
-Crie um `.env` na raiz com pelo menos:
-```env
-VITE_API_KEY=sua_chave_api_do_gemini_aqui
-```
-
 ```bash
 npm run dev
 ```
-Acesse `http://localhost:5173`. Sem chave configurada, o app cai em resultado mock.
+Acesse `http://localhost:3000`. Para configurar apenas a URL do backend, copie `.env.example` para `.env` e ajuste `VITE_API_URL` se necessário. Não coloque chaves de API nesse arquivo.
 
 ### Modo Agentic (opcional, mais realista)
 
-Sobe o backend Node em `RAG/` (Express, porta 3002), com CriticAgent, DocumentAgent, RAG e ChromaDB. É um projeto Node **independente**, com seu próprio `package.json`.
+Sobe o backend Node em `RAG/` (Express, porta 3002), com CriticAgent, DocumentAgent, RAG e ChromaDB. É um projeto Node **independente**, com seu próprio `package.json`; as chaves dos provedores são lidas somente por esse processo.
 
 ```bash
 cd RAG
 npm install
 ```
 
-Crie um `RAG/.env` com pelo menos:
+Copie `RAG/.env.example` para `RAG/.env` e preencha as credenciais server-side necessárias:
 ```env
 GOOGLE_API_KEY=sua_chave_api_do_gemini_aqui
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 ```bash
@@ -99,27 +95,43 @@ Opcional: suba o ChromaDB na porta 8000 para RAG completo (busca por similaridad
 npm run index
 ```
 
-Com o backend no ar, o frontend (rodando normalmente com `npm run dev` na raiz) passa a usar o modo agentic automaticamente.
+Com o backend no ar, o frontend (rodando com `npm run dev` na raiz) pode usar o modo agentic e o proxy de provedores. O backend expõe `GET /api/status`, `POST /api/generate`, `POST /api/simulate` e `POST /api/ingest`.
+
+### Testes e build
+
+Gate completo, na raiz:
+
+```bash
+npm run quality
+```
+
+O gate executa typecheck frontend/backend, testes offline, testes do roteador/gateway/grafo/racing, builds de produção e `npm audit` nos dois projetos. Para verificar a conectividade das credenciais configuradas sem imprimir seus valores:
+
+```bash
+npm run health:keys
+```
+
+Os testes isolados continuam disponíveis como `npm run test:offline`, `npm run test:keys` e `npm --prefix RAG test`.
 
 ## 🔑 Variáveis de Ambiente
 
-### Raiz (`.env`) — modo standard
+### Raiz (`.env`) — frontend
 | Variável | Obrigatória | Descrição |
 |---|---|---|
-| `VITE_API_KEY` | Sim | Chave Gemini principal |
-| `VITE_API_KEY_2` .. `VITE_API_KEY_7` | Não | Rotação de chaves Gemini anti-rate-limit |
-| `VITE_OPENAI_API_KEY` | Não | Fallback GPT-4 |
-| `VITE_DEEPSEEK_API_KEY` | Não | Fallback DeepSeek |
+| `VITE_API_URL` | Não | URL base do backend/proxy (default `http://localhost:3002/api`) |
+
+`VITE_*` é incorporado ao bundle do navegador. Não coloque credenciais de Gemini, OpenAI ou DeepSeek no `.env` da raiz.
 
 ### `RAG/.env` — modo agentic
 | Variável | Obrigatória | Descrição |
 |---|---|---|
 | `GOOGLE_API_KEY` | Sim | Chave Gemini para o backend |
-| `GOOGLE_API_KEY_2` / `_3` | Não | Rotação de chaves |
+| `GOOGLE_API_KEY_1` .. `_7` | Não | Rotação/failover de chaves Gemini adicionais |
 | `OPENAI_API_KEY` | Não | Fallback GPT-4 |
 | `DEEPSEEK_API_KEY` | Não | Fallback DeepSeek |
 | `OLLAMA_BASE_URL` | Não | Endpoint de um Ollama local |
-| `CHROMA_DB_PATH` | Não | Path do ChromaDB local (default `./chroma_db`) |
+| `CHROMA_URL` | Não | URL do ChromaDB (default `http://localhost:8000`) |
+| `CORS_ORIGINS` | Não | Origens permitidas pelo Express (default: Vite em `localhost:3000`) |
 
 ## 🔧 Estrutura do Projeto
 
@@ -145,7 +157,7 @@ Frame-sim/
 
 ## 🏗️ Arquitetura
 
-Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`](./ARCHITECTURE.md) e contexto detalhado para agentes de IA em [`.context/docs/index.md`](./.context/docs/index.md).
+Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`](./ARCHITECTURE.md) e [`DIAGRAMAS.md`](./DIAGRAMAS.md). O estado auditado das especificações históricas está em [`next_steps/completion_audit.md`](./next_steps/completion_audit.md). O contexto detalhado para agentes de IA está em [`.context/docs/index.md`](./.context/docs/index.md).
 
 ## 📜 Histórico de versões
 

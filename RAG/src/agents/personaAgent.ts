@@ -3,16 +3,16 @@
  * Usa few-shot examples e NÃO usa RAG para queries de persona pura
  */
 
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { readFileSync } from 'fs';
 import path from 'path';
-import { geminiModel } from '../services/LLMProvider.js';
+import { GeminiProvider, LLMFactory, type LLMProvider } from '../services/LLMProvider.js';
 import type {
     PersonaProfile,
     PersonaResponse,
     FewShotExample,
     SimulationConfig
 } from '../types/index.js';
+import { clamp, hashString } from '../core/employeeBrainCore.js';
 import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
 
 // Carregamento dinâmico dos exemplos de poucas tentativas (few-shots).
@@ -100,14 +100,12 @@ Responda APENAS em JSON válido:
 }`;
 
 export class PersonaAgent {
-    private llm: ChatGoogleGenerativeAI;
+    private llm?: LLMProvider;
 
     constructor(apiKey?: string) {
-        this.llm = new ChatGoogleGenerativeAI({
-            apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: geminiModel(),
-            temperature: 0.7, // Alguma variação para respostas naturais
-        });
+        this.llm = apiKey
+            ? new GeminiProvider({ keys: [apiKey] })
+            : LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined;
     }
 
     /**
@@ -117,15 +115,16 @@ export class PersonaAgent {
         persona: PersonaProfile,
         situacao: string,
         config?: SimulationConfig,
-        brain?: EmployeeBrainState
+        brain?: EmployeeBrainState,
+        signal?: AbortSignal
     ): Promise<PersonaResponse> {
         const prompt = this.buildPrompt(persona, situacao, config, brain);
 
         try {
-            const response = await this.llm.invoke(prompt);
-            const content = typeof response.content === 'string'
-                ? response.content
-                : JSON.stringify(response.content);
+            if (!this.llm) throw new Error('GOOGLE_API_KEY ausente');
+            if (signal?.aborted) throw signal.reason ?? new Error('cancelled');
+            const response = await this.llm.generate(prompt, undefined, { signal });
+            const content = response.content;
 
             // Extrair JSON
             const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -133,15 +132,25 @@ export class PersonaAgent {
                 throw new Error('JSON não encontrado na resposta');
             }
 
-            return JSON.parse(jsonMatch[0]) as PersonaResponse;
+            const parsed = JSON.parse(jsonMatch[0]) as Partial<PersonaResponse>;
+            return {
+                resposta_persona: typeof parsed.resposta_persona === 'string' ? parsed.resposta_persona : 'Resposta não disponível.',
+                emocao_detectada: typeof parsed.emocao_detectada === 'string' ? parsed.emocao_detectada : 'neutro',
+                impacto_moral: clamp(Number(parsed.impacto_moral) || 0, -10, 10),
+                rag_utilizado: parsed.rag_utilizado === true,
+                fonte_rag: typeof parsed.fonte_rag === 'string' ? parsed.fonte_rag : null,
+                degraded: false
+            };
         } catch (error) {
-            console.error('Erro ao simular persona:', error);
+            if (signal?.aborted) throw error;
+            console.error(`Erro ao simular persona (${error instanceof Error ? error.name : 'Unavailable'}).`);
             return {
                 resposta_persona: 'Não tenho uma opinião formada sobre isso no momento.',
                 emocao_detectada: 'neutro',
                 impacto_moral: 0,
                 rag_utilizado: false,
-                fonte_rag: null
+                fonte_rag: null,
+                degraded: true
             };
         }
     }
@@ -163,7 +172,7 @@ export class PersonaAgent {
 
         // Viés Cognitivo: prioriza o do brain (derivado do perfil); aleatório só na ausência
         const bias = brain?.viesCognitivo
-            || COGNITIVE_BIASES[Math.floor(Math.random() * COGNITIVE_BIASES.length)];
+            || COGNITIVE_BIASES[hashString(`${persona.id}:bias`) % COGNITIVE_BIASES.length];
 
         // Estado interno do EmployeeBrain (números guiam o tom, nunca são revelados)
         let estadoInterno = '';

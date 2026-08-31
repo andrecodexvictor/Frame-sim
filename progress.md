@@ -35,7 +35,7 @@ graph TB
         CFG["ConfigForm<br/>17 arquétipos corporativos"]
         DASH["Dashboard<br/>keyPersonas, ROI, timeline, emergentEvents"]
         AGSVC["agenticService.ts<br/>cliente HTTP :3002 + fallback legacy"]
-        GEM["geminiService.ts<br/>engine standard<br/>rotação 7 chaves VITE_API_KEY"]
+        GEM["providerClient.ts<br/>gateway server-side<br/>sem credenciais no browser"]
         ENR["personaEnricher.ts<br/>arquétipos → personas reais"]
         METR["metricsCalculator.ts<br/>ROI determinístico: Curva J,<br/>dívida técnica, CoNQ, SurpriseFactor, Fit"]
         RAGS["ragService.ts<br/>pseudo-RAG few-shot + cenários responsivos"]

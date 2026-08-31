@@ -1,14 +1,15 @@
 
-import React, { useState } from 'react';
-import { UploadSection } from './components/UploadSection';
-import { ConfigForm } from './components/ConfigForm';
-import { SimulationLoader } from './components/SimulationLoader';
-import { Dashboard } from './components/Dashboard';
-import { ComparisonDashboard } from './components/ComparisonDashboard';
-import { BatchSimulationPanel } from './components/BatchSimulationPanel';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { FrameworkInput, SimulationConfig, SimulationOutput } from './types';
 import { runSimulation } from './services/geminiService';
-import { runAgenticSimulation } from './services/agenticService';
+import { checkAgenticStatus, runAgenticSimulation } from './services/agenticService';
+
+const UploadSection = lazy(() => import('./components/UploadSection').then(m => ({ default: m.UploadSection })));
+const ConfigForm = lazy(() => import('./components/ConfigForm').then(m => ({ default: m.ConfigForm })));
+const SimulationLoader = lazy(() => import('./components/SimulationLoader').then(m => ({ default: m.SimulationLoader })));
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const ComparisonDashboard = lazy(() => import('./components/ComparisonDashboard').then(m => ({ default: m.ComparisonDashboard })));
+const BatchSimulationPanel = lazy(() => import('./components/BatchSimulationPanel').then(m => ({ default: m.BatchSimulationPanel })));
 
 type Step = 'upload' | 'config' | 'simulating' | 'results' | 'batch';
 
@@ -17,14 +18,30 @@ const App: React.FC = () => {
   const [frameworks, setFrameworks] = useState<FrameworkInput[]>([]);
   const [config, setConfig] = useState<SimulationConfig | null>(null);
   const [results, setResults] = useState<SimulationOutput[]>([]);
-  const [darkMode, setDarkMode] = useState(true);
+  const [agenticAvailable, setAgenticAvailable] = useState<boolean | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    checkAgenticStatus().then(status => {
+      if (active) setAgenticAvailable(status.available);
+    });
+    return () => { active = false; };
+  }, []);
 
   const handleFrameworksSubmit = (inputs: FrameworkInput[]) => {
+    setErrorMessage(null);
     setFrameworks(inputs);
     setStep('config');
   };
 
   const handleConfigSubmit = async (simulationConfig: SimulationConfig) => {
+    setErrorMessage(null);
+    if (simulationConfig.simulationMode === 'agentic' && agenticAvailable !== true) {
+      setErrorMessage('O modo agêntico está indisponível no momento. Inicie o backend local na porta 3002 ou desative o modo agêntico para executar no modo padrão.');
+      setStep('config');
+      return;
+    }
     setConfig(simulationConfig);
     setStep('simulating');
 
@@ -57,7 +74,9 @@ const App: React.FC = () => {
             operationalVelocity: simulationConfig.operationalVelocity,
             previousFailures: simulationConfig.previousFailures,
             scenarioContext: scenarioContext,
-            durationMonths: simulationConfig.durationMonths || 12
+            durationMonths: simulationConfig.durationMonths || 12,
+            economicProfileId: simulationConfig.economicProfileId,
+            economicScenarioId: simulationConfig.economicScenarioId
           });
         });
       }
@@ -67,12 +86,13 @@ const App: React.FC = () => {
       setStep('results');
     } catch (error) {
       console.error("Simulation failed", error);
+      setErrorMessage('Não foi possível concluir a simulação. Verifique a conexão, tente novamente ou desative o modo agêntico. Suas configurações foram preservadas.');
       setStep('config');
-      alert("Erro ao executar a simulação. Verifique o console ou tente novamente.");
     }
   };
 
   const handleReset = () => {
+    setErrorMessage(null);
     setStep('upload');
     setFrameworks([]);
     setConfig(null);
@@ -80,19 +100,22 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`${darkMode ? 'dark' : ''} min-h-screen font-sans transition-colors duration-500`}>
-      <div className="min-h-screen bg-brutal-white dark:bg-brutal-black text-brutal-black dark:text-brutal-white relative overflow-hidden">
+    <div className="dark min-h-screen font-sans bg-brutal-black text-brutal-white">
+      <main className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-screen">
+        {errorMessage && (
+          <div className="w-full max-w-5xl mb-6 flex items-start justify-between gap-4 border-2 border-red-400 bg-red-950/60 p-4 text-sm text-red-100" role="alert">
+            <p>{errorMessage}</p>
+            <button
+              type="button"
+              className="shrink-0 underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-200"
+              onClick={() => setErrorMessage(null)}
+            >
+              Fechar
+            </button>
+          </div>
+        )}
 
-        {/* Ambient Background Noise/Grid */}
-        <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
-        <div className="absolute inset-0 z-0 opacity-5 pointer-events-none"
-          style={{
-            backgroundImage: `linear-gradient(${darkMode ? '#333' : '#ccc'} 1px, transparent 1px), linear-gradient(90deg, ${darkMode ? '#333' : '#ccc'} 1px, transparent 1px)`,
-            backgroundSize: '40px 40px'
-          }}>
-        </div>
-
-        <main className="relative z-10 container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-screen">
+        <Suspense fallback={<div className="w-full max-w-5xl py-16 text-center font-mono text-sm" role="status">Carregando interface…</div>}>
 
           {step === 'upload' && (
             <UploadSection onNext={handleFrameworksSubmit} />
@@ -103,6 +126,7 @@ const App: React.FC = () => {
               frameworks={frameworks}
               onSubmit={handleConfigSubmit}
               onBack={() => setStep('upload')}
+              agenticAvailable={agenticAvailable}
               onBatchMode={(config) => {
                 setConfig(config);
                 setStep('batch');
@@ -136,9 +160,8 @@ const App: React.FC = () => {
               />
             )
           )}
-
-        </main>
-      </div>
+        </Suspense>
+      </main>
     </div>
   );
 };

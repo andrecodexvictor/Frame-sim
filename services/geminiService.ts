@@ -1,49 +1,52 @@
 /// <reference types="vite/client" />
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { SingleSimulationConfig, SimulationOutput } from "../types";
-import { calculateMonthlyMetrics, SimulationRawData, getCostProfile, calculateFrameworkFit } from "./metricsCalculator";
+import { calculateMonthlyMetrics, SimulationRawData, getCostProfile, getEconomicScenario, calculateFrameworkFit } from "./metricsCalculator";
 import { MOCK_SIMULATION_RESULT } from "./mockData";
 import { generateRAGContext, injectRAGContext } from "./ragService";
 import { enrichArchetypesToTeam, generateTeamDescription, calculateTeamResistance } from "./personaEnricher";
-import { simulateTeamOffline, hashString } from "../RAG/src/core/employeeBrainCore";
+import { simulateTeamOffline, hashString, mulberry32 } from "../RAG/src/core/employeeBrainCore";
+import { generateProviderContent } from './providerClient';
+
+// Google accepts these JSON-schema enum values over its REST API. Keeping the
+// tiny constants local avoids shipping the provider SDK (and credentials) to
+// every browser session.
+const Type = {
+  OBJECT: 'OBJECT',
+  ARRAY: 'ARRAY',
+  STRING: 'STRING',
+  NUMBER: 'NUMBER'
+} as const;
 
 
 // === NEW: Document Digestion Service (Gemini Flash) ===
 export const digestFrameworkDocument = async (rawText: string): Promise<string> => {
   try {
-    const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
-    if (!apiKey) return rawText; // Fallback if no key
+    const prompt = `Você é um Arquiteto de Soluções Sênior. Sua tarefa é analisar este documento técnico de um Framework Corporativo e extrair um MANIFESTO ESTRUTURADO DENSO para ser usado em uma simulação.
 
-    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `Você é um Arquiteto de Soluções Sênior. Sua tarefa é analisar este documento técnico de um Framework Corporativo e extrair um MANIFESTO ESTRUTURADO DENSO para ser usado em uma simulação.
-            
-            Foque em:
-            1. Valores Core e Filosofia
-            2. Papéis e Responsabilidades (Quem faz o que)
-            3. Cerimônias, Reuniões e Eventos
-            4. Artefatos e Saídas
-            5. Estratégias de Adoção Recomendadas
+Foque em:
+1. Valores Core e Filosofia
+2. Papéis e Responsabilidades (Quem faz o que)
+3. Cerimônias, Reuniões e Eventos
+4. Artefatos e Saídas
+5. Estratégias de Adoção Recomendadas
 
-            Se o texto for muito longo, priorize os processos e regras de negócio.
-            
-            SAÍDA: Um texto Markdown bem estruturado e conciso (máximo 4000 caracteres) com essas seções.`
-          }, {
-            text: `DOCUMENTO ORIGINAL (Trecho): ${rawText.slice(0, 500000)}` // Limit to safe Flash context
-          }]
-        }]
-      })
+Se o texto for muito longo, priorize os processos e regras de negócio.
+
+SAÍDA: Um texto Markdown bem estruturado e conciso (máximo 4000 caracteres) com essas seções.
+
+DOCUMENTO ORIGINAL (Trecho): ${rawText.slice(0, 120000)}`;
+
+    const result = await generateProviderContent({
+      task: 'document-digest',
+      prompt,
+      temperature: 0.2,
+      timeoutMs: 90_000
     });
 
-    const data = await result.json();
-    const digest = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    return digest ? `=== DOCUMENTO DIGERIDO (via Gemini 1.5 Flash) ===\n\n${digest}` : rawText;
+    return result.content
+      ? `=== DOCUMENTO DIGERIDO (${result.provider}/${result.model}) ===\n\n${result.content}`
+      : rawText;
 
   } catch (error) {
     console.error("Erro na digestão do documento:", error);
@@ -52,7 +55,7 @@ export const digestFrameworkDocument = async (rawText: string): Promise<string> 
 };
 
 
-const SIMULATION_SCHEMA = {
+export const SIMULATION_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     summary: {
@@ -223,144 +226,12 @@ const SIMULATION_SCHEMA = {
   required: ["summary", "implementationNarrative", "sentimentBreakdown", "resourceAllocation", "timeline", "keyPersonas", "risks", "recommendations", "departmentReadiness", "businessMetrics", "companyEvolution"],
 };
 
-// API Key Rotation Pool - 7 keys from different Google Cloud projects
-const getApiKeys = (): string[] => {
-  const keys = [
-    import.meta.env.VITE_API_KEY,
-    import.meta.env.VITE_API_KEY_2,
-    import.meta.env.VITE_API_KEY_3,
-    import.meta.env.VITE_API_KEY_4,
-    import.meta.env.VITE_API_KEY_5,
-    import.meta.env.VITE_API_KEY_6,
-    import.meta.env.VITE_API_KEY_7
-  ].filter(k => !!k) as string[];
-  return keys;
-};
-
-let currentKeyIndex = 0;
-
-const getNextApiKey = (): string | null => {
-  const keys = getApiKeys();
-  if (keys.length === 0) return null;
-  currentKeyIndex = (currentKeyIndex + 1) % keys.length;
-  console.log(`🔄 Rotating to API Key ${currentKeyIndex + 1} of ${keys.length}`);
-  return keys[currentKeyIndex];
-};
-
-// ================== FALLBACK PROVIDERS ==================
-
-// OpenAI Fallback (GPT-4)
-const runSimulationWithOpenAI = async (config: SingleSimulationConfig, prompt: string): Promise<any | null> => {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  if (!apiKey) {
-    console.warn("⚠️ OpenAI API key not configured, skipping OpenAI fallback");
-    return null;
-  }
-
-  console.log("🤖 Attempting OpenAI GPT-4 fallback...");
+export const runSimulation = async (
+  config: SingleSimulationConfig,
+  options: { signal?: AbortSignal } = {}
+): Promise<SimulationOutput> => {
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          { role: "system", content: "You are a corporate framework simulation expert. Always respond with valid JSON only." },
-          { role: "user", content: prompt + "\n\nRespond ONLY with the JSON, no markdown blocks." }
-        ],
-        temperature: 0.6,
-        response_format: { type: "json_object" }
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenAI API error:", errorData);
-      return null;
-    }
-
-    const data = await response.json();
-    const jsonText = data.choices[0]?.message?.content;
-    if (!jsonText) return null;
-
-    console.log("✅ OpenAI fallback successful!");
-    return JSON.parse(jsonText);
-  } catch (error) {
-    console.error("❌ OpenAI fallback failed:", error);
-    return null;
-  }
-};
-
-// DeepSeek Fallback
-const runSimulationWithDeepSeek = async (config: SingleSimulationConfig, prompt: string): Promise<any | null> => {
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
-  if (!apiKey) {
-    console.warn("⚠️ DeepSeek API key not configured, skipping DeepSeek fallback");
-    return null;
-  }
-
-  console.log("🤖 Attempting DeepSeek fallback...");
-
-  try {
-    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          { role: "system", content: "You are a corporate framework simulation expert. Always respond with valid JSON only." },
-          { role: "user", content: prompt + "\n\nRespond ONLY with the JSON, no markdown blocks." }
-        ],
-        temperature: 0.6
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("DeepSeek API error:", errorData);
-      return null;
-    }
-
-    const data = await response.json();
-    const jsonText = data.choices[0]?.message?.content;
-    if (!jsonText) return null;
-
-    console.log("✅ DeepSeek fallback successful!");
-    // Clean any markdown blocks if present
-    const cleanJson = jsonText.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(cleanJson);
-  } catch (error) {
-    console.error("❌ DeepSeek fallback failed:", error);
-    return null;
-  }
-};
-
-
-// ========================================================
-
-export const runSimulation = async (config: SingleSimulationConfig, retryCount = 0): Promise<SimulationOutput> => {
-  const MAX_RETRIES = 7;
-
-  try {
-    const apiKeys = getApiKeys();
-    const apiKey = apiKeys[currentKeyIndex] || apiKeys[0];
-
-    // Fallback to Mock if no API Key (Safety Net)
-    if (!apiKey) {
-      console.warn("No API Key found. Using Mock Mode.");
-      return { ...MOCK_SIMULATION_RESULT, frameworkName: config.frameworkName };
-    }
-
-    console.log(`🔑 Using API Key ${currentKeyIndex + 1} of ${apiKeys.length}`);
-    const ai = new GoogleGenAI({ apiKey });
-
     // ===== RAG OTIMIZADO =====
     // Gera contexto RAG baseado na configuração (Self-RAG implícito)
     const ragContext = generateRAGContext(config);
@@ -385,9 +256,16 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
 
     // PERSONA ENRICHMENT: Map archetypes to real personas from profiles.json
     const archetypes = config.employeeArchetypes || ['mid_level', 'senior_staff'];
+    const simulationSeed = config.seed ?? hashString([
+      config.frameworkName,
+      config.companySize,
+      config.sector,
+      config.scenarioContext
+    ].join(':'));
     const { team, keyStakeholders, archetypeDistribution } = enrichArchetypesToTeam(
       archetypes,
-      config.companySize
+      config.companySize,
+      simulationSeed
     );
 
     // Generate rich team description for prompt
@@ -400,7 +278,8 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
     // EMPLOYEE BRAIN: simulação offline (zero-LLM) de estresse/humor/burnout por pessoa.
     // team já contém keyStakeholders como prefixo (ver enrichArchetypesToTeam) — cap 30 para
     // manter o custo de simulação baixo e o prompt enxuto.
-    const brainSeed = hashString(`${config.frameworkName}:${config.companySize}`);
+    const brainSeed = hashString(`${simulationSeed}:${config.frameworkName}:${config.companySize}`);
+    const financialRng = mulberry32(hashString(`${simulationSeed}:${config.frameworkName}:financial`));
     const { brains, emergentEvents: brainEvents } = simulateTeamOffline(
       team.slice(0, 30),
       config.durationMonths || 12,
@@ -417,7 +296,7 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
 
     // Realism Factors Calculation
     const realismContext = `
-      FATORES DE REALISMO (ACCURACY 95%):
+      FATORES DE REALISMO (hipóteses explícitas, não garantia estatística):
       - Dívida Técnica: ${config.techDebtLevel.toUpperCase()} ${config.techDebtLevel === 'critical' ? '(Sistemas quase colapsando, qualquer mudança quebra tudo)' : ''}
       - Velocidade Operacional: ${config.operationalVelocity.toUpperCase()}
       - Trauma Anterior: ${config.previousFailures ? 'SIM (Funcionários céticos, "lá vem outra bala de prata")' : 'NÃO'}
@@ -426,6 +305,7 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
 
     // Economic Profile Context for accurate cost simulation
     const costProfile = getCostProfile((config as any).economicProfileId);
+    const macroScenario = getEconomicScenario(config.economicScenarioId, simulationSeed);
     const economicContext = costProfile ? `
       CONTEXTO ECONÔMICO (${costProfile.name}):
       - Região: ${costProfile.region} | Moeda: ${costProfile.currency}
@@ -433,6 +313,8 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       - Custo Incidente: ${costProfile.currency} ${costProfile.constants.INCIDENT_COST}
       - Valor por Feature: ${costProfile.currency} ${costProfile.constants.FEATURE_VALUE}
       - ${costProfile.description}
+      - Cenário macro: ${macroScenario.label}; demanda x${macroScenario.demandMultiplier}, trabalho x${macroScenario.laborCostMultiplier}, incidentes x${macroScenario.incidentMultiplier}.
+      - Incerteza: ${macroScenario.uncertainty}
       
       INSTRUÇÃO: Use esses valores como referência para cálculos de ROI e custos.
     ` : '';
@@ -442,7 +324,8 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       config.frameworkName,
       config.companySize,
       config.budgetLevel,
-      config.frameworkCategory
+      config.frameworkCategory,
+      financialRng
     );
     const fitContext = `
       ANÁLISE DE FIT FRAMEWORK-ORGANIZAÇÃO:
@@ -460,7 +343,7 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       Atue como uma Engine de Realidade Estendida (XRE) e CFO Virtual Multidimensional.
       
       OBJETIVO:
-      Simular a implementação do framework "${config.frameworkName}" na empresa com 95% de fidelidade ao mundo real, utilizando os dados de RAG fornecidos.
+      Simular a implementação do framework "${config.frameworkName}" com hipóteses rastreáveis, incerteza explícita e coerência causal, utilizando os dados de RAG fornecidos.
       
       DADOS DE ENTRADA:
       - Framework: ${config.frameworkText.substring(0, 5000)}...
@@ -517,17 +400,18 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
       Retorne APENAS o JSON conforme o schema.
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: SIMULATION_SCHEMA,
-        temperature: 0.6,
-      },
+    const providerResponse = await generateProviderContent({
+      task: 'simulation',
+      prompt,
+      responseSchema: SIMULATION_SCHEMA,
+      temperature: config.temperature ?? 0.6,
+      seed: config.seed,
+      modelPreference: config.modelPreference,
+      agentPersona: config.agentPersona,
+      signal: options.signal
     });
 
-    const jsonText = response.text;
+    const jsonText = providerResponse.content;
     if (!jsonText) throw new Error("Falha crítica na engine de simulação.");
 
     // Sanitization to prevent JSON parse errors if model adds markdown blocks
@@ -590,7 +474,8 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
         config as any, // Type assertion needed as SingleSimulationConfig is slightly different from SimulationConfig but compatible for this
         accumulatedValue,
         accumulatedOpEx,
-        accumulatedCoNQ
+        accumulatedCoNQ,
+        financialRng
       );
 
       // Update accumulators
@@ -614,19 +499,47 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
           ? parseFloat(((accumulatedValue - accumulatedCoNQ - accumulatedOpEx) / accumulatedOpEx * 100).toFixed(2))
           : 0
       },
-      frameworkName: config.frameworkName
+      frameworkName: config.frameworkName,
+      execution: {
+        mode: providerResponse.degraded ? 'degraded' : 'live',
+        provider: providerResponse.provider,
+        model: providerResponse.model,
+        attempts: providerResponse.attempts,
+        seed: config.seed
+      }
     };
 
     // EMPLOYEE BRAIN: substitui o sentimento inventado pelo LLM pelo humor simulado
     // deterministicamente, quando a persona citada em keyPersonas bate com um brain.
     if (Array.isArray(finalResult.keyPersonas)) {
-      finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any) => {
+      finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any, index: number) => {
         // Guard: nome vazio faria includes('') casar sempre com o primeiro brain.
         const brain = brains.find(b => b.nome && b.nome.length >= 3 && kp.role?.toLowerCase().includes(b.nome.toLowerCase()));
-        if (!brain) return kp;
-        const sentiment = Math.round((brain.humor + 100) / 2);
-        const statusNote = brain.status !== 'ativo' ? ` [EmployeeBrain: ${brain.status}]` : '';
-        return { ...kp, sentiment, impact: `${kp.impact}${statusNote}` };
+        const profile = keyStakeholders.find(p =>
+          p.nome && kp.role?.toLowerCase().includes(p.nome.toLowerCase())
+        ) ?? keyStakeholders[index % Math.max(1, keyStakeholders.length)];
+        const sentiment = brain ? Math.round((brain.humor + 100) / 2) : kp.sentiment;
+        const status = brain?.status ?? 'ativo';
+        const statusNote = status !== 'ativo' ? ` [EmployeeBrain: ${status}]` : '';
+        return {
+          ...kp,
+          sentiment,
+          impact: `${kp.impact}${statusNote}`,
+          ...(profile ? {
+            id: profile.id,
+            name: profile.nome,
+            area: profile.area,
+            motivation: profile.motivacao,
+            cognitiveBias: profile.vies_cognitivo,
+            communicationStyle: profile.estilo_comunicacao,
+            challenge: profile.desafio_atual,
+            preferredFramework: profile.framework_preferido
+          } : {}),
+          status,
+          stress: brain ? Math.round(brain.estresse) : undefined,
+          energy: brain ? Math.round(brain.energia) : undefined,
+          engagement: brain ? Math.round(brain.engajamento) : undefined
+        };
       });
     }
     finalResult.emergentEvents = brainEvents.map(e => ({ month: e.mes, persona: e.nome, type: e.tipo, event: e.narrativa }));
@@ -638,63 +551,24 @@ export const runSimulation = async (config: SingleSimulationConfig, retryCount =
     console.error("Error Name:", error?.name);
     console.error("Error Message:", error?.message);
 
-    // Check if it's a quota/rate limit error (429)
-    const isQuotaError = error?.message?.includes('429') ||
-      error?.message?.includes('quota') ||
-      error?.message?.includes('rate') ||
-      error?.message?.includes('RESOURCE_EXHAUSTED');
+    if (options.signal?.aborted) throw error;
 
-    if (isQuotaError && retryCount < MAX_RETRIES) {
-      const nextKey = getNextApiKey();
-      if (nextKey) {
-        console.warn(`⚠️ Quota exceeded. Retrying with next API key (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
-        // Wait a bit before retrying
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return runSimulation(config, retryCount + 1);
+    // Keep the UI recoverable, but label the fixture honestly so it cannot be
+    // mistaken for a live model result.
+    console.warn("⚠️ Provider gateway unavailable. Returning an explicit degraded fixture.");
+    return {
+      ...MOCK_SIMULATION_RESULT,
+      frameworkName: config.frameworkName,
+      execution: {
+        mode: 'fixture',
+        provider: 'none',
+        model: 'local-fixture',
+        attempts: 0,
+        seed: config.seed,
+        warning: error instanceof Error
+          ? `${error.message}${error instanceof Error && 'failureCodes' in error && Array.isArray(error.failureCodes) && error.failureCodes.length > 0 ? ` [${error.failureCodes.join(', ')}]` : ''}`
+          : 'Provider gateway unavailable.'
       }
-    }
-
-    // All Gemini retries exhausted - try alternative providers
-    console.warn("⚠️ All Gemini keys exhausted. Trying alternative providers...");
-
-    // Build a simplified prompt for alternative providers
-    const fallbackPrompt = `
-      Simulate the implementation of framework "${config.frameworkName}" for a company with ${config.companySize} employees in ${config.sector} sector.
-      Budget: ${config.budgetLevel}. Category: ${config.frameworkCategory}.
-      Duration: ${config.durationMonths || 12} months.
-      
-      Return a JSON with this structure:
-      {
-        "summary": { "finalAdoption": 0-100, "totalRoi": number, "maturityScore": 0-100, "monthsToComplete": number, "scenarioValidity": 0-100 },
-        "implementationNarrative": "string describing the implementation journey",
-        "timeline": [ { "month": 1, "adoption": 0-100, "productivity": 0-100, "roi": number } ... for ${config.durationMonths || 12} months ],
-        "keyPersonas": [ { "name": "string", "role": "string", "impact": "string", "stance": "champion|skeptic|neutral|saboteur" } ],
-        "risks": [ { "category": "string", "description": "string", "mitigation": "string", "probability": 0-100 } ],
-        "recommendations": ["string"],
-        "sentimentBreakdown": { "positive": 0-100, "neutral": 0-100, "negative": 0-100 },
-        "resourceAllocation": { "training": 0-100, "tooling": 0-100, "process": 0-100 },
-        "departmentReadiness": [ { "name": "string", "readiness": 0-100, "risk": "low|medium|high" } ],
-        "businessMetrics": { "timeToMarket": { "before": 90, "after": 60 }, "qualityIndex": { "before": 65, "after": 85 }, "teamMorale": { "before": 50, "after": 75 }, "processEfficiency": { "before": 40, "after": 70 } },
-        "companyEvolution": { "before": { "teamSize": ${config.companySize}, "productivity": 60 }, "after": { "teamSize": ${config.companySize}, "productivity": 85 } }
-      }
-    `;
-
-    // Try OpenAI
-    const openAIResult = await runSimulationWithOpenAI(config, fallbackPrompt);
-    if (openAIResult) {
-      console.log("✅ OpenAI fallback successful!");
-      return { ...openAIResult, frameworkName: config.frameworkName } as SimulationOutput;
-    }
-
-    // Try DeepSeek
-    const deepSeekResult = await runSimulationWithDeepSeek(config, fallbackPrompt);
-    if (deepSeekResult) {
-      console.log("✅ DeepSeek fallback successful!");
-      return { ...deepSeekResult, frameworkName: config.frameworkName } as SimulationOutput;
-    }
-
-    // All providers exhausted - return mock
-    console.warn("⚠️ All providers exhausted. Falling back to MOCK MODE.");
-    return { ...MOCK_SIMULATION_RESULT, frameworkName: config.frameworkName };
+    };
   }
 };

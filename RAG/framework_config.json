@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "frameworks": [
+    {
+      "id": "scrum",
+      "name": "Scrum",
+      "version": "2026.1",
+      "category": "management",
+      "description": "Framework iterativo para entrega incremental e inspeção frequente.",
+      "roles": ["Product Owner", "Scrum Master", "Developers"],
+      "rituals": [
+        { "name": "Sprint Planning", "cadence": "a cada sprint", "purpose": "definir objetivo e plano" },
+        { "name": "Daily Scrum", "cadence": "diário", "purpose": "inspecionar progresso e impedimentos" },
+        { "name": "Sprint Review", "cadence": "fim da sprint", "purpose": "inspecionar incremento com stakeholders" },
+        { "name": "Retrospective", "cadence": "fim da sprint", "purpose": "adaptar o modo de trabalho" }
+      ],
+      "artifacts": ["Product Backlog", "Sprint Backlog", "Incremento"],
+      "metrics": ["adoption_rate", "cycle_time", "escaped_defects"],
+      "riskRules": [
+        { "id": "scrum-role-confusion", "trigger": "papéis não definidos", "impact": "redução de confiança e velocidade" },
+        { "id": "scrum-review-skipped", "trigger": "review ignorada", "impact": "feedback tardio e retrabalho" }
+      ]
+    },
+    {
+      "id": "kanban",
+      "name": "Kanban",
+      "version": "2026.1",
+      "category": "development",
+      "description": "Sistema de fluxo contínuo com limites explícitos de trabalho em progresso.",
+      "roles": ["Service Owner", "Flow Manager", "Delivery Team"],
+      "rituals": [
+        { "name": "Replenishment", "cadence": "semanal", "purpose": "selecionar trabalho pronto para iniciar" },
+        { "name": "Flow Review", "cadence": "semanal", "purpose": "inspecionar fluxo e bloqueios" },
+        { "name": "Delivery Planning", "cadence": "sob demanda", "purpose": "planejar uma entrega" }
+      ],
+      "artifacts": ["Quadro Kanban", "Políticas explícitas", "Classes de serviço"],
+      "metrics": ["lead_time", "throughput", "work_in_progress"],
+      "riskRules": [
+        { "id": "kanban-wip-overflow", "trigger": "WIP acima do limite", "impact": "aumento de lead time" },
+        { "id": "kanban-hidden-work", "trigger": "trabalho fora do quadro", "impact": "baixa previsibilidade" }
+      ]
+    }
+  ]
+}

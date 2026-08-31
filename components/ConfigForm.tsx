@@ -15,6 +15,7 @@ interface ConfigFormProps {
   onSubmit: (config: SimulationConfig) => void;
   onBack: () => void;
   onBatchMode?: (config: SimulationConfig) => void;
+  agenticAvailable?: boolean | null;
 }
 
 const ARCHETYPES: { id: CorporateArchetype; label: string; icon: React.ElementType; desc: string }[] = [
@@ -52,7 +53,7 @@ const PRESET_SCENARIOS = [
   { id: 'hypergrowth', label: 'Hipercrescimento (Scale-up)', desc: 'Contratando 50 pessoas/mês. Caos organizado.' },
 ];
 
-export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, onBack, onBatchMode }) => {
+export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, onBack, onBatchMode, agenticAvailable }) => {
   const { register, handleSubmit, watch, setValue } = useForm<SimulationConfig>({
     defaultValues: {
       frameworks: frameworks,
@@ -71,7 +72,8 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
       selectedScenarioId: 'legacy_migration',
       customScenarioText: '',
       durationMonths: 12,
-      economicProfileId: 'br_pme' // Default to Brazilian PME
+      economicProfileId: 'br_pme', // Default to Brazilian PME
+      economicScenarioId: 'base'
     }
   });
 
@@ -105,16 +107,40 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
           {isComparison ? 'Parâmetros do Cenário' : 'Configuração'}
         </h2>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-800 p-2 border-2 border-brutal-black shadow-sm">
-            <span className="font-bold text-xs uppercase">MODO AGÊNTICO</span>
+          <label className={`flex items-center gap-2 bg-white dark:bg-zinc-800 p-2 border-2 border-brutal-black shadow-sm ${agenticAvailable === false ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+            <span className="font-bold text-xs uppercase" id="agentic-mode-label">MODO AGÊNTICO</span>
             <div className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" {...register('simulationMode')} value="agentic" />
+              <input
+                id="agentic-mode"
+                type="checkbox"
+                className="sr-only peer"
+                {...register('simulationMode')}
+                value="agentic"
+                disabled={agenticAvailable !== true}
+                aria-describedby="agentic-mode-help"
+              />
               <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
             </div>
+            <span id="agentic-mode-help" className="sr-only">
+              {agenticAvailable === true ? 'Backend agêntico disponível.' : agenticAvailable === false ? 'Backend agêntico indisponível. Execute-o na porta 3002 para habilitar.' : 'Verificando disponibilidade do backend agêntico.'}
+            </span>
           </label>
+          <span className="hidden sm:inline text-[10px] font-mono text-zinc-500" role="status">
+            {agenticAvailable === true ? 'BACKEND AGÊNTICO ONLINE' : agenticAvailable === false ? 'AGÊNTICO OFFLINE · PADRÃO DISPONÍVEL' : 'VERIFICANDO BACKEND…'}
+          </span>
           <span className="bg-brutal-black text-white font-mono px-2 py-1 text-xs">PASSO 2/3</span>
         </div>
       </div>
+
+      <details className="mb-6 w-full border-b border-zinc-700 pb-4 text-sm text-zinc-300">
+        <summary className="cursor-pointer font-mono font-bold uppercase text-xs tracking-wide focus-visible:outline">Como a simulação reage</summary>
+        <div className="mt-3 max-w-3xl space-y-2 leading-relaxed">
+          <p><strong>Personas:</strong> os perfis selecionados influenciam resistência, humor e a narrativa dos agentes. Eles representam hipóteses de comportamento, não pessoas reais nem votos individuais.</p>
+          <p><strong>Sinais emergentes:</strong> alertas do modelo — por exemplo, resistência, afastamento ou apoio — que ajudam a investigar sensibilidades do cenário. Não são previsões nem fatos sobre sua equipe.</p>
+          <p><strong>Semente:</strong> quando uma semente é informada, ela torna a seleção e o estado humano determinísticos para aquela entrada. O texto gerado pelo provedor ainda pode variar; não há garantia de repetição idêntica.</p>
+          <p><strong>Modo degradado:</strong> se o backend agêntico estiver indisponível, use o modo padrão. Se os provedores falharem, o resultado pode ser uma demonstração local sinalizada na tela de resultados; não use esse resultado para decisões.</p>
+        </div>
+      </details>
 
       <form onSubmit={handleSubmit(onSubmit)} className="bg-white dark:bg-zinc-900 border-4 border-brutal-black dark:border-zinc-700 shadow-hard p-8 space-y-10 transition-colors">
 
@@ -127,9 +153,10 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300">Categoria do Cenário</label>
+              <label htmlFor="framework-category" className="font-bold text-sm uppercase dark:text-zinc-300">Categoria do Cenário</label>
               <div className="relative">
                 <select
+                  id="framework-category"
                   {...register('frameworkCategory')}
                   className="w-full p-4 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green bg-zinc-50 dark:bg-zinc-800 dark:text-white appearance-none uppercase"
                 >
@@ -143,8 +170,9 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
             </div>
 
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300">Setor de Atuação</label>
+              <label htmlFor="sector" className="font-bold text-sm uppercase dark:text-zinc-300">Setor de Atuação</label>
               <select
+                id="sector"
                 {...register('sector')}
                 className="w-full p-4 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green bg-white dark:bg-zinc-800 dark:text-white dark:border-zinc-600 uppercase"
               >
@@ -158,8 +186,9 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
             </div>
 
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300">Tamanho (FTEs)</label>
+              <label htmlFor="company-size" className="font-bold text-sm uppercase dark:text-zinc-300">Tamanho (FTEs)</label>
               <input
+                id="company-size"
                 type="number"
                 {...register('companySize', { valueAsNumber: true })}
                 className="w-full p-3 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green dark:bg-zinc-800 dark:text-white dark:border-zinc-600"
@@ -167,8 +196,9 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
             </div>
 
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300">Orçamento Disponível</label>
+              <label htmlFor="budget-level" className="font-bold text-sm uppercase dark:text-zinc-300">Orçamento Disponível</label>
               <select
+                id="budget-level"
                 {...register('budgetLevel')}
                 className="w-full p-3 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green bg-white dark:bg-zinc-800 dark:text-white dark:border-zinc-600 uppercase"
               >
@@ -179,8 +209,9 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
             </div>
 
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300">💰 Perfil Econômico</label>
+              <label htmlFor="economic-profile" className="font-bold text-sm uppercase dark:text-zinc-300">💰 Perfil Econômico</label>
               <select
+                id="economic-profile"
                 {...register('economicProfileId')}
                 className="w-full p-3 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green bg-white dark:bg-zinc-800 dark:text-white dark:border-zinc-600 text-sm"
               >
@@ -196,18 +227,34 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
               <p className="text-xs opacity-60 font-mono">Define custos de salários, incidentes e valor de features</p>
             </div>
 
+            <div className="space-y-2">
+              <label htmlFor="economic-scenario" className="font-bold text-sm uppercase dark:text-zinc-300">Cenário macroeconômico</label>
+              <select
+                id="economic-scenario"
+                {...register('economicScenarioId')}
+                className="w-full p-3 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green bg-white dark:bg-zinc-800 dark:text-white dark:border-zinc-600 text-sm"
+              >
+                <option value="base">Base — referência neutra</option>
+                <option value="recession">Recessão — demanda e orçamento pressionados</option>
+                <option value="expansion">Expansão — demanda e investimento maiores</option>
+                <option value="auto">Variação seedada — cenário escolhido pela semente</option>
+              </select>
+              <p className="text-xs opacity-60 font-mono">Hipótese de estresse para comparação; não é previsão econômica.</p>
+            </div>
+
             {/* Cost Breakdown Panel */}
             <div className="md:col-span-2">
               <CostBreakdownPanel profileId={watch('economicProfileId') || 'br_pme'} />
             </div>
 
             <div className="md:col-span-2 space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-brutal-green" /> Duração da Simulação
-              </label>
+               <span className="font-bold text-sm uppercase dark:text-zinc-300 flex items-center gap-2">
+                 <Clock className="w-4 h-4 text-brutal-green" /> Duração da Simulação
+               </span>
               <div className="grid grid-cols-2 gap-4">
                 <label className="cursor-pointer">
                   <input
+                    id="duration-12"
                     type="radio"
                     value="12"
                     {...register('durationMonths', { valueAsNumber: true })}
@@ -220,6 +267,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
                 </label>
                 <label className="cursor-pointer">
                   <input
+                    id="duration-60"
                     type="radio"
                     value="60"
                     {...register('durationMonths', { valueAsNumber: true })}
@@ -239,15 +287,16 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
         <div className="space-y-6">
           <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-700 pb-2">
             <Activity className="w-5 h-5 text-red-500" />
-            <h3 className="font-black text-lg uppercase dark:text-white">2. Calibragem de Realismo (95% Accuracy)</h3>
+            <h3 className="font-black text-lg uppercase dark:text-white">2. Calibragem de Realismo</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300 flex items-center gap-2">
+               <label htmlFor="tech-debt" className="font-bold text-sm uppercase dark:text-zinc-300 flex items-center gap-2">
                 <Server className="w-4 h-4" /> Dívida Técnica
               </label>
-              <select
+               <select
+                 id="tech-debt"
                 {...register('techDebtLevel')}
                 className="w-full p-2 border-2 border-brutal-black font-mono text-sm bg-zinc-50 dark:bg-zinc-800 dark:text-white dark:border-zinc-600 uppercase"
               >
@@ -260,16 +309,17 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
             </div>
 
             <div className="space-y-2">
-              <label className="font-bold text-sm uppercase dark:text-zinc-300 flex items-center gap-2">
+               <label htmlFor="operational-velocity" className="font-bold text-sm uppercase dark:text-zinc-300 flex items-center gap-2">
                 <Clock className="w-4 h-4" /> Velocidade Operacional
               </label>
-              <select
+               <select
+                 id="operational-velocity"
                 {...register('operationalVelocity')}
                 className="w-full p-2 border-2 border-brutal-black font-mono text-sm bg-zinc-50 dark:bg-zinc-800 dark:text-white dark:border-zinc-600 uppercase"
               >
                 <option value="startup">Startup (Caos Ágil)</option>
                 <option value="agile">Ágil Corporativo</option>
-                <option value="bureaucratic">Burocrática (Lenta)</option>
+                  <option value="bureaucrat">Burocrática (Lenta)</option>
                 <option value="fossilized">Fossilizada (Resistente)</option>
               </select>
               <p className="text-[10px] opacity-60 dark:text-zinc-400">Define a inércia da cultura.</p>
@@ -281,7 +331,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
               </label>
               <div className="flex items-center gap-4 pt-2">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" {...register('previousFailures')} className="w-5 h-5 accent-brutal-green" />
+                   <input id="previous-failures" type="checkbox" {...register('previousFailures')} className="w-5 h-5 accent-brutal-green" />
                   <span className="font-mono text-sm dark:text-white">Sim, falhamos antes.</span>
                 </label>
               </div>
@@ -295,13 +345,14 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-zinc-200 dark:border-zinc-700 pb-2">
             <div className="flex items-center gap-2">
               <User className="w-5 h-5 text-purple-500" />
-              <label className="font-black text-lg uppercase dark:text-white">
+              <h3 className="font-black text-lg uppercase dark:text-white">
                 3. Ecossistema Humano
-              </label>
+              </h3>
             </div>
-            <button
-              type="button"
-              onClick={toggleAllArchetypes}
+              <button
+                type="button"
+                onClick={toggleAllArchetypes}
+                aria-pressed={selectedArchetypes?.length === ARCHETYPES.length}
               className="text-[10px] uppercase font-bold font-mono border border-brutal-black dark:border-zinc-500 px-2 py-1 hover:bg-brutal-green hover:text-black hover:border-brutal-green transition-colors flex items-center gap-1 dark:text-white"
             >
               <CheckSquare className="w-3 h-3" />
@@ -319,6 +370,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
                   key={arch.id}
                   type="button"
                   onClick={() => toggleArchetype(arch.id)}
+                  aria-pressed={isSelected}
                   className={`p-3 border-2 text-left transition-all relative overflow-hidden group min-h-[90px] flex flex-col justify-between ${isSelected
                     ? 'border-brutal-green bg-brutal-green/10 dark:bg-brutal-green/20'
                     : isCLevel
@@ -391,7 +443,9 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
             </div>
           ) : (
             <div className="space-y-2">
-              <textarea
+               <label htmlFor="custom-scenario" className="sr-only">Descreva o cenário hipotético</label>
+               <textarea
+                 id="custom-scenario"
                 {...register('customScenarioText')}
                 className="w-full h-32 p-4 border-2 border-brutal-black dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900 focus:outline-none focus:border-brutal-green font-mono text-sm dark:text-white"
                 placeholder="Descreva o cenário hipotético... Ex: 'A empresa acabou de sofrer um vazamento de dados massivo e o CTO foi demitido. O clima é de pânico e auditoria constante.'"
@@ -418,7 +472,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
           )}
 
           <BrutalButton type="submit" className="flex-[2]">
-            {isComparison ? 'EXECUTAR COMPARAÇÃO (95% ACCURACY)' : 'EXECUTAR SIMULAÇÃO (95% ACCURACY)'}
+              {isComparison ? 'EXECUTAR COMPARAÇÃO' : 'EXECUTAR SIMULAÇÃO'}
           </BrutalButton>
         </div>
       </form>

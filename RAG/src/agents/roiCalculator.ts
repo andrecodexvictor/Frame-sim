@@ -3,7 +3,6 @@
  * Usa RAG para buscar fórmulas e aplica tools para cálculos
  */
 
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import type {
     ROIResult,
     ROIProjection,
@@ -11,7 +10,8 @@ import type {
     SimulationEvent
 } from '../types/index.js';
 import { VectorStoreService, SearchResult } from '../services/vectorStore.js';
-import { geminiModel } from '../services/LLMProvider.js';
+import { GeminiProvider, LLMFactory, type LLMProvider } from '../services/LLMProvider.js';
+import { clamp, hashString, mulberry32 } from '../core/employeeBrainCore.js';
 
 // Variáveis base por tipo de empresa
 const BASE_VARIABLES = {
@@ -80,15 +80,13 @@ JSON com análise qualitativa:
 }`;
 
 export class ROICalculatorAgent {
-    private llm: ChatGoogleGenerativeAI;
+    private llm?: LLMProvider;
     private vectorStore?: VectorStoreService;
 
     constructor(apiKey?: string, vectorStore?: VectorStoreService) {
-        this.llm = new ChatGoogleGenerativeAI({
-            apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: geminiModel(),
-            temperature: 0, // Determinístico para cálculos
-        });
+        this.llm = apiKey
+            ? new GeminiProvider({ keys: [apiKey] })
+            : LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined;
         this.vectorStore = vectorStore;
     }
 
@@ -111,32 +109,46 @@ export class ROICalculatorAgent {
         const ftes = config.contexto_estrutural.tamanho_ftes.valor;
         const dividaTecnica = config.calibragem_realismo.divida_tecnica.valor;
         const debtMod = this.getDebtModifier(dividaTecnica);
-
-        // Buscar fórmulas no RAG se disponível
-        let formulas = '';
-        if (this.vectorStore) {
-            const metricsResults = await this.vectorStore.findMetrics('ROI OpEx Value', 5);
-            formulas = metricsResults.map(r => r.content).join('\n\n---\n\n');
-        }
+        const seed = config.parametros_simulacao.seed
+            ?? config.contexto_economico?.seed
+            ?? hashString(`${framework}:${ftes}:${duracao}:${config.contexto_situacional.cenario_atual}`);
+        const random = mulberry32(seed >>> 0);
+        const economic = config.contexto_economico?.scenario;
+        const adjustedVars = {
+            ...vars,
+            CUSTO_DEV_DIA: vars.CUSTO_DEV_DIA * (economic?.laborCostMultiplier ?? 1),
+            VALOR_PONTO_FUNCAO: vars.VALOR_PONTO_FUNCAO * (economic?.demandMultiplier ?? 1),
+            CUSTO_INCIDENTE: vars.CUSTO_INCIDENTE * (economic?.incidentMultiplier ?? 1),
+            CUSTO_REWORK: vars.CUSTO_REWORK * (economic?.laborCostMultiplier ?? 1)
+        };
+        const debtRisk = dividaTecnica.toUpperCase().includes('CRÍT') ? 0.18
+            : dividaTecnica.toUpperCase().includes('ALTA') ? 0.14
+                : dividaTecnica.toUpperCase().includes('BAIXA') ? 0.06 : 0.1;
+        const riskNoise = clamp(debtRisk + (config.calibragem_realismo.historico_traumatico.valor ? 0.03 : 0), 0.04, 0.2);
 
         // Calcular projeção mês a mês
         const projecao: ROIProjection[] = [];
         let opexAcumulado = 0;
         let valueAcumulado = 0;
         let conqAcumulado = 0;
+        const occurredEventIds = new Set<string>();
 
         for (let mes = 1; mes <= duracao; mes++) {
             const projection = this.calculateMonthlyProjection(
                 mes,
                 ftes,
-                vars,
+                adjustedVars,
                 debtMod,
-                config.calibragem_realismo.historico_traumatico.valor
+                config.calibragem_realismo.historico_traumatico.valor,
+                economic?.budgetMultiplier ?? 1,
+                riskNoise,
+                random
             );
 
             // Aplicar eventos aleatórios
-            const eventosMes = this.applyEvents(events, config, mes);
+            const eventosMes = this.applyEvents(events, config, mes, random);
             for (const evt of eventosMes) {
+                occurredEventIds.add(evt.id);
                 if (evt.impacto.roi) projection.value += evt.impacto.roi;
                 if (evt.impacto.custo_reposicao) projection.opex += evt.impacto.custo_reposicao;
             }
@@ -172,9 +184,11 @@ export class ROICalculatorAgent {
         return {
             projecao_mensal: projecao,
             roi_final: Math.round(roiFinal * 100) / 100,
-            break_even_mes: breakEvenMes > 0 ? breakEvenMes + 1 : null,
-            eventos_ocorridos: [],
-            confianca_estimativa: confianca
+            break_even_mes: breakEvenMes >= 0 ? breakEvenMes + 1 : null,
+            eventos_ocorridos: [...occurredEventIds],
+            confianca_estimativa: confianca,
+            economic_scenario: economic?.id || config.contexto_economico?.scenario_id || 'base',
+            seed: seed >>> 0
         };
     }
 
@@ -186,7 +200,10 @@ export class ROICalculatorAgent {
         ftes: number,
         vars: typeof BASE_VARIABLES.PME,
         debtMod: { bugs: number; velocity: number; taxa: number },
-        historicoTraumatico: boolean
+        historicoTraumatico: boolean,
+        budgetMultiplier: number,
+        riskNoise: number,
+        random: () => number
     ): { opex: number; value: number; conq: number } {
         // OpEx mensal
         const diasUteis = 22;
@@ -200,7 +217,7 @@ export class ROICalculatorAgent {
 
         // Features entregues (simplificado)
         const featuresBase = ftes * 0.5; // 0.5 features/FTE/mês base
-        const featuresAjustadas = featuresBase * jFactor * debtMod.velocity * traumaFactor;
+        const featuresAjustadas = featuresBase * jFactor * debtMod.velocity * traumaFactor * clamp(budgetMultiplier, 0.5, 1.5);
 
         // Complexidade média por feature
         const complexidadeMedia = 3;
@@ -217,9 +234,8 @@ export class ROICalculatorAgent {
 
         const conq = custoRework + custoManutencao;
 
-        // Stochastic Noise (Incerteza do mundo real)
-        // +/- 10% de variação aleatória
-        const noise = (Math.random() * 0.2) - 0.1; // -0.1 to 0.1
+        // Controlled triangular noise: seeded, centered and bounded by observed risk.
+        const noise = (random() + random() - 1) * riskNoise;
 
         return {
             opex: opex * (1 + (noise * 0.5)), // OpEx é mais estável
@@ -234,7 +250,8 @@ export class ROICalculatorAgent {
     private applyEvents(
         events: SimulationEvent[],
         config: SimulationConfig,
-        mes: number
+        mes: number,
+        random: () => number
     ): SimulationEvent[] {
         const triggered: SimulationEvent[] = [];
 
@@ -251,7 +268,7 @@ export class ROICalculatorAgent {
             }
 
             // Roll do dado
-            if (Math.random() < prob / 12) { // Dividir por 12 para probabilidade mensal
+            if (random() < prob / 12) { // Dividir por 12 para probabilidade mensal
                 triggered.push(event);
             }
         }
@@ -339,10 +356,9 @@ export class ROICalculatorAgent {
             .replace('{projecao_parcial}', JSON.stringify(result.projecao_mensal.slice(0, 6), null, 2));
 
         try {
-            const response = await this.llm.invoke(prompt);
-            const content = typeof response.content === 'string'
-                ? response.content
-                : JSON.stringify(response.content);
+            if (!this.llm) throw new Error('GOOGLE_API_KEY ausente');
+            const response = await this.llm.generate(prompt);
+            const content = response.content;
 
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (!jsonMatch) {

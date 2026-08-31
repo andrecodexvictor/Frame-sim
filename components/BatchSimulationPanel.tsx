@@ -15,11 +15,13 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
     const [isRunning, setIsRunning] = useState(false);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<BatchResult | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const handleRun = async () => {
         setIsRunning(true);
         setProgress(0);
         setResult(null);
+        setErrorMessage(null);
 
         try {
             const batchResult = await runBatchSimulation(config, iterations, (completed) => {
@@ -28,7 +30,7 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
             setResult(batchResult);
         } catch (error) {
             console.error("Batch failed", error);
-            alert("Erro na execução em lote.");
+            setErrorMessage(error instanceof Error ? error.message : 'Erro na execução em lote.');
         } finally {
             setIsRunning(false);
         }
@@ -43,6 +45,7 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
         a.href = url;
         a.download = `validacao_tcc_${config.frameworks[0].name}_${new Date().getTime()}.csv`;
         a.click();
+        window.URL.revokeObjectURL(url);
     };
 
     return (
@@ -63,16 +66,20 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 mb-8">
                 <div className="flex flex-col md:flex-row gap-6 items-end">
                     <div className="flex-1">
-                        <label className="block text-sm font-bold mb-2">Número de Iterações (N)</label>
+                        <label htmlFor="batch-iterations" className="block text-sm font-bold mb-2">Número de Iterações (N)</label>
                         <input
+                            id="batch-iterations"
                             type="number"
                             min="2"
                             max="50"
                             value={iterations}
-                            onChange={(e) => setIterations(parseInt(e.target.value))}
-                            className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg"
+                            onChange={(e) => {
+                                const value = Number(e.target.value);
+                                if (Number.isFinite(value)) setIterations(Math.max(2, Math.min(50, Math.trunc(value))));
+                            }}
+                            className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Recomendado: 10 para testes rápidos, 30 para significância estatística.</p>
+                        <p className="text-xs text-gray-500 mt-1">10 para uma leitura rápida; amostras maiores reduzem a incerteza, sem garantir significância por si só.</p>
                     </div>
 
                     <div className="flex-1">
@@ -105,7 +112,7 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
 
                 {/* Progress Bar */}
                 {isRunning && (
-                    <div className="mt-6 w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                    <div className="mt-6 w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700" role="progressbar" aria-label="Progresso das simulações" aria-valuemin={0} aria-valuemax={iterations} aria-valuenow={progress}>
                         <div
                             className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                             style={{ width: `${(progress / iterations) * 100}%` }}
@@ -113,6 +120,12 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
                     </div>
                 )}
             </div>
+
+            {errorMessage && (
+                <div role="alert" className="mb-8 border border-red-500 bg-red-950/40 p-4 text-sm text-red-100">
+                    <strong>O lote não foi concluído.</strong> {errorMessage}
+                </div>
+            )}
 
             {/* Results Section */}
             {result && (

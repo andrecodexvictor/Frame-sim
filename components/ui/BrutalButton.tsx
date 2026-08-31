@@ -12,7 +12,7 @@ export const BrutalButton: React.FC<BrutalButtonProps> = ({
   className = '', 
   ...props 
 }) => {
-  const baseStyles = "px-6 py-3 font-bold text-sm md:text-base flex items-center justify-center gap-2 relative transition-all duration-200 uppercase tracking-wider";
+  const baseStyles = "px-6 py-3 font-bold text-sm md:text-base flex items-center justify-center gap-2 relative transition-all duration-200 uppercase tracking-wider focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brutal-green";
   
   // Updated variants for Modern Brutalism (works in light/dark)
   const variants = {
@@ -29,7 +29,7 @@ export const BrutalButton: React.FC<BrutalButtonProps> = ({
     >
       {isLoading ? (
         <>
-          <span className="animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full"></span>
+           <span aria-hidden="true" className="animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full"></span>
           CALCULANDO...
         </>
       ) : children}

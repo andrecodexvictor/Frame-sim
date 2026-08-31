@@ -1,6 +1,7 @@
 
-import { SimulationConfig, SimulationOutput, SingleSimulationConfig, EnhancedBatchConfig, WarmupResult, BatchSummary, OptimizedParameters, RacingConfig, AgentConfig } from '../types';
+import { SimulationConfig, SimulationOutput, SingleSimulationConfig, EnhancedBatchConfig, WarmupResult, BatchSummary, OptimizedParameters, RacingConfig, AgentConfig, AgentResult, RaceResult, RacingMetrics } from '../types';
 import { runSimulation } from './geminiService';
+import { hashString } from '../RAG/src/core/employeeBrainCore';
 
 export interface BatchResult {
     config: SimulationConfig;
@@ -14,6 +15,75 @@ export interface BatchProgress {
     percent: number;
     message: string;
     currentIteration?: number;
+}
+
+const MAX_BATCH_ITERATIONS = 50;
+const DEFAULT_BATCH_CONCURRENCY = 3;
+
+function validateIterations(iterations: number): number {
+    if (!Number.isInteger(iterations) || iterations < 1 || iterations > MAX_BATCH_ITERATIONS) {
+        throw new RangeError(`Iterations must be an integer between 1 and ${MAX_BATCH_ITERATIONS}.`);
+    }
+    return iterations;
+}
+
+function normalizeScore(value: unknown, fallback = 50): number {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(0, Math.min(100, value))
+        : fallback;
+}
+
+function seedFor(config: SimulationConfig, label: string): number {
+    return hashString([
+        config.frameworks[0]?.name || 'framework',
+        config.companySize,
+        config.sector,
+        config.selectedScenarioId || config.customScenarioText || 'recommended',
+        label
+    ].join(':'));
+}
+
+async function mapConcurrent<T, R>(
+    values: readonly T[],
+    concurrency: number,
+    worker: (value: T, index: number) => Promise<R>
+): Promise<R[]> {
+    const results = new Array<R>(values.length);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(Math.max(1, concurrency), values.length) }, async () => {
+        while (true) {
+            const index = nextIndex++;
+            if (index >= values.length) return;
+            results[index] = await worker(values[index], index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
+
+function summarizeOutputs(outputs: SimulationOutput[]): BatchSummary {
+    if (outputs.length === 0) {
+        throw new Error('No simulation completed successfully; batch statistics are unavailable.');
+    }
+    const rois = outputs.map(o => o.summary.totalRoi).filter(Number.isFinite);
+    const adoptions = outputs.map(o => o.summary.finalAdoption).filter(Number.isFinite);
+    if (rois.length === 0 || adoptions.length === 0) {
+        throw new Error('Simulation results did not contain finite ROI/adoption values.');
+    }
+    const averageRoi = rois.reduce((a, b) => a + b, 0) / rois.length;
+    const averageAdoption = adoptions.reduce((a, b) => a + b, 0) / adoptions.length;
+    const variance = rois.reduce((sum, value) => sum + Math.pow(value - averageRoi, 2), 0) / rois.length;
+    const stdDevRoi = Math.sqrt(variance);
+    const margin = 1.96 * (stdDevRoi / Math.sqrt(rois.length));
+    return {
+        averageRoi,
+        averageAdoption,
+        successRate: (rois.filter(r => r > 0).length / rois.length) * 100,
+        stdDevRoi,
+        minRoi: Math.min(...rois),
+        maxRoi: Math.max(...rois),
+        confidenceInterval95: [averageRoi - margin, averageRoi + margin]
+    };
 }
 
 // ========== SELF-IMPROVEMENT SERVICE (Inline for Frontend) ==========
@@ -48,13 +118,17 @@ class FrontendSelfImprovementService {
                 operationalVelocity: config.operationalVelocity,
                 previousFailures: config.previousFailures,
                 scenarioContext: `[WARMUP] T=${candidateParams.temperature}`,
-                durationMonths: 6
+                durationMonths: 6,
+                economicProfileId: config.economicProfileId,
+                economicScenarioId: config.economicScenarioId,
+                temperature: candidateParams.temperature,
+                seed: seedFor(config, `warmup:${i}`)
             };
 
             const result = await runSimulation(singleConfig);
 
             // Simple plausibility score based on scenario validity
-            const score = result.summary.scenarioValidity || 50;
+            const score = normalizeScore(result.summary.scenarioValidity);
 
             history.push({ iteration: i + 1, params: candidateParams, plausibilityScore: score, timestamp: Date.now() });
 
@@ -83,9 +157,9 @@ class FrontendSelfImprovementService {
     private sampleParameters(space: any, iteration: number, history: any[]): OptimizedParameters {
         if (iteration < 2) {
             return {
-                temperature: space.temperatures[Math.floor(Math.random() * space.temperatures.length)],
-                topK: space.topKValues[Math.floor(Math.random() * space.topKValues.length)],
-                ragMode: space.ragModes[Math.floor(Math.random() * space.ragModes.length)]
+                temperature: space.temperatures[iteration % space.temperatures.length],
+                topK: space.topKValues[(iteration * 2 + 1) % space.topKValues.length],
+                ragMode: space.ragModes[(iteration * 3 + 1) % space.ragModes.length]
             };
         }
         if (this.bestParams) {
@@ -117,12 +191,15 @@ class FrontendAgentRacingService {
     async race(
         config: SimulationConfig,
         racingConfig: RacingConfig
-    ): Promise<{ winner: any; allResults: any[]; metrics: any }> {
+    ): Promise<RaceResult> {
         console.log(`⚔️ AGENT RACING: ${this.agents.length} agents competing...`);
         const startTime = Date.now();
-        const results: any[] = [];
+        const timeoutMs = Math.max(1_000, racingConfig.timeout || 120_000);
 
-        for (const agent of this.agents) {
+        const results = await Promise.all(this.agents.map(async (agent): Promise<AgentResult> => {
+            const agentStartedAt = Date.now();
+            const controller = new AbortController();
+            const timer = window.setTimeout(() => controller.abort('agent-timeout'), timeoutMs);
             const singleConfig: SingleSimulationConfig = {
                 frameworkName: config.frameworks[0]?.name || 'Framework',
                 frameworkText: config.frameworks[0]?.text || '',
@@ -135,26 +212,75 @@ class FrontendAgentRacingService {
                 operationalVelocity: config.operationalVelocity,
                 previousFailures: config.previousFailures,
                 scenarioContext: `[RACING] Agent ${agent.id} (${agent.persona})`,
-                durationMonths: config.durationMonths || 12
+                durationMonths: config.durationMonths || 12,
+                economicProfileId: config.economicProfileId,
+                economicScenarioId: config.economicScenarioId,
+                temperature: agent.temperature,
+                modelPreference: agent.model,
+                agentPersona: agent.persona,
+                seed: seedFor(config, `race:${agent.id}`)
             };
 
-            const result = await runSimulation(singleConfig);
-            const score = result.summary.scenarioValidity || 50;
-            results.push({ agentId: agent.id, agentConfig: agent, result, critiqueScore: score, success: true });
-        }
+            try {
+                const result = await runSimulation(singleConfig, { signal: controller.signal });
+                return {
+                    agentId: agent.id,
+                    agentConfig: agent,
+                    result,
+                    critiqueScore: normalizeScore(result.summary.scenarioValidity),
+                    duration: Date.now() - agentStartedAt,
+                    success: true
+                };
+            } catch (error) {
+                return {
+                    agentId: agent.id,
+                    agentConfig: agent,
+                    result: null,
+                    critiqueScore: 0,
+                    duration: Date.now() - agentStartedAt,
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Agent failed.'
+                };
+            } finally {
+                window.clearTimeout(timer);
+            }
+        }));
 
-        const winner = results.reduce((best, r) => r.critiqueScore > best.critiqueScore ? r : best);
+        const successful = results.filter((result): result is AgentResult & { result: SimulationOutput } =>
+            result.success && result.result !== null
+        );
+        if (successful.length === 0) throw new Error('All racing agents failed or timed out.');
+
+        const scoreSum = successful.reduce((sum, result) => sum + Math.max(1, result.critiqueScore), 0);
+        const ensemble = {
+            weightedROI: successful.reduce((sum, item) => sum + item.result.summary.totalRoi * Math.max(1, item.critiqueScore), 0) / scoreSum,
+            weightedAdoption: successful.reduce((sum, item) => sum + item.result.summary.finalAdoption * Math.max(1, item.critiqueScore), 0) / scoreSum,
+            confidence: successful.reduce((sum, item) => sum + item.critiqueScore, 0) / successful.length,
+            contributingAgents: successful.map(item => item.agentId)
+        };
+
+        const best = successful.reduce((current, item) => item.critiqueScore > current.critiqueScore ? item : current);
+        const winner = racingConfig.selectionStrategy === 'weighted'
+            ? successful.reduce((current, item) =>
+                Math.abs(item.result.summary.totalRoi - ensemble.weightedROI) < Math.abs(current.result.summary.totalRoi - ensemble.weightedROI)
+                    ? item
+                    : current
+            )
+            : best;
+        const averageScore = successful.reduce((sum, item) => sum + item.critiqueScore, 0) / successful.length;
+        const metrics: RacingMetrics = {
+            totalDuration: Date.now() - startTime,
+            agentsCompleted: successful.length,
+            agentsFailed: results.length - successful.length,
+            averageScore,
+            scoreVariance: successful.reduce((sum, item) => sum + Math.pow(item.critiqueScore - averageScore, 2), 0) / successful.length
+        };
 
         return {
             winner,
             allResults: results,
-            metrics: {
-                totalDuration: Date.now() - startTime,
-                agentsCompleted: results.length,
-                agentsFailed: 0,
-                averageScore: results.reduce((s, r) => s + r.critiqueScore, 0) / results.length,
-                scoreVariance: 0
-            }
+            ...(racingConfig.selectionStrategy === 'best' ? {} : { ensemble }),
+            metrics
         };
     }
 }
@@ -165,6 +291,7 @@ export const runEnhancedBatchSimulation = async (
     batchConfig: EnhancedBatchConfig,
     onProgress: (status: BatchProgress) => void
 ): Promise<BatchResult> => {
+    const iterationCount = validateIterations(batchConfig.iterations);
     const selfImprovement = new FrontendSelfImprovementService();
     const agentRacing = new FrontendAgentRacingService();
 
@@ -198,61 +325,68 @@ export const runEnhancedBatchSimulation = async (
     // ═══════════════════════════════════════════════════════════════════
     // FASE 1: BATCH EXECUTION
     // ═══════════════════════════════════════════════════════════════════
-    for (let i = 0; i < batchConfig.iterations; i++) {
-        onProgress({ phase: 'BATCH', percent: (i / batchConfig.iterations) * 100, message: `Simulação ${i + 1}/${batchConfig.iterations}`, currentIteration: i + 1 });
-
-        let result: SimulationOutput;
-
-        if (batchConfig.enableRacing && batchConfig.racingConfig) {
-            onProgress({ phase: 'RACING', percent: (i / batchConfig.iterations) * 100, message: `⚔️ Racing simulação ${i + 1}...` });
-            agentRacing.setupAgents(batchConfig.racingConfig.numAgents);
-            const raceResult = await agentRacing.race(config, batchConfig.racingConfig);
-            result = raceResult.winner.result;
-            (result as any).racingMetrics = raceResult.metrics;
-        } else {
-            const singleConfig: SingleSimulationConfig = {
-                frameworkName: config.frameworks[0]?.name || 'Framework',
-                frameworkText: config.frameworks[0]?.text || '',
-                frameworkCategory: config.frameworkCategory,
-                companySize: config.companySize,
-                sector: config.sector,
-                budgetLevel: config.budgetLevel,
-                employeeArchetypes: config.employeeArchetypes,
-                techDebtLevel: config.techDebtLevel,
-                operationalVelocity: config.operationalVelocity,
-                previousFailures: config.previousFailures,
-                scenarioContext: optimalParams ? `[OPTIMIZED] T=${optimalParams.temperature}` : `Simulation ${i + 1}`,
-                durationMonths: config.durationMonths || 12
-            };
-            result = await runSimulation(singleConfig);
+    let completed = 0;
+    const batchOutputs = await mapConcurrent(
+        Array.from({ length: iterationCount }, (_, index) => index),
+        batchConfig.enableRacing ? 1 : DEFAULT_BATCH_CONCURRENCY,
+        async (i) => {
+            let result: SimulationOutput;
+            if (batchConfig.enableRacing && batchConfig.racingConfig) {
+                onProgress({ phase: 'RACING', percent: (completed / iterationCount) * 100, message: `⚔️ Racing simulação ${i + 1}...`, currentIteration: i + 1 });
+                agentRacing.setupAgents(batchConfig.racingConfig.numAgents);
+                const raceResult = await agentRacing.race(config, batchConfig.racingConfig);
+                if (!raceResult.winner.result) throw new Error('Racing winner did not return a simulation.');
+                result = raceResult.winner.result;
+                if (raceResult.ensemble) {
+                    result = {
+                        ...result,
+                        summary: {
+                            ...result.summary,
+                            totalRoi: raceResult.ensemble.weightedROI,
+                            finalAdoption: raceResult.ensemble.weightedAdoption
+                        }
+                    };
+                }
+                (result as SimulationOutput & { racingMetrics?: RacingMetrics }).racingMetrics = raceResult.metrics;
+            } else {
+                const singleConfig: SingleSimulationConfig = {
+                    frameworkName: config.frameworks[0]?.name || 'Framework',
+                    frameworkText: config.frameworks[0]?.text || '',
+                    frameworkCategory: config.frameworkCategory,
+                    companySize: config.companySize,
+                    sector: config.sector,
+                    budgetLevel: config.budgetLevel,
+                    employeeArchetypes: config.employeeArchetypes,
+                    techDebtLevel: config.techDebtLevel,
+                    operationalVelocity: config.operationalVelocity,
+                    previousFailures: config.previousFailures,
+                    scenarioContext: optimalParams ? `[OPTIMIZED] T=${optimalParams.temperature}; run=${i + 1}` : `Simulation ${i + 1}`,
+                    durationMonths: config.durationMonths || 12,
+                    economicProfileId: config.economicProfileId,
+                    economicScenarioId: config.economicScenarioId,
+                    temperature: optimalParams?.temperature,
+                    seed: seedFor(config, `batch:${i}`)
+                };
+                result = await runSimulation(singleConfig);
+            }
+            completed++;
+            onProgress({
+                phase: 'BATCH',
+                percent: (completed / iterationCount) * 100,
+                message: `Simulações concluídas: ${completed}/${iterationCount}`,
+                currentIteration: completed
+            });
+            return result;
         }
-
-        outputs.push(result);
-    }
+    );
+    outputs.push(...batchOutputs);
 
     // ═══════════════════════════════════════════════════════════════════
     // FASE 2: CONSOLIDAÇÃO
     // ═══════════════════════════════════════════════════════════════════
     onProgress({ phase: 'CONSOLIDATION', percent: 95, message: '📊 Consolidando resultados...' });
 
-    const rois = outputs.map(o => o.summary.totalRoi);
-    const adoptions = outputs.map(o => o.summary.finalAdoption);
-    const avgRoi = rois.reduce((a, b) => a + b, 0) / rois.length;
-    const stdDevRoi = Math.sqrt(rois.map(r => Math.pow(r - avgRoi, 2)).reduce((a, b) => a + b, 0) / rois.length);
-
-    // 95% CI
-    const marginOfError = 1.96 * (stdDevRoi / Math.sqrt(rois.length));
-    const ci95: [number, number] = [avgRoi - marginOfError, avgRoi + marginOfError];
-
-    const summary: BatchSummary = {
-        averageRoi: avgRoi,
-        averageAdoption: adoptions.reduce((a, b) => a + b, 0) / adoptions.length,
-        successRate: (rois.filter(r => r > 0).length / rois.length) * 100,
-        stdDevRoi,
-        minRoi: Math.min(...rois),
-        maxRoi: Math.max(...rois),
-        confidenceInterval95: ci95
-    };
+    const summary = summarizeOutputs(outputs);
 
     onProgress({ phase: 'CONSOLIDATION', percent: 100, message: '✅ Batch completo!' });
 
@@ -265,7 +399,7 @@ export const runBatchSimulation = async (
     iterations: number,
     onProgress: (completed: number) => void
 ): Promise<BatchResult> => {
-    const outputs: SimulationOutput[] = [];
+    const iterationCount = validateIterations(iterations);
 
     const baseScenario = config.scenarioMode === 'custom'
         ? config.customScenarioText || "Nenhum cenário específico."
@@ -274,7 +408,11 @@ export const runBatchSimulation = async (
     const targetFramework = config.frameworks[0];
     if (!targetFramework) throw new Error("Nenhum framework selecionado para validação.");
 
-    for (let i = 0; i < iterations; i++) {
+    let completed = 0;
+    const settled = await mapConcurrent(
+        Array.from({ length: iterationCount }, (_, index) => index),
+        DEFAULT_BATCH_CONCURRENCY,
+        async (i): Promise<SimulationOutput | null> => {
         const singleConfig: SingleSimulationConfig = {
             frameworkName: targetFramework.name,
             frameworkText: targetFramework.text,
@@ -287,40 +425,30 @@ export const runBatchSimulation = async (
             techDebtLevel: config.techDebtLevel,
             operationalVelocity: config.operationalVelocity,
             previousFailures: config.previousFailures,
-            scenarioContext: `${baseScenario} (Simulação ${i + 1}/${iterations})`
+            scenarioContext: `${baseScenario} (Simulação ${i + 1}/${iterationCount})`,
+            durationMonths: config.durationMonths || 12,
+            economicProfileId: config.economicProfileId,
+            economicScenarioId: config.economicScenarioId,
+            seed: seedFor(config, `legacy-batch:${i}`)
         };
 
         try {
-            const result = await runSimulation(singleConfig);
-            outputs.push(result);
+            return await runSimulation(singleConfig);
         } catch (error) {
             console.error(`Batch run ${i + 1} failed`, error);
+            return null;
+        } finally {
+            completed++;
+            onProgress(completed);
         }
-
-        onProgress(i + 1);
-    }
-
-    const rois = outputs.map(o => o.summary.totalRoi);
-    const adoptions = outputs.map(o => o.summary.finalAdoption);
-    const averageRoi = rois.reduce((a, b) => a + b, 0) / rois.length;
-    const averageAdoption = adoptions.reduce((a, b) => a + b, 0) / adoptions.length;
-    const successRate = (rois.filter(r => r > 0).length / rois.length) * 100;
-    const squareDiffs = rois.map(value => Math.pow(value - averageRoi, 2));
-    const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / squareDiffs.length;
-    const stdDevRoi = Math.sqrt(avgSquareDiff);
+        }
+    );
+    const outputs = settled.filter((output): output is SimulationOutput => output !== null);
 
     return {
         config,
         outputs,
-        summary: {
-            averageRoi,
-            averageAdoption,
-            successRate,
-            stdDevRoi,
-            minRoi: Math.min(...rois),
-            maxRoi: Math.max(...rois),
-            confidenceInterval95: [averageRoi - 1.96 * (stdDevRoi / Math.sqrt(rois.length)), averageRoi + 1.96 * (stdDevRoi / Math.sqrt(rois.length))]
-        }
+        summary: summarizeOutputs(outputs)
     };
 };
 

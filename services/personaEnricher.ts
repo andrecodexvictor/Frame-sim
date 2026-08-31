@@ -107,13 +107,35 @@ const COGNITIVE_BIASES = [
     'Viés de Autoridade: Aceita opiniões de figuras de autoridade sem questionar.'
 ];
 
+type RandomSource = () => number;
+
+function hashSeed(value: string): number {
+    let hash = 2166136261;
+    for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+
+function seededRandom(seed: number): RandomSource {
+    let state = seed >>> 0;
+    return () => {
+        state += 0x6D2B79F5;
+        let t = state;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
 /**
  * Shuffles array using Fisher-Yates algorithm
  */
-function shuffle<T>(array: T[]): T[] {
+function shuffle<T>(array: T[], random: RandomSource): T[] {
     const result = [...array];
     for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(random() * (i + 1));
         [result[i], result[j]] = [result[j], result[i]];
     }
     return result;
@@ -122,8 +144,8 @@ function shuffle<T>(array: T[]): T[] {
 /**
  * Gets a random cognitive bias
  */
-export function getRandomBias(): string {
-    return COGNITIVE_BIASES[Math.floor(Math.random() * COGNITIVE_BIASES.length)];
+export function getRandomBias(random: RandomSource = seededRandom(0xF4A6E51)): string {
+    return COGNITIVE_BIASES[Math.floor(random() * COGNITIVE_BIASES.length)];
 }
 
 /**
@@ -131,13 +153,14 @@ export function getRandomBias(): string {
  */
 export function getPersonasForArchetype(
     archetype: string,
-    count: number = 2
+    count: number = 2,
+    random: RandomSource = seededRandom(hashSeed(archetype))
 ): CompactPersona[] {
     const mapping = ARCHETYPE_MAPPING[archetype];
 
     if (!mapping) {
         console.warn(`Unknown archetype: ${archetype}, using random profiles`);
-        return shuffle(profiles as CompactPersona[]).slice(0, count);
+        return shuffle(profiles as CompactPersona[], random).slice(0, count);
     }
 
     // Filter profiles by cargo
@@ -155,7 +178,7 @@ export function getPersonasForArchetype(
         matches = profiles as CompactPersona[];
     }
 
-    return shuffle(matches).slice(0, count);
+    return shuffle(matches, random).slice(0, count);
 }
 
 /**
@@ -165,7 +188,8 @@ export function getPersonasForArchetype(
  */
 export function enrichArchetypesToTeam(
     archetypes: string[],
-    companySize: number = 50
+    companySize: number = 50,
+    seed: number = hashSeed(`${[...archetypes].sort().join('|')}:${companySize}`)
 ): {
     team: CompactPersona[];
     keyStakeholders: CompactPersona[];
@@ -174,11 +198,12 @@ export function enrichArchetypesToTeam(
     const keyStakeholders: CompactPersona[] = [];
     const team: CompactPersona[] = [];
     const archetypeDistribution: Record<string, number> = {};
+    const random = seededRandom(seed);
 
     // Step 1: Selected archetypes become KEY STAKEHOLDERS (1-2 each)
     for (const archetype of archetypes) {
         const count = archetype.includes('ceo') || archetype.includes('cto') ? 1 : 2;
-        const personas = getPersonasForArchetype(archetype, count);
+        const personas = getPersonasForArchetype(archetype, count, random);
         keyStakeholders.push(...personas);
         archetypeDistribution[archetype] = personas.length;
     }
@@ -190,7 +215,7 @@ export function enrichArchetypesToTeam(
     const usedIds = new Set(keyStakeholders.map(p => p.id));
 
     for (const [role, count] of Object.entries(distribution)) {
-        const rolePersonas = getPersonasForRole(role, count, usedIds);
+        const rolePersonas = getPersonasForRole(role, count, usedIds, random);
         team.push(...rolePersonas);
         rolePersonas.forEach(p => usedIds.add(p.id));
     }
@@ -257,7 +282,8 @@ function getRealisticDistribution(companySize: number): Record<string, number> {
 function getPersonasForRole(
     role: string,
     count: number,
-    usedIds: Set<string>
+    usedIds: Set<string>,
+    random: RandomSource
 ): CompactPersona[] {
     const available = (profiles as CompactPersona[]).filter(p =>
         !usedIds.has(p.id) &&
@@ -268,10 +294,10 @@ function getPersonasForRole(
     if (available.length === 0) {
         // Fallback to any unused profile
         const fallback = (profiles as CompactPersona[]).filter(p => !usedIds.has(p.id));
-        return shuffle(fallback).slice(0, count);
+        return shuffle(fallback, random).slice(0, count);
     }
 
-    return shuffle(available).slice(0, count);
+    return shuffle(available, random).slice(0, count);
 }
 
 /**
@@ -288,7 +314,7 @@ ${i + 1}. **${p.nome}** (${p.cargo}, ${p.area})
    - Estresse: ${p.gestao_estresse}
    - Opinião Ágil: ${p.opiniao_agil}
    - Desafio: ${p.desafio_atual}
-   - Viés: ${p.vies_cognitivo || getRandomBias()}
+   - Viés: ${p.vies_cognitivo || COGNITIVE_BIASES[hashSeed(p.id) % COGNITIVE_BIASES.length]}
 `).join('\n') + (team.length > 10 ? `\n... e mais ${team.length - 10} colaboradores.` : '');
 }
 

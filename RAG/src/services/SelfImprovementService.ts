@@ -13,6 +13,7 @@ import type {
     ParameterSpace
 } from '../types/index.js';
 import { CriticAgent } from '../agents/CriticAgent.js';
+import { hashString, mulberry32 } from '../core/employeeBrainCore.js';
 
 export class SelfImprovementService {
     private criticAgent: CriticAgent;
@@ -36,6 +37,11 @@ export class SelfImprovementService {
         console.log(`   Max iterations: ${warmupConfig.maxIterations}`);
 
         const history: ConvergencePoint[] = [];
+        const random = mulberry32((warmupConfig.seed
+            ?? hashString(JSON.stringify({
+                target: warmupConfig.targetPlausibility,
+                space: warmupConfig.parameterSpace
+            }))) >>> 0);
         this.bestParams = null;
         this.bestScore = 0;
 
@@ -46,7 +52,8 @@ export class SelfImprovementService {
             const candidateParams = this.sampleParameters(
                 warmupConfig.parameterSpace,
                 i,
-                history
+                history,
+                random
             );
             console.log(`   Params: T=${candidateParams.temperature}, TopK=${candidateParams.topK}, RAG=${candidateParams.ragMode}`);
 
@@ -113,20 +120,21 @@ export class SelfImprovementService {
     private sampleParameters(
         space: ParameterSpace,
         iteration: number,
-        history: ConvergencePoint[]
+        history: ConvergencePoint[],
+        random: () => number
     ): OptimizedParameters {
         // Primeiras iterações: exploração aleatória
         if (iteration < 2 || history.length === 0) {
             return {
-                temperature: space.temperatures[Math.floor(Math.random() * space.temperatures.length)],
-                topK: space.topKValues[Math.floor(Math.random() * space.topKValues.length)],
-                ragMode: space.ragModes[Math.floor(Math.random() * space.ragModes.length)]
+                temperature: space.temperatures[Math.floor(random() * space.temperatures.length)],
+                topK: space.topKValues[Math.floor(random() * space.topKValues.length)],
+                ragMode: space.ragModes[Math.floor(random() * space.ragModes.length)]
             };
         }
 
         // Iterações posteriores: perturbação do melhor
         if (this.bestParams) {
-            return this.perturbParams(this.bestParams, space);
+            return this.perturbParams(this.bestParams, space, random);
         }
 
         // Fallback
@@ -138,7 +146,8 @@ export class SelfImprovementService {
      */
     private perturbParams(
         base: OptimizedParameters,
-        space: ParameterSpace
+        space: ParameterSpace,
+        random: () => number
     ): OptimizedParameters {
         const tempIdx = space.temperatures.indexOf(base.temperature);
         const topKIdx = space.topKValues.indexOf(base.topK);
@@ -146,18 +155,18 @@ export class SelfImprovementService {
         // Pequena variação (±1 no índice)
         const newTempIdx = Math.max(0, Math.min(
             space.temperatures.length - 1,
-            tempIdx + (Math.random() > 0.5 ? 1 : -1)
+            tempIdx + (random() > 0.5 ? 1 : -1)
         ));
         const newTopKIdx = Math.max(0, Math.min(
             space.topKValues.length - 1,
-            topKIdx + (Math.random() > 0.5 ? 1 : -1)
+            topKIdx + (random() > 0.5 ? 1 : -1)
         ));
 
         return {
             temperature: space.temperatures[newTempIdx],
             topK: space.topKValues[newTopKIdx],
-            ragMode: Math.random() > 0.8
-                ? space.ragModes[Math.floor(Math.random() * space.ragModes.length)]
+            ragMode: random() > 0.8
+                ? space.ragModes[Math.floor(random() * space.ragModes.length)]
                 : base.ragMode
         };
     }

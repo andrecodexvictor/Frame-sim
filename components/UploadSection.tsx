@@ -19,7 +19,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
 
   const handleAddFramework = () => {
     if (inputs.length < 5) {
-      setInputs([...inputs, { id: Math.random().toString(36).substr(2, 9), name: '', text: '' }]);
+      setInputs([...inputs, { id: crypto.randomUUID(), name: '', text: '' }]);
     }
   };
 
@@ -174,12 +174,14 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
         <div className="grid grid-cols-2 mb-6 border-b-4 border-brutal-black dark:border-zinc-700">
           <button
             onClick={() => { setMode('single'); setInputs([{ id: '1', name: '', text: '' }]); }}
+            aria-pressed={mode === 'single'}
             className={`p-4 font-mono font-bold text-sm uppercase flex items-center justify-center gap-2 transition-colors ${mode === 'single' ? 'bg-brutal-black text-white dark:bg-zinc-200 dark:text-black' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:text-zinc-400'}`}
           >
             <Zap className="w-4 h-4" /> Simulação Única
           </button>
           <button
             onClick={() => { setMode('compare'); if (inputs.length < 2) handleAddFramework(); }}
+            aria-pressed={mode === 'compare'}
             className={`p-4 font-mono font-bold text-sm uppercase flex items-center justify-center gap-2 transition-colors ${mode === 'compare' ? 'bg-brutal-black text-white dark:bg-zinc-200 dark:text-black' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:text-zinc-400'}`}
           >
             <Layers className="w-4 h-4" /> Comparar (2-5)
@@ -190,8 +192,9 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
           {mode === 'single' ? (
             <div className="space-y-6">
               <div className="space-y-2">
-                <label className="font-bold text-lg font-mono uppercase dark:text-zinc-200">Nome do Framework</label>
+                <label htmlFor="framework-name" className="font-bold text-lg font-mono uppercase dark:text-zinc-200">Nome do Framework</label>
                 <input
+                  id="framework-name"
                   type="text"
                   className="w-full p-4 border-4 border-brutal-black dark:border-zinc-600 font-mono text-lg focus:outline-none focus:ring-4 focus:ring-brutal-green/30 bg-zinc-50 dark:bg-zinc-900 dark:text-white placeholder-zinc-400"
                   placeholder="EX: SCRUM"
@@ -232,6 +235,8 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
                 </div>
                 <input
                   type="file"
+                  aria-label="Importar documento técnico do framework"
+                  accept=".txt,.md,.json,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={(e) => handleFileSelect(inputs[0].id, e)}
                   disabled={isProcessing}
@@ -243,7 +248,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold font-mono uppercase text-sm dark:text-zinc-300">Frameworks para Batalha ({inputs.length}/5)</h3>
                 {inputs.length < 5 && (
-                  <button onClick={handleAddFramework} className="text-xs font-bold font-mono uppercase flex items-center gap-1 hover:text-brutal-green dark:text-zinc-400 dark:hover:text-brutal-green">
+                  <button type="button" onClick={handleAddFramework} className="text-xs font-bold font-mono uppercase flex items-center gap-1 hover:text-brutal-green dark:text-zinc-400 dark:hover:text-brutal-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brutal-green">
                     <Plus className="w-3 h-3" /> Adicionar
                   </button>
                 )}
@@ -254,20 +259,23 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onNext }) => {
                   <div className="flex-1 bg-zinc-50 dark:bg-zinc-900 border-2 border-brutal-black dark:border-zinc-600 p-2 flex items-center gap-4 focus-within:border-brutal-green transition-colors">
                     <span className="font-mono font-bold text-zinc-400 px-2">0{idx + 1}</span>
                     <input
+                      id={`framework-name-${input.id}`}
                       type="text"
                       placeholder={`Nome do Framework ${idx + 1}`}
                       className="bg-transparent w-full font-mono text-sm uppercase focus:outline-none dark:text-white"
                       value={input.name}
                       onChange={(e) => handleInputChange(input.id, 'name', e.target.value)}
                     />
-                    <label className={`cursor-pointer p-2 rounded transition-all ${input.text ? 'bg-brutal-green/20 text-brutal-green' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400'}`} title="Importar Arquivo">
-                      <input type="file" className="hidden" onChange={(e) => handleFileSelect(input.id, e)} disabled={isProcessing} />
+                    <label htmlFor={`framework-file-${input.id}`} aria-label={`Importar arquivo para ${input.name || `framework ${idx + 1}`}`} className={`cursor-pointer p-2 rounded transition-all ${input.text ? 'bg-brutal-green/20 text-brutal-green' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400'}`} title="Importar Arquivo">
+                      <input id={`framework-file-${input.id}`} type="file" accept=".txt,.md,.json,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={(e) => handleFileSelect(input.id, e)} disabled={isProcessing} />
                       {isProcessing && idx === 0 ? <Loader2 className="w-4 h-4 animate-spin" /> : (input.text ? <Check className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />)}
                     </label>
                   </div>
                   {inputs.length > 2 && (
                     <button
+                      type="button"
                       onClick={() => handleRemoveFramework(input.id)}
+                      aria-label={`Remover ${input.name || `framework ${idx + 1}`}`}
                       className="p-3 bg-red-100 hover:bg-red-200 text-red-600 border-2 border-brutal-black dark:border-zinc-600 dark:bg-red-900/20 dark:text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />

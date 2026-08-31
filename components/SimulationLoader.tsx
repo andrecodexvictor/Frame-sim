@@ -32,7 +32,7 @@ export const SimulationLoader: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full max-w-4xl mx-auto text-center space-y-12 animate-fade-in py-12 relative overflow-hidden min-h-[60vh] flex flex-col justify-center items-center">
+    <div className="w-full max-w-4xl mx-auto text-center space-y-12 animate-fade-in py-12 relative overflow-hidden min-h-[60vh] flex flex-col justify-center items-center" role="status" aria-live="polite" aria-busy="true">
       
       {/* Background Ambience - Walking People / Office */}
       <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden z-0">
@@ -82,12 +82,12 @@ export const SimulationLoader: React.FC = () => {
         
         <div className="space-y-2 mb-8">
           <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tighter">
-            Simulando<span className="animate-pulse">...</span>
+             Simulação em andamento
           </h2>
-          <p className="font-mono text-sm text-gray-500">Isso pode levar alguns segundos.</p>
+           <p className="font-mono text-sm text-gray-500">O tempo varia conforme o documento e o modo escolhido. As mensagens abaixo são etapas recentes, não uma porcentagem de progresso.</p>
         </div>
         
-        <div className="w-full max-w-2xl bg-black/90 border border-[#333] p-6 h-64 overflow-hidden flex flex-col justify-end shadow-2xl relative">
+        <div className="w-full max-w-2xl bg-black/90 border border-[#333] p-6 h-64 overflow-hidden flex flex-col justify-end shadow-2xl relative" role="log" aria-label="Etapas recentes da simulação" aria-live="polite">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#00ff88] to-transparent opacity-50"></div>
           {log.map((line, idx) => (
             <div key={idx} className="text-xs md:text-sm font-mono flex items-center gap-2 mb-1">
@@ -95,7 +95,7 @@ export const SimulationLoader: React.FC = () => {
               <span className="text-gray-300">{line}</span>
             </div>
           ))}
-          <div className="w-2 h-4 bg-[#00ff88] animate-pulse mt-1"></div>
+          <div aria-hidden="true" className="w-2 h-4 bg-[#00ff88] animate-pulse mt-1"></div>
         </div>
       </div>
     </div>

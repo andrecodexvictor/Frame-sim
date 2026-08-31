@@ -5,7 +5,6 @@
  * Usa Self-RAG para decidir automaticamente quando usar retrieval
  */
 
-import { GoogleGenAI } from "@google/genai";
 import type { SingleSimulationConfig } from "../types";
 import archetypeExamplesData from '../data/archetype_examples.json';
 
@@ -60,45 +59,29 @@ const TECH_DEBT_MODIFIERS: Record<string, { bugs: number; velocity: number; taxa
  */
 export async function classifyQuery(
     query: string,
-    apiKey: string
+    _apiKey?: string
 ): Promise<QueryClassification> {
-    const ai = new GoogleGenAI({ apiKey });
+    const normalized = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const has = (...terms: string[]) => terms.some(term => normalized.includes(term));
 
-    const prompt = `Classifique esta query para um sistema de simulação empresarial:
-
-Query: "${query}"
-
-Tipos:
-- PERSONA_PURA: Comportamento de stakeholder específico (ex: "Como o CEO reagiria?") → NÃO precisa RAG
-- CALCULO_ROI: Métricas financeiras (ex: "Qual o break-even?") → Precisa metrics
-- CENARIO_COMPARATIVO: Compara frameworks (ex: "Scrum vs Kanban?") → Precisa playbooks+metrics
-- EVENTO_SIMULACAO: Eventos/riscos (ex: "O que causa incidente?") → Precisa events
-- HIBRIDO: Combina aspectos → Precisa múltiplas fontes
-
-Retorne JSON: {"mode": "TIPO", "confidence": 0.0-1.0, "collections": ["profiles"|"metrics"|"events"|"playbooks"]}`;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-        });
-
-        const result = JSON.parse(response.text || '{}');
-        return {
-            mode: result.mode || 'HIBRIDO',
-            confidence: result.confidence || 0.5,
-            shouldUseRAG: result.mode !== 'PERSONA_PURA',
-            collections: result.collections || []
-        };
-    } catch {
-        return {
-            mode: 'HIBRIDO',
-            confidence: 0.5,
-            shouldUseRAG: true,
-            collections: ['profiles', 'metrics', 'playbooks', 'events']
-        };
+    if (has('roi', 'break-even', 'break even', 'custo', 'payback')) {
+        return { mode: 'CALCULO_ROI', confidence: 0.86, shouldUseRAG: true, collections: ['metrics'] };
     }
+    if (has(' versus ', ' vs ', 'compar', 'melhor framework')) {
+        return { mode: 'CENARIO_COMPARATIVO', confidence: 0.82, shouldUseRAG: true, collections: ['playbooks', 'metrics'] };
+    }
+    if (has('risco', 'evento', 'incidente', 'falha', 'burnout', 'demissao')) {
+        return { mode: 'EVENTO_SIMULACAO', confidence: 0.82, shouldUseRAG: true, collections: ['events', 'profiles'] };
+    }
+    if (has('reagiria', 'persona', 'stakeholder', 'ceo', 'cto', 'cfo', 'funcionario')) {
+        return { mode: 'PERSONA_PURA', confidence: 0.78, shouldUseRAG: false, collections: [] };
+    }
+    return {
+        mode: 'HIBRIDO',
+        confidence: 0.55,
+        shouldUseRAG: true,
+        collections: ['profiles', 'metrics', 'playbooks', 'events']
+    };
 }
 
 /**
@@ -353,7 +336,7 @@ export function buildOptimizedPrompt(
 Atue como uma Engine de Realidade Estendida (XRE) e CFO Virtual Multidimensional.
 
 OBJETIVO:
-Simular a implementação do framework "${config.frameworkName}" com 95% de fidelidade ao mundo real.
+Simular a implementação do framework "${config.frameworkName}" com hipóteses rastreáveis e incerteza explícita.
 ${skipMessage}
 
 DADOS DE ENTRADA:

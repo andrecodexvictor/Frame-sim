@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "plausibilityThreshold": 70,
+  "rules": [
+    {
+      "id": "extreme_single_run_roi",
+      "description": "ROI final acima de 500% em uma única simulação é altamente implausível.",
+      "metric": "roi_final",
+      "operator": "greater_than",
+      "value": 500,
+      "maxPlausibility": 20
+    },
+    {
+      "id": "extreme_negative_roi",
+      "description": "ROI final abaixo de -95% exige revisão das premissas e dos clamps financeiros.",
+      "metric": "roi_final",
+      "operator": "less_than",
+      "value": -95,
+      "maxPlausibility": 35
+    }
+  ]
+}

@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="FrameSim: simule a adoção de frameworks corporativos com cenários, ROI e sinais humanos emergentes." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0a'/%3E%3Cpath d='M7 6h19v5H13v4h11v5H13v7H7z' fill='%2300ff88'/%3E%3C/svg%3E" />
     <title>FrameSim // Enterprise Framework Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -50,13 +52,9 @@
     </script>
     <style>
       body {
-        background-color: #f4f4f5;
-        color: #0a0a0a;
-        overflow-x: hidden;
-      }
-      .dark body {
         background-color: #09090b;
         color: #fafafa;
+        overflow-x: hidden;
       }
       .custom-scrollbar::-webkit-scrollbar {
         width: 8px;
@@ -68,88 +66,24 @@
         background: #00ff88;
         border: 2px solid #18181b;
       }
-      /* Brutalist Utilities */
       .brutal-border {
-<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FrameSim // Enterprise Framework Simulator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['Space Mono', 'monospace'],
-            },
-            colors: {
-              brutal: {
-                black: '#0a0a0a',
-                white: '#fafafa',
-                green: '#00ff88',
-                purple: '#ff00ff',
-                red: '#ff3366',
-                yellow: '#ffaa00',
-              }
-            },
-            boxShadow: {
-              'hard': '4px 4px 0px 0px #0a0a0a',
-              'hard-green': '4px 4px 0px 0px #00ff88',
-            },
-            animation: {
-              'fade-in': 'fadeIn 0.5s ease-out forwards',
-              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
-              'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            },
-            keyframes: {
-              fadeIn: {
-                '0%': { opacity: '0' },
-                '100%': { opacity: '1' },
-              },
-              fadeInUp: {
-                '0%': { opacity: '0', transform: 'translateY(20px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      body {
-        background-color: #f4f4f5;
-        color: #0a0a0a;
-        overflow-x: hidden;
-      }
-      .dark body {
-        background-color: #09090b;
-        color: #fafafa;
-      }
-      .custom-scrollbar::-webkit-scrollbar {
-        width: 8px;
-      }
-      .custom-scrollbar::-webkit-scrollbar-track {
-        background: #18181b;
-      }
-      .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #00ff88;
-        border: 2px solid #18181b;
-      }
-      /* Brutalist Utilities */
-      .brutal-border {
-        border: 3px solid #0a0a0a;
-      }
-      .dark .brutal-border {
         border: 3px solid #27272a;
+      }
+      :focus-visible {
+        outline: 3px solid #00ff88 !important;
+        outline-offset: 2px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     </style>
     <script type="module" src="/index.tsx"></script>
-</head>
+  </head>
   <body class="antialiased transition-colors duration-300 selection:bg-brutal-green selection:text-black">
     <div id="root"></div>
   </body>

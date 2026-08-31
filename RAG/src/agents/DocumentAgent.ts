@@ -8,8 +8,7 @@
  * - Indexar chunks no Vector Store para RAG dinâmico
  */
 
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { geminiModel } from '../services/LLMProvider.js';
+import { GeminiProvider, LLMFactory, type LLMProvider } from '../services/LLMProvider.js';
 import { SmartChunker, ChunkingResult } from '../services/SmartChunker.js';
 import { UserFrameworkStore, IndexingResult } from '../services/UserFrameworkStore.js';
 
@@ -31,6 +30,8 @@ export interface DocumentDigest {
     chunksCreated?: number;
     documentId?: string;
     indexed?: boolean;
+    degraded?: boolean;
+    warning?: string;
 }
 
 export interface LargeDocumentResult {
@@ -64,16 +65,14 @@ DOCUMENTO ORIGINAL:
 {document}`;
 
 export class DocumentAgent {
-    private llm: ChatGoogleGenerativeAI;
+    private llm?: LLMProvider;
     private chunker: SmartChunker;
     private vectorStore: UserFrameworkStore;
 
     constructor(apiKey?: string) {
-        this.llm = new ChatGoogleGenerativeAI({
-            apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            model: geminiModel(),
-            temperature: 0.3, // Low temperature for factual extraction
-        });
+        this.llm = apiKey
+            ? new GeminiProvider({ keys: [apiKey] })
+            : LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined;
         this.chunker = new SmartChunker();
         this.vectorStore = new UserFrameworkStore();
     }
@@ -110,10 +109,9 @@ export class DocumentAgent {
         const prompt = DIGEST_PROMPT.replace('{document}', truncatedText);
 
         try {
-            const response = await this.llm.invoke(prompt);
-            const content = typeof response.content === 'string'
-                ? response.content
-                : JSON.stringify(response.content);
+            if (!this.llm) throw new Error('No document provider configured');
+            const response = await this.llm.generate(prompt);
+            const content = response.content;
 
             // Extract JSON from response
             const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -135,14 +133,15 @@ export class DocumentAgent {
                 compressionRatio: rawText.length > 0
                     ? parseFloat(((parsed.manifesto?.length || 0) / rawText.length * 100).toFixed(2))
                     : 0,
-                isLargeDocument: false
+                isLargeDocument: false,
+                degraded: false
             };
 
             console.log(`✅ DocumentAgent: Digested to ${digest.digestedLength} chars (${digest.compressionRatio}% of original)`);
             return digest;
 
         } catch (error) {
-            console.error('❌ DocumentAgent: Falha na digestão:', error);
+            console.error(`❌ DocumentAgent: digestão degradada (${error instanceof Error ? error.name : 'Unavailable'}).`);
             // Fallback: return raw text as manifesto
             return {
                 manifesto: rawText.slice(0, 4000),
@@ -154,7 +153,9 @@ export class DocumentAgent {
                 rawLength: rawText.length,
                 digestedLength: Math.min(rawText.length, 4000),
                 compressionRatio: 100,
-                isLargeDocument: false
+                isLargeDocument: false,
+                degraded: true,
+                warning: 'O provedor não concluiu a extração; o manifesto contém apenas um recorte do documento original.'
             };
         }
     }
@@ -180,7 +181,7 @@ export class DocumentAgent {
                 indexingResult = await this.vectorStore.indexDocument(chunkingResult);
                 console.log(`   Indexed ${indexingResult.chunksIndexed} chunks in Vector Store`);
             } catch (error) {
-                console.warn('   ⚠️ Vector Store indexing failed (continuing without):', error);
+                console.warn(`   ⚠️ Vector Store indexing failed; continuing without it (${error instanceof Error ? error.name : 'Unavailable'}).`);
             }
         }
 
@@ -275,7 +276,11 @@ ESTRUTURA DO DOCUMENTO:
             compressionRatio: 0,
             isLargeDocument: digests.some(d => d.isLargeDocument),
             chunksCreated: digests.reduce((sum, d) => sum + (d.chunksCreated || 0), 0),
-            indexed: digests.some(d => d.indexed)
+            indexed: digests.some(d => d.indexed),
+            degraded: digests.some(d => d.degraded),
+            warning: digests.some(d => d.degraded)
+                ? 'Ao menos um documento usou o recorte de contingência; revise o manifesto antes da simulação.'
+                : undefined
         };
 
         merged.compressionRatio = merged.rawLength > 0

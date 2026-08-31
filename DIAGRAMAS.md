@@ -27,7 +27,7 @@ graph TB
         CFG["ConfigForm<br/>17 arquétipos corporativos"]
         DASH["Dashboard<br/>keyPersonas, ROI, timeline, emergentEvents"]
         AGSVC["agenticService.ts<br/>cliente HTTP :3002 + fallback legacy"]
-        GEM["geminiService.ts<br/>engine standard<br/>rotação 7 chaves VITE_API_KEY"]
+        GEM["geminiService.ts<br/>engine standard<br/>gateway /api/generate"]
         ENR["personaEnricher.ts<br/>arquétipos → personas reais"]
         METR["metricsCalculator.ts<br/>ROI determinístico: Curva J,<br/>dívida técnica, CoNQ, SurpriseFactor, Fit"]
         RAGS["ragService.ts<br/>pseudo-RAG few-shot + cenários responsivos"]
@@ -78,9 +78,10 @@ graph TB
     GEM --> RAGS
     GEM --> METR
     GEM -->|"pré-LLM"| OFF
-    GEM --> GEMINI
-    GEM -.->|"fallback"| GPT
-    GEM -.->|"fallback"| DS
+    GEM -->|"POST /api/generate"| SRV
+    SRV --> GEMINI
+    SRV -.->|"fallback server-side"| GPT
+    SRV -.->|"fallback server-side"| DS
     ENR --> COMPACT
     RAGS --> EXAMPLES
     METR --> COSTS
@@ -159,7 +160,7 @@ graph TD
 
 ## 3. Fluxo Standard
 
-Simulação 100% no browser: enriquecimento de personas → EmployeeBrain offline → prompt → LLM → pós-processamento determinístico ([ARCHITECTURE.md §2](ARCHITECTURE.md)).
+Fluxo da interface: enriquecimento de personas → EmployeeBrain offline → gateway server-side → LLM → pós-processamento determinístico ([ARCHITECTURE.md §2](ARCHITECTURE.md)). Nenhuma credencial de provedor deve ir para o browser.
 
 ```mermaid
 sequenceDiagram
@@ -169,7 +170,7 @@ sequenceDiagram
     participant Enricher as personaEnricher
     participant RAG as ragService
     participant Metrics as metricsCalculator
-    participant API as Gemini API<br/>gemini-2.5-flash
+    participant API as Provider Gateway<br/>POST /api/generate
 
     Usuário->>App: handleConfigSubmit(config)
     App->>Gemini: runSimulation(singleConfig)
@@ -187,7 +188,7 @@ sequenceDiagram
     Gemini->>Metrics: getCostProfile(economicProfileId)
     Gemini->>Metrics: calculateFrameworkFit(framework, size, budget, categoria)
 
-    Gemini->>API: generateContent(prompt, responseSchema=SIMULATION_SCHEMA)
+    Gemini->>API: POST /api/generate(prompt, responseSchema=SIMULATION_SCHEMA)
     API-->>Gemini: JSON com summary, timeline 12x rawData, keyPersonas, risks
 
     Note over Gemini: PÓS-PROCESSAMENTO DETERMINÍSTICO —<br/>o ROI do LLM é descartado
@@ -332,16 +333,11 @@ Resiliência do frontend a quota/erros ([ARCHITECTURE.md §5](ARCHITECTURE.md)).
 
 ```mermaid
 flowchart TD
-    Start["runSimulation(config)"] --> Key["API Key atual do pool de 7"]
-    Key --> Call["Gemini gemini-2.5-flash"]
-    Call -->|"sucesso"| PostProc["Pós-processamento determinístico do ROI"]
-    Call -->|"erro 429/quota e retryCount < 7"| Rotate["getNextApiKey() → próxima chave do pool"]
-    Rotate --> Call
-    Call -->|"7 tentativas esgotadas OU erro não-quota"| OpenAI["runSimulationWithOpenAI()<br/>GPT-4, prompt simplificado"]
-    OpenAI -->|"sucesso"| Result["SimulationOutput (sem pós-proc. de ROI)"]
-    OpenAI -->|"falha ou sem chave"| DeepSeek["runSimulationWithDeepSeek()"]
-    DeepSeek -->|"sucesso"| Result
-    DeepSeek -->|"falha ou sem chave"| Mock["MOCK_SIMULATION_RESULT"]
+    Start["runSimulation(config)"] --> Call["POST /api/generate"]
+    Call --> Gateway["ProviderGateway<br/>credenciais server-side"]
+    Gateway -->|"sucesso/fallback"| Result["conteúdo do provedor"]
+    Call -->|"gateway indisponível"| Mock["MOCK_SIMULATION_RESULT"]
+    Result --> PostProc["Pós-processamento determinístico do ROI"]
     PostProc --> Result2["SimulationOutput (ROI real)"]
 ```
 

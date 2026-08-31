@@ -46,6 +46,7 @@ export interface SimulationConfig {
 
   // Economic Profile (Custo Dinâmico)
   economicProfileId?: string; // e.g., 'br_pme', 'br_startup', 'us_faang'
+  economicScenarioId?: 'auto' | 'recession' | 'base' | 'expansion';
 
   // Agentic Mode
   simulationMode?: 'standard' | 'agentic';
@@ -67,6 +68,15 @@ export interface SingleSimulationConfig {
   previousFailures: boolean;
   scenarioContext: string;
   durationMonths?: number;
+  /** Cost assumptions selected in the configuration UI. */
+  economicProfileId?: string;
+  economicScenarioId?: 'auto' | 'recession' | 'base' | 'expansion';
+  /** Explicit run seed: same inputs + seed must select the same people/events. */
+  seed?: number;
+  /** Racing overrides consumed by the provider gateway. */
+  temperature?: number;
+  modelPreference?: string;
+  agentPersona?: string;
 }
 
 export interface SimulationOutput {
@@ -106,10 +116,22 @@ export interface SimulationOutput {
   }>;
 
   keyPersonas: Array<{
+    id?: string;
+    name?: string;
     role: string;
     archetype: string;
     sentiment: number;
     impact: string;
+    area?: string;
+    motivation?: string;
+    cognitiveBias?: string;
+    communicationStyle?: string;
+    challenge?: string;
+    preferredFramework?: string;
+    status?: string;
+    stress?: number;
+    energy?: number;
+    engagement?: number;
   }>;
 
   risks: Array<{
@@ -170,6 +192,16 @@ export interface SimulationOutput {
 
   // EmployeeBrain: eventos emergentes (demissões, burnout, etc) previstos pelo modelo de equipe
   emergentEvents?: Array<{ month: number; persona: string; type: string; event: string }>;
+
+  // Provenance: prevents fixtures/degraded output from looking like a live run.
+  execution?: {
+    mode: 'live' | 'degraded' | 'fixture';
+    provider: string;
+    model: string;
+    attempts: number;
+    seed?: number;
+    warning?: string;
+  };
 }
 
 export interface AgenticMetrics {
@@ -178,6 +210,13 @@ export interface AgenticMetrics {
   cost_estimate_usd: number;
   total_tokens: number;
   router_choice: string;
+  input_tokens: number;
+  output_tokens: number;
+  replan_count: number;
+  risk_incidents: number;
+  /** Taxa de incidência de risco: incidentes por ciclo, em percentual. */
+  tir: number;
+  degraded: boolean;
 }
 
 // === SELF-IMPROVEMENT TYPES ===

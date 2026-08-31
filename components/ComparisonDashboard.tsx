@@ -84,7 +84,7 @@ export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ result
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded border ${theme.border} hover:bg-zinc-500/10 transition-colors`}>
+            <button onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'} title={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'} className={`p-2 rounded border ${theme.border} hover:bg-zinc-500/10 transition-colors`}>
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
             <BrutalButton variant="secondary" className="text-xs h-9 px-4" onClick={onReset}>Nova Comparação</BrutalButton>

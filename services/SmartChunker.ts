@@ -356,7 +356,7 @@ export class SmartChunker {
      * Gera ID único
      */
     private generateId(): string {
-        return `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `doc_${Date.now()}_${crypto.randomUUID()}`;
     }
 }
 

@@ -32,6 +32,49 @@ export interface CostConstants {
     TURNOVER_COST_MULTIPLIER: number;
 }
 
+export type RandomSource = () => number;
+
+function deterministicRandom(...parts: Array<string | number | boolean | undefined>): RandomSource {
+    const input = parts.join('|');
+    let seed = 2166136261;
+    for (let index = 0; index < input.length; index++) {
+        seed ^= input.charCodeAt(index);
+        seed = Math.imul(seed, 16777619);
+    }
+    let state = seed >>> 0;
+    return () => {
+        state += 0x6D2B79F5;
+        let value = state;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+export interface EconomicScenarioAssumptions {
+    id: 'recession' | 'base' | 'expansion';
+    label: string;
+    demandMultiplier: number;
+    laborCostMultiplier: number;
+    budgetMultiplier: number;
+    incidentMultiplier: number;
+    uncertainty: string;
+}
+
+const ECONOMIC_SCENARIOS: Record<EconomicScenarioAssumptions['id'], EconomicScenarioAssumptions> = {
+    recession: { id: 'recession', label: 'Recessão', demandMultiplier: 0.75, laborCostMultiplier: 1.05, budgetMultiplier: 0.8, incidentMultiplier: 1.25, uncertainty: 'Hipótese de demanda menor e pressão de caixa; não é previsão.' },
+    base: { id: 'base', label: 'Base', demandMultiplier: 1, laborCostMultiplier: 1, budgetMultiplier: 1, incidentMultiplier: 1, uncertainty: 'Referência neutra; não é previsão macroeconômica.' },
+    expansion: { id: 'expansion', label: 'Expansão', demandMultiplier: 1.25, laborCostMultiplier: 1.1, budgetMultiplier: 1.2, incidentMultiplier: 0.95, uncertainty: 'Hipótese de demanda e investimento maiores; não é previsão.' }
+};
+
+export const getEconomicScenario = (scenarioId?: string, seed = 0): EconomicScenarioAssumptions => {
+    if (scenarioId === 'auto') {
+        const ids: EconomicScenarioAssumptions['id'][] = ['recession', 'base', 'expansion'];
+        return ECONOMIC_SCENARIOS[ids[(Math.trunc(seed) >>> 0) % ids.length]];
+    }
+    return ECONOMIC_SCENARIOS[scenarioId as EconomicScenarioAssumptions['id']] || ECONOMIC_SCENARIOS.base;
+};
+
 // Default Constants (fallback if no profile selected)
 const DEFAULT_CONSTANTS: CostConstants = {
     DEV_DAY_COST: 400,
@@ -86,8 +129,18 @@ export const getAllCostProfiles = () => {
  */
 export const calculateSurpriseFactor = (
     rawData: SimulationRawData,
-    config: SimulationConfig
+    config: SimulationConfig,
+    random?: RandomSource
 ): { multiplier: number; triggered: boolean; reason?: string } => {
+    const rng = random ?? deterministicRandom(
+        (config as SimulationConfig & { seed?: number }).seed,
+        rawData.month,
+        rawData.teamSize,
+        rawData.featuresDelivered,
+        rawData.bugsGenerated,
+        rawData.learningCurveFactor,
+        config.techDebtLevel
+    );
 
     // Sinais de adaptação excepcional
     const highAdaptation = rawData.learningCurveFactor >= 1.1;
@@ -103,7 +156,7 @@ export const calculateSurpriseFactor = (
     if (smallAgileTeam) surpriseProbability += 0.03; // Pequenas equipes podem ser mais ágeis
 
     // Roll the dice
-    const roll = Math.random();
+    const roll = rng();
     const triggered = roll < surpriseProbability;
 
     if (!triggered) {
@@ -111,7 +164,7 @@ export const calculateSurpriseFactor = (
     }
 
     // Determinar intensidade da surpresa (1.15 a 1.40)
-    let multiplier = 1.15 + (Math.random() * 0.25);
+    let multiplier = 1.15 + (rng() * 0.25);
     let reason = '🎲 Adoção Surpreendente: ';
 
     if (highAdaptation && lowBugRatio) {
@@ -182,8 +235,10 @@ export const calculateFrameworkFit = (
     frameworkName: string,
     companySize: number,
     budgetLevel: string,
-    category: string
+    category: string,
+    random?: RandomSource
 ): { multiplier: number; fitLevel: 'EXCELENTE' | 'BOM' | 'NEUTRO' | 'RUIM' | 'PÉSSIMO'; reason: string } => {
+    const rng = random ?? deterministicRandom(frameworkName, companySize, budgetLevel, category);
 
     // Detectar complexidade do framework pelo nome
     const nameLower = frameworkName.toLowerCase();
@@ -215,7 +270,7 @@ export const calculateFrameworkFit = (
 
     // CENÁRIO 1: Framework leve + empresa pequena = EXCELENTE
     if (complexity === 'lightweight' && isSmall) {
-        multiplier = 1.20 + (Math.random() * 0.15); // 1.20 a 1.35
+        multiplier = 1.20 + (rng() * 0.15); // 1.20 a 1.35
         fitLevel = 'EXCELENTE';
         reason = `🎯 FIT EXCELENTE: ${frameworkName} é ideal para equipes pequenas e ágeis.`;
     }
@@ -227,7 +282,7 @@ export const calculateFrameworkFit = (
     }
     // CENÁRIO 3: Framework enterprise + empresa pequena sem budget = PÉSSIMO
     else if (complexity === 'enterprise' && isSmall && hasLowBudget) {
-        multiplier = 0.60 + (Math.random() * 0.10); // 0.60 a 0.70
+        multiplier = 0.60 + (rng() * 0.10); // 0.60 a 0.70
         fitLevel = 'PÉSSIMO';
         reason = `❌ FIT PÉSSIMO: ${frameworkName} é muito pesado para uma empresa pequena sem orçamento. Overhead excessivo.`;
     }
@@ -263,15 +318,27 @@ export const calculateMonthlyMetrics = (
     config: SimulationConfig,
     previousAccumulatedValue: number = 0,
     previousAccumulatedOpEx: number = 0,
-    previousAccumulatedCoNQ: number = 0
+    previousAccumulatedCoNQ: number = 0,
+    random?: RandomSource
 ): CalculatedMetrics => {
+    const rng = random ?? deterministicRandom(
+        (config as SimulationConfig & { seed?: number }).seed,
+        rawData.month,
+        rawData.teamSize,
+        rawData.featuresDelivered,
+        rawData.bugsGenerated,
+        rawData.criticalIncidents,
+        config.techDebtLevel,
+        config.economicScenarioId
+    );
 
     // Use dynamic cost profile or fallback to default
     const constants = getCostConstants(config.economicProfileId);
+    const economicScenario = getEconomicScenario(config.economicScenarioId, Number((config as SimulationConfig & { seed?: number }).seed) || 0);
 
     // 1. Calculate OpEx (Operational Expenditure)
     // Formula: (Devs * DailyCost * 22 days)
-    const opEx = rawData.teamSize * constants.DEV_DAY_COST * 22;
+    const opEx = rawData.teamSize * constants.DEV_DAY_COST * 22 * economicScenario.laborCostMultiplier;
 
     // 2. Calculate Value Delivered
     // Formula: Features * ValuePerPoint * LearningCurve
@@ -284,7 +351,7 @@ export const calculateMonthlyMetrics = (
     const teamScaleFactor = Math.log10(Math.max(10, rawData.teamSize)) / 2;
 
     // Feature Value (New Deliverables)
-    const featureValue = rawData.featuresDelivered * constants.FEATURE_VALUE * teamScaleFactor * rawData.learningCurveFactor * techDebtPenalty;
+    const featureValue = rawData.featuresDelivered * constants.FEATURE_VALUE * teamScaleFactor * rawData.learningCurveFactor * techDebtPenalty * economicScenario.demandMultiplier;
 
     // Maintenance Value (Business as Usual) - RESPONSIVE to scenario
     // Base: 65%, adjusted by efficiency and compliance
@@ -307,13 +374,14 @@ export const calculateMonthlyMetrics = (
     let valueDelivered = featureValue + maintenanceValue;
 
     // SURPRISE FACTOR: Rare positive boost for exceptional adaptation
-    const surprise = calculateSurpriseFactor(rawData, config);
+    const surprise = calculateSurpriseFactor(rawData, config, rng);
     if (surprise.triggered) {
         valueDelivered *= surprise.multiplier;
     }
 
     // 3. Calculate CoNQ (Cost of Non-Quality)
-    const conq = (rawData.bugsGenerated * constants.BUG_FIX_COST) + (rawData.criticalIncidents * constants.INCIDENT_COST);
+    const conq = (rawData.bugsGenerated * constants.BUG_FIX_COST * economicScenario.laborCostMultiplier)
+        + (rawData.criticalIncidents * constants.INCIDENT_COST * economicScenario.incidentMultiplier);
 
     // 4. Calculate ROI (Monthly Snapshot)
     const roi = opEx > 0 ? ((valueDelivered - conq) - opEx) / opEx : 0;

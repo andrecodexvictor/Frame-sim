@@ -3,27 +3,49 @@ import { SimulationConfig, SimulationOutput } from '../types';
 import { runSimulation } from './geminiService';
 import { SingleSimulationConfig } from '../types';
 import { enrichArchetypesToTeam } from './personaEnricher';
+import { hashString } from '../RAG/src/core/employeeBrainCore';
 
-const API_URL = 'http://localhost:3002/api';
+const API_URL = (import.meta.env?.VITE_API_URL?.trim() || 'http://localhost:3002/api').replace(/\/$/, '');
+const STATUS_TIMEOUT_MS = 4_000;
+const SIMULATION_TIMEOUT_MS = 180_000;
 
 export interface AgenticStatus {
     available: boolean;
     mode: string;
+    ready?: boolean;
+    degraded?: boolean;
+    graph?: string;
+    providers?: Record<string, boolean>;
 }
 
 export const checkAgenticStatus = async (): Promise<AgenticStatus> => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort('timeout'), STATUS_TIMEOUT_MS);
     try {
-        const response = await fetch(`${API_URL}/status`);
+        const response = await fetch(`${API_URL}/status`, { signal: controller.signal });
         if (response.ok) {
-            return { available: true, mode: 'agentic' };
+            const status = await response.json().catch(() => ({}));
+            return {
+                available: status.ready !== false,
+                ready: status.ready !== false,
+                degraded: Boolean(status.degraded),
+                mode: status.mode || 'agentic',
+                graph: status.graph,
+                providers: status.providers
+            };
         }
     } catch (error) {
         console.warn('Agentic Server offline', error);
+    } finally {
+        window.clearTimeout(timeoutId);
     }
     return { available: false, mode: 'legacy' };
 };
 
-export const runAgenticSimulation = async (config: SimulationConfig): Promise<SimulationOutput> => {
+export const runAgenticSimulation = async (
+    config: SimulationConfig,
+    options: { signal?: AbortSignal } = {}
+): Promise<SimulationOutput> => {
     console.log('🚀 Starting Agentic Simulation via API...');
 
     // Convert Frontend Config to Backend Orchestrator Input.
@@ -31,9 +53,15 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
     // hydrate the full 350-persona profiles instead of synthetic ones.
     let stakeholders: Array<{ id: string; archetype?: string }> | string[];
     let teamSample: string[] = [];
+    const simulationSeed = hashString([
+        config.frameworks[0]?.name || 'framework',
+        config.companySize,
+        config.sector,
+        config.customScenarioText || config.selectedScenarioId || 'recommended'
+    ].join(':'));
     try {
         const archetypes = config.employeeArchetypes || [];
-        const { team, keyStakeholders } = enrichArchetypesToTeam(archetypes, config.companySize);
+        const { team, keyStakeholders } = enrichArchetypesToTeam(archetypes, config.companySize, simulationSeed);
         stakeholders = keyStakeholders.map(p => ({ id: p.id }));
         teamSample = team.slice(0, 30).map(p => p.id);
         if (stakeholders.length === 0) stakeholders = archetypes;
@@ -46,16 +74,22 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
         query: `Simulate adoption of ${config.frameworks[0].name} for a ${config.companySize} company in ${config.sector}. Context: ${config.customScenarioText || config.selectedScenarioId}`,
         stakeholders,
         teamSample,
-        config: config
+        config: { ...config, simulationSeed }
     };
 
     const startedAt = Date.now();
+    const requestController = new AbortController();
+    const abortFromCaller = () => requestController.abort(options.signal?.reason ?? 'cancelled');
+    if (options.signal?.aborted) abortFromCaller();
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+    const requestTimeout = window.setTimeout(() => requestController.abort('timeout'), SIMULATION_TIMEOUT_MS);
     try {
         // STEP 1: Run Agentic Simulation (Multi-turn with Critic/Goal)
         const response = await fetch(`${API_URL}/simulate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: requestController.signal
         });
 
         if (!response.ok) {
@@ -104,10 +138,10 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
                 [CONTEXTO GERADO POR SIMULAÇÃO AGÊNTICA PROFUNDA]
                 
                 Estado Final da Simulação:
-                - Moral do Time: ${agenticData.state?.moral_time || 70}%
-                - Velocidade: ${agenticData.state?.velocidade_sprint || 65}%
-                - Confiança Stakeholders: ${agenticData.state?.confianca_stakeholders || 60}%
-                - Turnos Simulados: ${agenticData.state?.turno || 5}
+                - Moral do Time: ${agenticData.state?.moral_time ?? 70}%
+                - Velocidade: ${agenticData.state?.velocidade_sprint ?? 65}%
+                - Confiança Stakeholders: ${agenticData.state?.confianca_stakeholders ?? 60}%
+                - Turnos Simulados: ${agenticData.state?.turno ?? 0}
                 
                 Insights (Scratchpad do Orquestrador):
                 ${agenticData.state?.scratchpad || 'Simulação concluída sem observações críticas.'}
@@ -116,15 +150,18 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
                 ${(agenticData.state?.eventos_disparados || []).join(', ') || 'Nenhum evento crítico'}
                 
                 ROI Calculado pelo Agente:
-                ${agenticData.roi?.roi_final ? agenticData.roi.roi_final.toFixed(2) + '%' : 'Pendente cálculo detalhado'}
+                ${typeof agenticData.roi?.roi_final === 'number' ? agenticData.roi.roi_final.toFixed(2) + '%' : 'Pendente cálculo detalhado'}
                 ${employeeBrainSection}
                 INSTRUÇÃO: Use estes dados da simulação agêntica como BASE para gerar números e narrativas consistentes.
             `,
-            durationMonths: config.durationMonths || 12
+            durationMonths: config.durationMonths || 12,
+            economicProfileId: config.economicProfileId,
+            economicScenarioId: config.economicScenarioId,
+            seed: simulationSeed
         };
 
         // Run the normal simulation with the Agentic context injected
-        const richOutput = await runSimulation(singleConfig);
+        const richOutput = await runSimulation(singleConfig, { signal: requestController.signal });
         const timeToSolveMs = Date.now() - startedAt;
 
         // EMPLOYEE BRAIN: sobrescreve o sentimento inventado pelo LLM com o humor real
@@ -141,7 +178,7 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
         }
 
         // EMPLOYEE BRAIN: eventos de RH + decisões graves viram emergentEvents (month ≈ turno atual)
-        const turno = agenticData.state?.turno || (config.durationMonths || 12);
+        const turno = agenticData.state?.turno ?? (config.durationMonths || 12);
         const gravesDecisoes = funcionarios
             .filter(f => f.status !== 'ativo')
             .map(f => ({ month: turno, persona: f.nome, type: f.status, event: f.decisoes?.[f.decisoes.length - 1] || `${f.nome} mudou de status para ${f.status}` }));
@@ -157,16 +194,25 @@ export const runAgenticSimulation = async (config: SimulationConfig): Promise<Si
             ...richOutput,
             ...(emergentEvents.length > 0 ? { emergentEvents } : {}),
             agenticMetrics: {
-                quality_per_cycle: backendMetrics?.quality_per_cycle ?? agenticData.state?.plausibility_score ?? 100,
+                quality_per_cycle: backendMetrics?.quality_per_cycle ?? agenticData.state?.plausibility_score ?? 0,
                 time_to_solve_ms: timeToSolveMs,
-                cost_estimate_usd: backendMetrics?.cost_estimate_usd ?? 0.05,
-                total_tokens: backendMetrics?.total_tokens ?? 5000,
-                router_choice: backendMetrics?.router_choice ?? 'Gemini Pro (via Agentic Router)'
+                cost_estimate_usd: backendMetrics?.cost_estimate_usd ?? 0,
+                total_tokens: backendMetrics?.total_tokens ?? 0,
+                router_choice: backendMetrics?.router_choice ?? 'unknown',
+                input_tokens: backendMetrics?.input_tokens ?? 0,
+                output_tokens: backendMetrics?.output_tokens ?? 0,
+                replan_count: backendMetrics?.replan_count ?? 0,
+                risk_incidents: backendMetrics?.risk_incidents ?? 0,
+                tir: backendMetrics?.tir ?? 0,
+                degraded: Boolean(backendMetrics?.degraded || agenticData.state?.degraded)
             }
         };
 
     } catch (error) {
         console.error('Agentic Simulation Failed:', error);
         throw error;
+    } finally {
+        window.clearTimeout(requestTimeout);
+        options.signal?.removeEventListener('abort', abortFromCaller);
     }
 };

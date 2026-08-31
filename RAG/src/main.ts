@@ -333,13 +333,11 @@ function selectDiverseStakeholders(profiles: PersonaProfile[], count: number): P
         }
     }
 
-    // Completar com perfis aleatórios se necessário
-    while (selected.length < count && selected.length < profiles.length) {
-        const random = profiles[Math.floor(Math.random() * profiles.length)];
-        if (!selected.includes(random)) {
-            selected.push(random);
-        }
-    }
+    // Completar em ordem estável: seleção de personas faz parte do replay.
+    const remaining = profiles
+        .filter(profile => !selected.includes(profile))
+        .sort((left, right) => left.id.localeCompare(right.id));
+    selected.push(...remaining.slice(0, Math.max(0, count - selected.length)));
 
     return selected;
 }

@@ -64,7 +64,7 @@ export class AgentRacingService {
      * Executa corrida de agentes em paralelo
      */
     async race(
-        simulationFn: (agent: AgentConfig, optimalParams?: OptimizedParameters) => Promise<any>,
+        simulationFn: (agent: AgentConfig, optimalParams?: OptimizedParameters, signal?: AbortSignal) => Promise<any>,
         racingConfig: RacingConfig,
         optimalParams?: OptimizedParameters
     ): Promise<RaceResult> {
@@ -87,7 +87,7 @@ export class AgentRacingService {
 
         // Selecionar vencedor baseado na estratégia
         const winner = this.selectWinner(successfulResults, racingConfig.selectionStrategy);
-        const ensemble = racingConfig.selectionStrategy === 'ensemble'
+        const ensemble = racingConfig.selectionStrategy === 'ensemble' || racingConfig.selectionStrategy === 'weighted'
             ? this.buildEnsemble(successfulResults)
             : undefined;
 
@@ -114,16 +114,24 @@ export class AgentRacingService {
      */
     private async runAgentWithTimeout(
         agent: AgentConfig,
-        simulationFn: (agent: AgentConfig, optimalParams?: OptimizedParameters) => Promise<any>,
+        simulationFn: (agent: AgentConfig, optimalParams?: OptimizedParameters, signal?: AbortSignal) => Promise<any>,
         timeout: number,
         optimalParams?: OptimizedParameters
     ): Promise<AgentResult> {
         const startTime = Date.now();
+        const controller = new AbortController();
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
         try {
+            const timeoutPromise = new Promise<'TIMEOUT'>(resolve => {
+                timeoutHandle = setTimeout(() => {
+                    controller.abort();
+                    resolve('TIMEOUT');
+                }, Math.max(0, timeout));
+            });
             const result = await Promise.race([
-                simulationFn(agent, optimalParams),
-                this.createTimeout(timeout)
+                simulationFn(agent, optimalParams, controller.signal),
+                timeoutPromise
             ]);
 
             if (result === 'TIMEOUT') {
@@ -155,11 +163,10 @@ export class AgentRacingService {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error'
             };
+        } finally {
+            // A completed agent must not leave a timer alive until the timeout.
+            if (timeoutHandle) clearTimeout(timeoutHandle);
         }
-    }
-
-    private createTimeout(ms: number): Promise<'TIMEOUT'> {
-        return new Promise(resolve => setTimeout(() => resolve('TIMEOUT'), ms));
     }
 
     /**
@@ -172,19 +179,14 @@ export class AgentRacingService {
 
         switch (strategy) {
             case 'best':
-                return results.reduce((best, r) =>
-                    r.critiqueScore > best.critiqueScore ? r : best
-                );
-
             case 'weighted':
-                // Seleciona aleatoriamente ponderado pelo score
-                const totalScore = results.reduce((sum, r) => sum + r.critiqueScore, 0);
-                let random = Math.random() * totalScore;
-                for (const r of results) {
-                    random -= r.critiqueScore;
-                    if (random <= 0) return r;
-                }
-                return results[0];
+            case 'ensemble':
+                return results.reduce((best, r) =>
+                    r.critiqueScore > best.critiqueScore
+                        || (r.critiqueScore === best.critiqueScore && r.duration < best.duration)
+                        || (r.critiqueScore === best.critiqueScore && r.duration === best.duration && r.agentId.localeCompare(best.agentId) < 0)
+                        ? r : best
+                );
 
             default:
                 return results[0];

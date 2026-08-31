@@ -23,10 +23,10 @@ Frame-sim é um simulador de adoção de frameworks de gestão (Scrum, SAFe, COB
 
 Existem **dois modos de execução**, decididos no formulário de configuração (`components/ConfigForm.tsx`, campo `simulationMode: 'standard' | 'agentic'`):
 
-- **Standard**: tudo roda no browser, uma única chamada Gemini por framework simulado.
-- **Agentic**: se o backend Node (`RAG/`) estiver de pé em `localhost:3002`, a simulação passa por um loop multi-turno com agentes de persona antes de gerar o output visual (que reaproveita o pipeline standard).
+- **Standard**: a interface roda no browser, mas a geração de conteúdo passa pelo gateway server-side `/api/generate`; sem backend/provedor disponível, o frontend usa o caminho offline/degradado.
+- **Agentic**: se o backend Node (`RAG/`) estiver pronto em `localhost:3002`, a simulação passa por um loop multi-turno com agentes de persona antes de gerar o output visual (que reaproveita o pipeline standard).
 
-> **Nota de precisão:** `services/agenticService.ts` exporta `checkAgenticStatus()` para checar `GET /api/status`, mas essa função não é chamada por nenhum componente hoje (`components/ConfigForm.tsx` apenas expõe um checkbox `simulationMode: 'agentic'` sem checar disponibilidade do backend primeiro). Se o usuário marcar "agentic" com o backend offline, `runAgenticSimulation` falha no `fetch` e o erro sobe até `App.tsx`, que volta para a tela de config com um alerta.
+> **Nota de precisão:** `services/agenticService.ts` consulta `GET /api/status` antes de habilitar o modo agentic. O frontend mantém o erro recuperável na própria interface e informa quando o backend está indisponível/degradado; não há credenciais de provedor no bundle do navegador.
 
 ```mermaid
 graph TD
@@ -69,7 +69,7 @@ Ideia central do sistema: **o LLM nunca decide o número final de ROI**. Ele ger
 
 ## 2. Fluxo Standard (browser-only)
 
-Arquivo principal: `services/geminiService.ts` (`runSimulation`), chamado por `App.tsx` a partir de `handleConfigSubmit`.
+Arquivo principal: `services/geminiService.ts` (`runSimulation`), chamado por `App.tsx` a partir de `handleConfigSubmit`. As gerações passam por `services/providerClient.ts` → `RAG/src/server.ts:/api/generate`.
 
 ```mermaid
 sequenceDiagram
@@ -79,7 +79,7 @@ sequenceDiagram
     participant Enricher as personaEnricher
     participant RAG as ragService
     participant Metrics as metricsCalculator
-    participant API as Gemini API<br/>gemini-2.5-flash
+    participant API as Provider Gateway<br/>RAG :3002/api/generate
 
     Usuário->>App: handleConfigSubmit(config)
     App->>Gemini: runSimulation(singleConfig)
@@ -98,7 +98,7 @@ sequenceDiagram
     Gemini->>Metrics: calculateFrameworkFit(framework, size, budget, categoria)
     Note over Gemini,Metrics: fitLevel/reason viram texto no prompt<br/>(o multiplier NÃO é aplicado numericamente hoje)
 
-    Gemini->>API: generateContent(prompt, responseSchema=SIMULATION_SCHEMA)
+Gemini->>API: POST /api/generate(prompt, responseSchema=SIMULATION_SCHEMA)
     API-->>Gemini: JSON {summary, timeline[12x com rawData], keyPersonas, risks...}
 
     Note over Gemini: PÓS-PROCESSAMENTO DETERMINÍSTICO —<br/>o ROI do LLM é descartado
@@ -117,7 +117,7 @@ sequenceDiagram
 
 **Invariante central:** o schema `SIMULATION_SCHEMA` pede ao LLM que preencha `rawData` (features, bugs, incidentes, learning curve) por mês, mas o campo `roi` de cada mês e o `summary.totalRoi` retornado pela API são **sobrescritos** em `runSimulation` (linhas ~552-596 de `services/geminiService.ts`) pelo resultado de `calculateMonthlyMetrics`. O LLM contribui com a história (`implementationNarrative`, `roiAnalysis`, `keyPersonas`, `risks`) e com os insumos operacionais brutos; a matemática decide o número.
 
-**Fallback de erro:** se todas as 7 chaves Gemini falharem por quota (HTTP 429 / `RESOURCE_EXHAUSTED`), `runSimulation` tenta OpenAI GPT-4 (`runSimulationWithOpenAI`), depois DeepSeek (`runSimulationWithDeepSeek`), e por fim retorna `MOCK_SIMULATION_RESULT` de `services/mockData.ts`. Note que o fallback para GPT-4/DeepSeek usa um prompt simplificado sem o pós-processamento de ROI determinístico (o JSON retornado por esses provedores é usado como está).
+**Fallback de erro:** `services/providerClient.ts` envia a solicitação ao gateway server-side. O `ProviderGateway` tenta os provedores configurados conforme a política do backend e informa `provider`, `model`, `attempts` e `degraded`; se o gateway não estiver disponível, `runSimulation` retorna `MOCK_SIMULATION_RESULT` de `services/mockData.ts` quando o fluxo de fallback local for alcançado. As credenciais nunca devem ser fornecidas ao bundle do browser.
 
 ---
 
@@ -194,7 +194,7 @@ sequenceDiagram
 **Limitações confirmadas no código atual (não no README/roadmap):**
 
 - `server.ts` carrega `RAG/profiles.json` (350 personas reais) num `Map` na subida e resolve `stakeholders`/`teamSample` por `id` nesse mapa; `generatePersonaFromArchetype()` só é usado como **fallback sintético** quando o `id` recebido não bate com nenhuma persona real. `server.ts` também tenta conectar o `VectorStoreService` (`initVectorStore()`, fail-open com timeout de 3s) e passa a instância para `createOrchestrator().setVectorStore()`. Ainda assim, `OrchestratorAgent.processQuery()` (que faria `hybridSearch` no ChromaDB) **não** é chamado pelo endpoint `/api/simulate` — quem é chamado é `runSimulation()` → `runTurn()` direto; o efeito prático do vector store conectado nesse caminho é `consolidateTurn()` conseguir salvar memória de turno (`saveMemory`) e o `ROICalculatorAgent` conseguir puxar métricas extras (`findMetrics`) — a busca híbrida por persona/playbook continua só no CLI (`RAG/src/main.ts --query`).
-- `CriticAgent` agora é instanciado e chamado dentro de `OrchestratorAgent.runSimulation()` — **1 vez por simulação** (não por turno), depois do último turno e antes do `ROICalculatorAgent`. O resultado (`plausibilityScore`, `replanRequired`) é gravado em `state.plausibility_score`/`state.replan_triggered` e propagado ao frontend como `agenticMetrics.quality_per_cycle` (antes hardcoded em 100). `CriticAgent` continua sendo usado também por `AgentRacingService` e `SelfImprovementService`.
+- `CriticAgent` roda no StateGraph depois do `ROICalculatorAgent`, recebe o ROI determinístico e aplica também as regras versionadas de `RAG/simulation_rules.json`. Se solicitar replan, o grafo admite exatamente um novo turno, recalcula o ROI e critica novamente; uma segunda reprovação vira ajuste aspiracional, sem loop ilimitado. O score chega ao frontend como `agenticMetrics.quality_per_cycle`.
 - `GoalAgent.evaluate` roda a cada 3 turnos, mas como `/api/simulate` só executa 1 query por request (`orchestrator.runSimulation([query], ...)`), na prática o `GoalAgent` quase nunca dispara pelo caminho HTTP atual — ele é pensado para simulações de múltiplos turnos como as do CLI (`main.ts --simulate`, que roda 3 queries fixas).
 
 ---
@@ -264,32 +264,30 @@ flowchart TD
 
 | Camada | Provider | Modelo | Chave(s) de env | Uso |
 |---|---|---|---|---|
-| Frontend (`services/geminiService.ts`) | Google Gemini | `gemini-2.5-flash` | `VITE_API_KEY` .. `VITE_API_KEY_7` (round-robin, 7 chaves) | Simulação principal (schema JSON estrito) |
-| Frontend (`digestFrameworkDocument`) | Google Gemini | `gemini-2.5-flash` | `VITE_API_KEY` | Digestão rápida de documento (fetch direto à API REST) — antes `gemini-1.5-flash`, aposentado pela API (404) |
-| Frontend fallback | OpenAI | `gpt-4-turbo-preview` | `VITE_OPENAI_API_KEY` | Fallback se as 7 chaves Gemini estourarem quota |
-| Frontend fallback | DeepSeek | `deepseek-chat` | `VITE_DEEPSEEK_API_KEY` | Fallback final antes do mock |
-| Frontend fallback final | — | — | — | `services/mockData.ts` (`MOCK_SIMULATION_RESULT`) |
-| Backend RAG (`LLMProvider.ts:geminiModel()`) | Google Gemini | `gemini-2.5-flash` (default), configurável via `GEMINI_MODEL` | `GOOGLE_API_KEY`, `GOOGLE_API_KEY_2`, `GOOGLE_API_KEY_3` (round-robin, 3 clientes) | Worker LLM do `SmartRouter`, `PersonaAgent`, `ROICalculatorAgent`, `queryRouter.ts` (via `@langchain/google-genai`) — antes hardcoded em `gemini-1.5-pro`/`gemini-1.5-flash`, aposentados pela API (404) |
-| Backend RAG | OpenAI | `gpt-4` | `OPENAI_API_KEY` | Primary LLM do `SmartRouter`, `CriticAgent` |
+| Frontend (`services/providerClient.ts`) | Provider Gateway server-side | modelo escolhido pelo backend | `VITE_API_URL` (URL, sem segredo) | Todas as gerações solicitadas pelo browser |
+| Backend Gateway (`RAG/src/services/ProviderGateway.ts`) | Google Gemini | `gemini-2.5-flash` (default) | `GOOGLE_API_KEY`, `GOOGLE_API_KEY_1` .. `_7` | Provedor principal com rotação/failover |
+| Backend Gateway | OpenAI | `gpt-4o-mini` (default do gateway) | `OPENAI_API_KEY` | Fallback server-side |
+| Backend Gateway | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_KEY` | Fallback server-side |
+| Frontend fallback final | — | — | — | `services/mockData.ts` (`MOCK_SIMULATION_RESULT`) quando o gateway não responde |
+| Backend RAG (`LLMProvider.ts:geminiModel()`) | Google Gemini | `gemini-2.5-flash` (default), configurável via `GEMINI_MODEL` | `GOOGLE_API_KEY`, `GOOGLE_API_KEY_1` .. `_7` | Pool rotativo usado pelo `SmartRouter`, `PersonaAgent`, `ROICalculatorAgent` e `DocumentAgent` |
+| Backend RAG | OpenAI | `gpt-4` | `OPENAI_API_KEY` | Primeira rota de raciocínio complexo do `SmartRouter`, incluindo o `CriticAgent` |
 | Backend RAG | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_KEY` | Rota `SIMPLE_VALIDATION` do `SmartRouter` |
 | Backend RAG | Ollama (local) | `llama3` (configurável) | `OLLAMA_BASE_URL` (default `http://localhost:11434`) | "Cérebro" do `SmartRouter` — classifica intenção antes de rotear, gratuito |
-| Query classification (`queryRouter.ts`) | Google Gemini | `geminiModel()` (default `gemini-2.5-flash`) | `GOOGLE_API_KEY` | Self-RAG: decide modo (`PERSONA_PURA`/`CALCULO_ROI`/...) |
+| Query classification (`queryRouter.ts`) | Local determinístico | — | — | Self-RAG sem chamada externa: decide modo (`PERSONA_PURA`/`CALCULO_ROI`/...) |
 | Embeddings (`vectorStore.ts`, `UserFrameworkStore.ts`) | Google | `text-embedding-004` | `GOOGLE_API_KEY` | Embeddings para ChromaDB |
 
 ### Cascata de fallback do frontend
 
 ```mermaid
 flowchart TD
-    Start["runSimulation(config)"] --> Key["API Key atual do pool de 7"]
-    Key --> Call["Gemini gemini-2.5-flash"]
-    Call -->|"sucesso"| PostProc["Pós-processamento determinístico do ROI"]
-    Call -->|"erro 429/quota/RESOURCE_EXHAUSTED e retryCount < 7"| Rotate["getNextApiKey() → próxima chave do pool"]
-    Rotate --> Call
-    Call -->|"7 tentativas esgotadas OU erro não-quota"| OpenAI["runSimulationWithOpenAI()<br/>GPT-4, prompt simplificado"]
-    OpenAI -->|"sucesso"| Result["SimulationOutput (sem pós-proc. de ROI)"]
-    OpenAI -->|"falha ou sem VITE_OPENAI_API_KEY"| DeepSeek["runSimulationWithDeepSeek()"]
-    DeepSeek -->|"sucesso"| Result
-    DeepSeek -->|"falha ou sem VITE_DEEPSEEK_API_KEY"| Mock["MOCK_SIMULATION_RESULT"]
+    Start["runSimulation(config)"] --> Call["POST /api/generate"]
+    Call --> Gateway["ProviderGateway<br/>credenciais somente no backend"]
+    Gateway --> Gemini["Gemini gemini-2.5-flash"]
+    Gateway -->|"sucesso"| CallOK["conteúdo do provedor"]
+    Gateway -->|"falha/limite"| Fallback["fallback server-side"]
+    Fallback --> CallOK
+    CallOK --> PostProc["Pós-processamento determinístico do ROI"]
+    Call -->|"gateway indisponível"| Mock["MOCK_SIMULATION_RESULT"]
     PostProc --> Result2["SimulationOutput (ROI real)"]
 ```
 
@@ -297,14 +295,15 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Prompt["prompt a rotear"] --> Ollama["Ollama llama3<br/>classifyIntent()"]
+    Prompt["prompt a rotear"] --> Heuristica["heurística local<br/>intenções explícitas"]
+    Heuristica -->|"sem sinal conclusivo"| Ollama["Ollama llama3 opcional<br/>classifyIntent()"]
     Ollama -->|"falha (Ollama offline)"| Unknown["IntentType.UNKNOWN"]
     Ollama -->|"contém 'COMPLEX'"| Complex["COMPLEX_REASONING"]
     Ollama -->|"contém 'CREATIVE'"| Creative["CREATIVE_GENERATION"]
     Ollama -->|"contém 'SIMPLE'"| Simple["SIMPLE_VALIDATION"]
 
     Complex --> GPT4["primaryLLM = GPT-4"]
-    Creative --> GeminiW["workerLLM = Gemini 1.5 Pro"]
+    Creative --> GeminiW["workerLLM = Gemini 2.5 Flash (default)"]
     Simple --> DS["LLMFactory.getDeepSeek()"]
     Unknown --> GeminiW
 ```
@@ -338,7 +337,7 @@ Duas implementações independentes coexistem (não compartilham código):
 Não é ruído gaussiano — é um **gatilho probabilístico com multiplicador uniforme**:
 
 - Probabilidade base: `5%`. Soma `+5%` se `learningCurveFactor ≥ 1.1`, `+3%` se `bugsGenerated < featuresDelivered*0.3`, `+4%` se `efficiency ≥ 85`, `+3%` se `teamSize ≤ 50`. Máximo teórico ≈ `20%` (o texto do prompt em `ragService.ts` chama isso de "~15%" como caso típico).
-- Se disparado (`Math.random() < probabilidade`), aplica um multiplicador em `valueDelivered` de `1.15` a `1.40` (+ até `0.08` extra se havia dívida técnica alta/crítica superada), capado em `1.50`.
+- Se o sorteio do RNG semeado ficar abaixo da probabilidade, aplica um multiplicador em `valueDelivered` de `1.15` a `1.40` (+ até `0.08` extra se havia dívida técnica alta/crítica superada), capado em `1.50`. Sem RNG fornecido, a função deriva a seed dos próprios inputs.
 - Efeito: permite que cenários difíceis produzam, ocasionalmente, resultados financeiros surpreendentemente bons — evita que o modelo seja 100% previsível a partir dos parâmetros de entrada.
 
 ### Framework-Organization Fit (`calculateFrameworkFit`)
@@ -351,7 +350,7 @@ Classifica o framework citado (por substring do nome, ex. `scrum`, `safe`, `cobi
 
 - **Curva J**: `J_CURVE_FACTORS = [0.6, 0.6, 0.9, 0.9, 1.2, 1.2, 1.3, 1.3, 1.4, 1.4, 1.5, 1.5]` (indexado por mês, satura no último valor após o mês 12).
 - **Modificadores de dívida técnica**: tabela `TECH_DEBT_MODIFIERS` com `bugs` (multiplicador de bugs), `velocity` (multiplicador de features) e `taxa` (juros compostos mensais da dívida) — de `BAIXA (0.8x bugs, 1.0x velocidade, 1% a.m.)` até `CRÍTICA (2.0x bugs, 0.5x velocidade, 15% a.m.)`.
-- **Ruído estocástico**: `noise = Math.random()*0.2 - 0.1` (uniforme, ±10%), aplicado como `opex *(1+noise*0.5)`, `value*(1+noise)`, `conq*(1+|noise|*2)` — CoNQ tende a piorar com o caos, OpEx é o mais estável dos três.
+- **Ruído estocástico controlado**: ruído triangular, centrado e semeado, limitado pelo risco de dívida/histórico. É aplicado como `opex *(1+noise*0.5)`, `value*(1+noise)` e `conq*(1+|noise|*2)` — CoNQ tende a piorar com o caos, OpEx é o mais estável dos três.
 - **Eventos**: `applyEvents()` sorteia eventos de `SimulationEvent[]` por mês (`probabilidade_base / 12`), aplicando impacto direto em `value`/`opex` quando disparam.
 - **Confiança da estimativa** (`determineConfidence`): score começa em 3, cai com duração > 24/36 meses, dívida alta/crítica e histórico traumático; mapeia para `Alta`/`Média`/`Baixa`.
 
@@ -373,7 +372,7 @@ Estado interno por funcionário simulado (`EmployeeBrainState`):
 - `reflexao`: gerada a cada 3 turnos (`reflect()`), a partir das 3 memórias de maior `|valência|`
 - Traços derivados do perfil real (`resiliencia`, `adaptabilidade`, `influencia`, `workaholic`, humor/engajamento iniciais) via `deriveTraits()`, calculados deterministicamente a partir de campos de texto de `PersonaProfile` (`gestao_estresse`, `abordagem_trabalho`, `opiniao_agil`, `cargo`/`senioridade`, `estilo_comunicacao`) + um jitter ±8 semeado por `id` para variar entre personas com o mesmo texto de perfil.
 
-Atualização **determinística por turno** (`updateBrain()`), com RNG semeado (`mulberry32` + `hashString`) — dada a mesma seed e a mesma sequência de eventos, o estado final é reproduzível (diferente do `Math.random()` não semeado em `metricsCalculator`/`roiCalculator`). Decisões (`evaluateDecisions()`) usam um RNG derivado de `hashString(personaId:turno)`.
+Atualização **determinística por turno** (`updateBrain()`), com RNG semeado (`mulberry32` + `hashString`) — dada a mesma seed e a mesma sequência de eventos, o estado humano e o ROI são reproduzíveis. Decisões (`evaluateDecisions()`) usam um RNG derivado de `hashString(personaId:turno)`.
 
 `aggregate()` deriva as métricas que antes o LLM inventava livremente:
 - `moral` = média de `(humor+100)/2` sobre os brains não-desistentes.
@@ -451,6 +450,7 @@ Frame-sim/
 │   ├── personaEnricher.ts           # Arquétipo → personas reais de data/profiles_compact.json
 │   ├── metricsCalculator.ts         # calculateMonthlyMetrics, Surprise Factor, Framework Fit
 │   ├── agenticService.ts            # Ponte para o backend RAG (checkAgenticStatus, runAgenticSimulation)
+│   ├── providerClient.ts             # Gateway server-side para geração; sem credenciais no browser
 │   ├── batchService.ts              # Reimplementação frontend de Monte Carlo + Warmup + Racing
 │   ├── SmartChunker.ts              # Cópia frontend do chunker (usado na digestão local de docs)
 │   └── mockData.ts                  # MOCK_SIMULATION_RESULT (fallback final)
@@ -475,6 +475,7 @@ Frame-sim/
 │   │   └── DocumentAgent.ts          # Digestão + chunking de documentos do usuário
 │   ├── src/services/
 │   │   ├── LLMProvider.ts            # GeminiProvider, OpenAICompatibleProvider, OllamaProvider, LLMFactory
+│   │   ├── ProviderGateway.ts         # /api/generate: seleção/fallback de provedores server-side
 │   │   ├── SmartRouter.ts            # Roteia por intenção (Ollama classifica)
 │   │   ├── queryRouter.ts            # Self-RAG: classifica modo da query (Zod schema)
 │   │   ├── vectorStore.ts            # VectorStoreService — ChromaDB, hybridSearch
@@ -482,7 +483,11 @@ Frame-sim/
 │   │   ├── SmartChunker.ts           # Chunking semântico (~2000 chars, overlap 200)
 │   │   ├── UserFrameworkStore.ts     # Collection 'user_frameworks' para docs do usuário
 │   │   ├── AgentRacingService.ts     # N agentes em paralelo, Critic escolhe vencedor
-│   │   └── SelfImprovementService.ts # Warmup iterativo de parâmetros (temperatura, topK, ragMode)
+│   │   ├── SelfImprovementService.ts # Warmup iterativo de parâmetros (temperatura, topK, ragMode)
+│   │   ├── frameworkConfigLoader.ts  # Validação/carregamento do catálogo de frameworks
+│   │   ├── economicScenarioLoader.ts # Cenários econômicos seedados e validados
+│   │   ├── externalToolStub.ts       # Stub offline determinístico para ferramentas externas
+│   │   └── HealthMonitor.ts           # Alertas de custo, tokens, tempo e risco
 │   ├── src/types/index.ts
 │   ├── profiles.json                 # 350 personas reais (fonte de verdade do RAG)
 │   ├── framework_playbooks.json
@@ -523,16 +528,13 @@ Frame-sim/
 
 | Variável | Onde é lida | Usada por | Status |
 |---|---|---|---|
-| `VITE_API_KEY` .. `VITE_API_KEY_7` | `.env` (raiz) | `services/geminiService.ts` — pool de 7 chaves Gemini com rotação em `getApiKeys()`/`getNextApiKey()` | Ativa |
-| `VITE_OPENAI_API_KEY` | `.env` (raiz) | `runSimulationWithOpenAI` (fallback GPT-4) | Ativa |
-| `VITE_DEEPSEEK_API_KEY` | `.env` (raiz) | `runSimulationWithDeepSeek` (fallback final) | Ativa |
-| `GOOGLE_API_KEY`, `GOOGLE_API_KEY_2`, `GOOGLE_API_KEY_3` | `.env` (raiz) e `RAG/.env` | `RAG/src/services/LLMProvider.ts:GeminiProvider` (round-robin), `queryRouter.ts`, `vectorStore.ts`, `UserFrameworkStore.ts`, `personaAgent.ts`, `roiCalculator.ts` | Ativa |
+| `VITE_API_URL` | `.env` (raiz) | `services/providerClient.ts` — URL do gateway HTTP; não é credencial | Ativa, opcional |
+| `GOOGLE_API_KEY`, `GOOGLE_API_KEY_1` .. `_7` | `RAG/.env` | `ProviderGateway`/`GeminiProvider` — pool server-side com rotação e retry; embeddings usam a chave principal | Ativa |
 | `OPENAI_API_KEY` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:LLMFactory.getGPT4()` (usado por `SmartRouter` e `CriticAgent`) | Ativa |
 | `DEEPSEEK_API_KEY` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:LLMFactory.getDeepSeek()` (rota `SIMPLE_VALIDATION` do `SmartRouter`) | Ativa |
 | `OLLAMA_BASE_URL` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:OllamaProvider` (default `http://localhost:11434`) | Ativa |
-| `CHROMA_URL` | `RAG/.env` | `RAG/src/services/UserFrameworkStore.ts` (default `http://localhost:8000`) | Ativa, **porém** `RAG/src/services/vectorStore.ts` hardcoda `http://localhost:8000` e não lê essa variável — inconsistência a corrigir se o Chroma mudar de endereço |
+| `CHROMA_URL` | `RAG/.env` | Adaptadores diretos `directVectorStore.ts` e `directUserFrameworkStore.ts` (default `http://localhost:8000`) | Ativa, opcional |
 | `GEMINI_MODEL` | `RAG/.env` | `RAG/src/services/LLMProvider.ts:geminiModel()` (default `gemini-2.5-flash`), consumida por `GeminiProvider`, `personaAgent.ts`, `queryRouter.ts` | Ativa (opcional) — lida de forma lazy (dentro da função, não no import) para que o `dotenv` já tenha carregado o `.env` |
-| `CHROMA_DB_PATH` | `RAG/.env.example` | `RAG/src/services/vectorStore.ts` constructor (`dbPath`), mas o valor não é de fato usado nas chamadas `Chroma.fromExistingCollection`/`Chroma.fromDocuments` (que usam a `url` fixa acima) | Documentada no `.env.example`, efeito limitado no código atual |
 
 ---
 
@@ -555,6 +557,6 @@ Snapshot do relatório (684 nós, 1058 arestas, 33 comunidades, construído do c
 5. `DocumentLoader` — 13 arestas
 6. `PersonaProfile` — 13 arestas
 
-Esses hubs confirmam, pelo grafo, o que a leitura de código também mostra: `VectorStoreService` e `OrchestratorAgent` são os pontos de maior acoplamento do backend RAG (por isso as limitações descritas na seção 3 — RAG não conectado, CriticAgent não usado no loop principal — importam tanto: mexer neles tem alto raio de impacto). `SimulationConfig` é o tipo mais compartilhado entre frontend e backend, o que explica a necessidade de "hidratação" manual entre os dois formatos em `server.ts` (`generateBackendConfig`, `generatePersonaFromArchetype`).
+Esses hubs confirmam, pelo grafo, o que a leitura de código também mostra: `VectorStoreService` e `OrchestratorAgent` são os pontos de maior acoplamento do backend RAG. `SimulationConfig` é o tipo mais compartilhado entre frontend e backend, o que explica a necessidade de "hidratação" manual entre os dois formatos em `server.ts` (`generateBackendConfig`, `generatePersonaFromArchetype`). O grafo é um snapshot e pode não incluir os loaders, stub e monitor adicionados depois da sua geração.
 
 > O grafo pode ficar desatualizado conforme o código muda. Para atualizar: `graphify update .` (sem custo de API). Compare `git rev-parse HEAD` com o commit citado no relatório para saber se está defasado.

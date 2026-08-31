@@ -73,6 +73,12 @@ export interface PersonaProfile {
 // ===== SIMULATION CONFIG =====
 
 export interface SimulationConfig {
+    framework_config?: {
+        id: string;
+        name: string;
+        source: 'catalog' | 'uploaded' | 'inferred';
+        description?: string;
+    };
     contexto_estrutural: {
         categoria_cenario: { valor: string; opcoes: string[] };
         setor_atuacao: { valor: string; opcoes: string[] };
@@ -92,10 +98,25 @@ export interface SimulationConfig {
         cenario_atual: string;
         opcoes: string[];
     };
+    contexto_economico?: {
+        profile_id?: string;
+        scenario_id?: string;
+        seed?: number;
+        scenario?: {
+            id: string;
+            label: string;
+            demandMultiplier: number;
+            laborCostMultiplier: number;
+            budgetMultiplier: number;
+            incidentMultiplier: number;
+            uncertainty: string;
+        };
+    };
     parametros_simulacao: {
         duracao_meses: number;
         acuracia_alvo: string;
         adaptacao_pme: boolean;
+        seed?: number;
     };
 }
 
@@ -150,6 +171,8 @@ export interface ROIResult {
     break_even_mes: number | null;
     eventos_ocorridos: string[];
     confianca_estimativa: 'Alta' | 'Média' | 'Baixa';
+    economic_scenario?: string;
+    seed?: number;
 }
 
 // ===== AGENT OUTPUTS =====
@@ -169,6 +192,45 @@ export interface SimulationState {
     funcionarios?: EmployeeBrainState[];
     /** Narrativas de decisões emergentes do EmployeeBrain (demissões, burnout, etc). */
     eventos_rh?: string[];
+    /** True when a provider/critic was unavailable and deterministic fallback was used. */
+    degraded?: boolean;
+    degraded_reasons?: string[];
+    run_id?: string;
+    metricas_agenticas?: AgenticMetrics;
+    /** Concise, bounded audit trail for the main agentic actions in a run. */
+    reasoning_log?: ReasoningLogEntry[];
+    /** A bounded suggestion recorded when the single replan was insufficient. */
+    aspirational_adjustment?: string;
+    /** Bounded final critic explanation retained for long-term memory. */
+    critique_summary?: string;
+    framework_context?: {
+        id: string;
+        name: string;
+        source: string;
+        matched: boolean;
+    };
+    economic_context?: {
+        profile_id?: string;
+        scenario_id: string;
+        label: string;
+        uncertainty: string;
+    };
+    external_tool_signals?: Array<{
+        tool: string;
+        offline: boolean;
+        summary: string;
+    }>;
+    health?: {
+        healthy: boolean;
+        degraded: boolean;
+        alerts: Array<{ code: string; severity: string; message: string }>;
+    };
+}
+
+export interface ReasoningLogEntry {
+    reason: string;
+    action: string;
+    observation: string;
 }
 
 export interface SimulationStep {
@@ -183,6 +245,8 @@ export interface PersonaResponse {
     impacto_moral: number;  // -10 a +10
     rag_utilizado: boolean;
     fonte_rag: string | null;
+    /** Provider/parsing fallback was used for this response. */
+    degraded?: boolean;
 }
 
 export interface OrchestratorOutput {
@@ -204,6 +268,13 @@ export interface AgenticMetrics {
     cost_estimate_usd: number;
     total_tokens: number;
     router_choice: string;
+    input_tokens: number;
+    output_tokens: number;
+    replan_count: number;
+    risk_incidents: number;
+    /** Taxa de incidência de risco: incidentes / turnos, em percentual. */
+    tir: number;
+    degraded: boolean;
 }
 
 // ===== FEW-SHOT EXAMPLES =====
@@ -229,6 +300,7 @@ export interface WarmupConfig {
     maxIterations: number;           // Max warmup iterations (default: 5)
     targetPlausibility: number;      // Min CriticAgent score (default: 85)
     parameterSpace: ParameterSpace;
+    seed?: number;                   // Replays the same exploration sequence
 }
 
 export interface ParameterSpace {
