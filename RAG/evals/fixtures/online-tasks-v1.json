@@ -1,0 +1,5 @@
+[
+  { "id": "collaboration-supported", "instruction": "Summarize documented individual collaboration and its limitations.", "evidence": [{ "eventId": "e1", "text": "Person A reviewed B's task; B corrected the documented defect after the review." }, { "eventId": "e2", "text": "Person A had stress 80 and energy 40. No further tasks were measured." }] },
+  { "id": "collaboration-contradictory", "instruction": "Summarize documented actions and identify incompatible accounts without inventing a resolution.", "evidence": [{ "eventId": "e3", "text": "A said the review resolved the defect in task X." }, { "eventId": "e4", "text": "The task X log still records the same unresolved defect at the same time." }] },
+  { "id": "missing-opportunities", "instruction": "Describe which performance dimensions can be measured.", "evidence": [{ "eventId": "e5", "text": "Person C requested general help. No peer, assigned opportunity, delivery or acceptance was recorded." }] }
+]

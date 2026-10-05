@@ -38,6 +38,13 @@ import { loadFrameworkConfig, type FrameworkConfig } from '../services/framework
 import { loadEconomicScenarios, selectEconomicScenario, type EconomicScenario } from '../services/economicScenarioLoader.js';
 import { ExternalToolStub } from '../services/externalToolStub.js';
 import { HealthMonitor } from '../services/HealthMonitor.js';
+import { createRunManifest, recordModel } from '../services/RunManifest.js';
+import { TraceRecorder } from '../services/TraceRecorder.js';
+import { evaluateIndividualMetrics } from '../services/IndividualMetrics.js';
+import { JevEvaluator } from '../services/JevEvaluator.js';
+import { incidentContext, resolveWorkPolicy, simulateWorkBlock } from '../core/syntheticWork.js';
+import type { TraceEvent } from '../types/evaluation.js';
+import { addressedRandom } from '../core/experimentProtocol.js';
 
 type NarrativeRouter = {
     route(prompt: string): Promise<{
@@ -47,6 +54,8 @@ type NarrativeRouter = {
             usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
             usage_metadata?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
             modelUsed?: string;
+            requestedModel?: string;
+            provider?: string;
         }>;
     }>;
 };
@@ -55,6 +64,7 @@ type MetricsServiceLike = Pick<MetricsService, 'startCycle' | 'calculateMetrics'
     Partial<Pick<MetricsService, 'recordReplan' | 'recordIncident' | 'recordCycle' | 'recordTokens' | 'setRouterChoice' | 'markDegraded'>>;
 
 export interface OrchestratorDependencies {
+    jevEvaluator?: Pick<JevEvaluator, 'evaluate'>;
     personaAgent?: Pick<PersonaAgent, 'simulateResponse'>;
     smartRouter?: NarrativeRouter;
     metricsService?: MetricsServiceLike;
@@ -136,12 +146,14 @@ export class OrchestratorAgent {
     private personaAgent: Pick<PersonaAgent, 'simulateResponse'>;
     private goalAgent: Pick<GoalAgent, 'evaluate'>;
     private criticAgent: Pick<CriticAgent, 'critique'>;
+    private jevEvaluator: Pick<JevEvaluator, 'evaluate'>;
     private readonly checkpointer = new MemorySaver();
     private readonly simulationGraph: any;
     private state!: SimulationState;
     // EmployeeBrain: array ordenado é a fonte da verdade (applyContagion opera em arrays).
     // state.funcionarios aponta para este mesmo array e serializa junto com o state.
     private brains: EmployeeBrainState[] = [];
+    private readonly traceRecorder = new TraceRecorder();
     private longTermMemoryContext = '';
     private activeSignal?: AbortSignal;
     private runActive = false;
@@ -167,6 +179,7 @@ export class OrchestratorAgent {
         this.personaAgent = dependencies.personaAgent ?? new PersonaAgent(apiKey);
         this.goalAgent = dependencies.goalAgent ?? new GoalAgent();
         this.criticAgent = dependencies.criticAgent ?? new CriticAgent();
+        this.jevEvaluator = dependencies.jevEvaluator ?? new JevEvaluator();
 
         this.resetState();
         this.simulationGraph = this.buildSimulationGraph();
@@ -236,7 +249,7 @@ export class OrchestratorAgent {
     private ensureBrains(profiles: PersonaProfile[]): void {
         for (const p of profiles) {
             if (!this.brains.some(b => b.personaId === p.id)) {
-                this.brains.push(deriveInitialBrain(this.toBrainInput(p)));
+                this.brains.push(deriveInitialBrain(this.toBrainInput(p), this.state.manifest?.scenarioSeed));
             }
         }
         this.state.funcionarios = this.brains;
@@ -254,11 +267,16 @@ export class OrchestratorAgent {
 
         // Garante brains mesmo em entradas que não passam por runSimulation (processQuery)
         this.ensureBrains(stakeholders);
+        const beforeTurn = structuredClone(this.brains);
+        const traceEvents: Array<Omit<TraceEvent, 'eventId' | 'turnId' | 'source'>> = [];
 
         // pressaoBase: difficulty_scalar do GoalAgent (0.8 fácil .. 1.2 difícil) normalizado
         // linearmente para 0-1 via (scalar-0.8)/0.4 e clampado em [0.2, 0.9] para nunca
         // zerar a pressão nem saturá-la (1.0 → 0.5 de pressão).
-        const pressaoBase = clamp((this.state.difficulty_scalar - 0.8) / 0.4, 0.2, 0.9);
+        const shock = config?.experiment?.exogenousSchedule.find(event => event.turnId === this.state.turno);
+        const policy = resolveWorkPolicy(config?.task_policy);
+        const pressaoBase = clamp(clamp((this.state.difficulty_scalar - 0.8) / 0.4, 0.2, 0.9) + (shock?.pressureDelta ?? 0) + incidentContext(shock, policy).pressureDelta, 0, 1);
+        if (shock) for (const brain of this.brains) traceEvents.push({ personaId: brain.personaId, type: 'environment-shock', text: JSON.stringify(shock), kind: 'exogenous' });
 
         // Personas de fundo sentem o delta de moral do turno anterior, amortecido.
         const impactoFundo = clamp((this.state.moral_time - this.moralPrevTurn) / 2, -3, 3);
@@ -285,6 +303,7 @@ export class OrchestratorAgent {
                 this.markDegraded(`persona indisponível: ${stakeholder.id}`);
                 this.metricsService.markDegraded?.();
             }
+            recordModel(this.state.manifest, { role: 'persona', provider: response.provider || 'unknown', requestedModel: response.requestedModel || response.modelUsed || 'unknown', resolvedModel: response.modelUsed || 'unknown', status: response.degraded ? 'unavailable' : 'completed' });
             this.appendReasoning(
                 'obter reação determinística/LLM do stakeholder',
                 'persona',
@@ -302,6 +321,7 @@ export class OrchestratorAgent {
             }
 
             outputs.push({
+                personaId: stakeholder.id,
                 turno: this.state.turno,
                 stakeholder: stakeholder.informacoes_basicas.nome,
                 resposta: response,
@@ -333,7 +353,7 @@ export class OrchestratorAgent {
         const eventosRhTurno: string[] = [];
         for (let i = 0; i < this.brains.length; i++) {
             if (this.brains[i].status !== 'ativo') continue;
-            const rng = mulberry32(hashString(`${this.brains[i].personaId}:${this.state.turno}`));
+            const rng = config?.experiment ? addressedRandom(config.experiment.scenarioSeed, this.brains[i].personaId, this.state.turno, `policy:${config.experiment.conditionId}`) : mulberry32(hashString(`${this.brains[i].personaId}:${this.state.turno}`));
             const ctx: TurnContext = {
                 turno: this.state.turno,
                 pressaoBase,
@@ -344,6 +364,7 @@ export class OrchestratorAgent {
             this.brains[i] = decided;
 
             for (const d of decisions) {
+                traceEvents.push({ personaId: decided.personaId, type: d.tipo, text: d.narrativa, kind: d.tipo === 'pedir_ajuda' ? 'collaboration' : 'decision' });
                 eventosRhTurno.push(d.narrativa);
                 if (GRAVE_DECISION_TYPES.has(d.tipo)) {
                     this.state.eventos_disparados.push(d.narrativa);
@@ -402,6 +423,13 @@ export class OrchestratorAgent {
 
         // Adicionar ao histórico
         this.state.historico.push(...outputs);
+        for (const output of outputs) {
+            traceEvents.push({ personaId: output.personaId!, type: 'persona-response', text: output.resposta.resposta_persona, kind: 'narrative' });
+        }
+        this.traceRecorder.recordTurn(this.state.run_id || 'interactive', this.state.turno, beforeTurn, this.brains, traceEvents);
+        this.traceRecorder.attachWorkTurn(simulateWorkBlock(this.traceRecorder.snapshot().filter(trace => trace.turnId === this.state.turno), { seed: this.state.manifest?.scenarioSeed ?? 0, shock, policy }));
+        this.state.personaTraces = this.traceRecorder.snapshot();
+        this.state.individualEvaluations = evaluateIndividualMetrics(this.state.personaTraces);
 
         return outputs;
     }
@@ -451,6 +479,7 @@ export class OrchestratorAgent {
             this.appendReasoning('selecionar narrativa para o turno', 'router', routerChoice);
             const response = await llm.generate(prompt, undefined, { signal: this.activeSignal });
             this.throwIfAborted();
+            recordModel(this.state.manifest, { role: 'narrative', provider: response.provider || routerChoice, requestedModel: response.requestedModel || response.modelUsed || 'unknown', resolvedModel: response.modelUsed || 'unknown', status: 'completed' });
             this.metricsService.recordTokens?.(
                 response.usage?.promptTokens ?? response.usage_metadata?.input_tokens ?? 0,
                 response.usage?.completionTokens ?? response.usage_metadata?.output_tokens ?? 0,
@@ -522,7 +551,7 @@ export class OrchestratorAgent {
                     config: isolatedConfig,
                     teamProfiles: [...(teamProfiles ?? [])],
                     runId
-                }, { configurable: { thread_id: runId }, signal: options.signal });
+                }, { configurable: { thread_id: runId }, signal: options.signal, recursionLimit: Math.max(25, queries.length * 3 + 15) });
             } catch (error) {
                 // LangGraph currently wraps an AbortSignal in a generic `Error:
                 // Aborted`. Keep the public service contract stable so HTTP and UI
@@ -599,8 +628,9 @@ export class OrchestratorAgent {
                 this.resetState();
                 this.metricsService.startCycle();
                 this.state.run_id = input.runId;
-                this.ensureBrains([...input.stakeholders, ...input.teamProfiles]);
                 const resolvedConfig = this.prepareRunConfig(input.config ?? undefined);
+                this.state.manifest = createRunManifest(input.runId, resolvedConfig, [...input.stakeholders, ...input.teamProfiles]);
+                this.ensureBrains([...input.stakeholders, ...input.teamProfiles]);
                 await this.loadLongTermMemory(input.queries, resolvedConfig);
                 console.log(`🧠 Brains inicializados: ${this.brains.length}`);
                 return { queryIndex: 0, outputs: [], config: resolvedConfig ?? null, state: this.cloneState() };
@@ -658,8 +688,9 @@ export class OrchestratorAgent {
                 this.appendReasoning('projetar retorno financeiro da configuração', 'roi', 'ROI calculado');
                 return { roiResult: roi, state: this.cloneState() };
             })
-            .addNode('finalize', async () => {
+            .addNode('finalize', async (input: SimulationGraphStateType) => {
                 this.throwIfAborted();
+                await this.evaluateSemantics(input.config ?? undefined);
                 // Set a first snapshot so the persisted metadata includes replan count.
                 const metricsBeforeMemory = this.metricsService.calculateMetrics();
                 this.state.metricas_agenticas = metricsBeforeMemory;
@@ -669,6 +700,10 @@ export class OrchestratorAgent {
                 const metrics = this.metricsService.calculateMetrics();
                 metrics.degraded = metrics.degraded || Boolean(this.state.degraded);
                 this.state.metricas_agenticas = metrics;
+                if (this.state.manifest) {
+                    this.state.manifest.completedAt = new Date().toISOString();
+                    this.state.manifest.executionMode = this.state.degraded ? 'degraded' : 'live';
+                }
                 const riskScore = 100 - Number((this.state as SimulationState & { plausibility_score?: number }).plausibility_score ?? 0);
                 const health = this.healthMonitor.record({
                     costUsd: metrics.cost_estimate_usd,
@@ -725,6 +760,7 @@ export class OrchestratorAgent {
             );
             this.throwIfAborted();
             (this.state as any).plausibility_score = clamp(Number(critique.plausibilityScore) || 0, 0, 100);
+            recordModel(this.state.manifest, { role: 'critique', provider: critique.provider || 'unknown', requestedModel: critique.requestedModel || critique.modelUsed || 'unknown', resolvedModel: critique.modelUsed || 'unknown', status: critique.degraded ? 'unavailable' : 'completed' });
             (this.state as any).replan_triggered = Boolean(critique.replanRequired);
             this.state.critique_summary = this.sanitizeText(critique.justification, 240);
             if (critique.degraded) this.markDegraded('critic indisponível');
@@ -771,6 +807,25 @@ export class OrchestratorAgent {
         return this.cloneState();
     }
 
+    private async evaluateSemantics(config?: SimulationConfig): Promise<void> {
+        const options = config?.semantic_evaluation;
+        let requestCount = 0;
+        const started = performance.now();
+        const maxRequests = Math.min(Math.max(Math.trunc(options?.max_requests || 1), 1), 10);
+        const timeout = Math.min(Math.max(options?.timeout_ms || 15_000, 1), 30_000);
+        for (const evaluation of this.state.individualEvaluations ?? []) {
+            this.throwIfAborted();
+            if (!options?.enabled || requestCount >= maxRequests || performance.now() - started >= timeout) {
+                evaluation.semantic.collaboration = { status: 'unavailable', evidenceIds: [], rubricVersion: 'individual-v1', reason: options?.enabled ? 'Run-level evaluation budget exhausted.' : 'Semantic evaluation was not requested; no inference was made.', requestCount: 0, questionCount: 0, estimatedCostUSD: null };
+                continue;
+            }
+            const result = await this.jevEvaluator.evaluate((this.state.personaTraces ?? []).filter(trace => trace.personaId === evaluation.personaId), { signal: this.activeSignal, timeoutMs: Math.max(1, timeout - (performance.now() - started)) });
+            requestCount += result.requestCount ?? 1;
+            evaluation.semantic.collaboration = result;
+            if (result.model) recordModel(this.state.manifest, { role: 'semantic-evaluation', provider: 'jev', requestedModel: result.requestedModel || 'jev-latest', resolvedModel: result.model, status: result.status === 'unavailable' ? 'unavailable' : 'completed' });
+        }
+    }
+
     private cloneState(state: SimulationState = this.state): SimulationState {
         return JSON.parse(JSON.stringify(state)) as SimulationState;
     }
@@ -781,6 +836,7 @@ export class OrchestratorAgent {
     }
 
     resetState(): void {
+        this.traceRecorder.reset();
         this.brains = [];
         this.longTermMemoryContext = '';
         this.moralPrevTurn = 70;
@@ -912,6 +968,10 @@ export class OrchestratorAgent {
     }
 
     private async prepareQueryContext(query: string): Promise<string> {
+        if (this.state.manifest?.memoryPolicy === 'isolated') {
+            this.appendReasoning('usar contexto congelado do experimento', 'rag_snapshot', 'perfis/configuração fornecidos; nenhuma busca mutável compartilhada');
+            return query;
+        }
         const classification = await this.queryRouter.classify(query);
         this.appendReasoning('selecionar fontes para a situação atual', 'rag_router', `${classification.mode}; confiança ${classification.confidence.toFixed(2)}`);
         if (!this.vectorStore || !this.queryRouter.shouldUseRAG(classification)) return query;
@@ -956,6 +1016,10 @@ export class OrchestratorAgent {
 
     private async loadLongTermMemory(queries: string[], config?: SimulationConfig): Promise<void> {
         this.throwIfAborted();
+        if (this.state.manifest?.memoryPolicy === 'isolated') {
+            this.appendReasoning('isolar condição experimental', 'recall_memories', 'memória compartilhada desativada');
+            return;
+        }
         if (!this.vectorStore) {
             this.appendReasoning('contextualizar a simulação com histórico', 'recall_memories', 'vector store não configurado');
             return;
@@ -992,6 +1056,10 @@ export class OrchestratorAgent {
 
     private async persistLongTermMemory(): Promise<void> {
         this.throwIfAborted();
+        if (this.state.manifest?.memoryPolicy === 'isolated') {
+            this.appendReasoning('isolar condição experimental', 'save_memory', 'nenhuma escrita em memória compartilhada');
+            return;
+        }
         if (!this.vectorStore) {
             this.appendReasoning('persistir contexto para próximas simulações', 'save_memory', 'vector store não configurado');
             return;

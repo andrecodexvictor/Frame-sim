@@ -4,6 +4,8 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 export enum LLMModel { GPT4 = 'gpt-4', GEMINI_PRO = 'gemini-pro', DEEPSEEK_CODER = 'deepseek-coder', OLLAMA_LLAMA3 = 'llama3', OLLAMA_PHI3 = 'phi3' }
 export interface GenerateOptions { signal?: AbortSignal; timeoutMs?: number; }
 export interface LLMResponse {
+    provider?: string;
+    requestedModel?: string;
     content: string;
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     modelUsed: string;
@@ -83,7 +85,8 @@ export class GeminiProvider implements LLMProvider {
             if (options?.signal?.aborted) throw abortError('Generation cancelled.');
             try {
                 const response = await invokeWithTimeout(this.clients[(startIndex + attempt) % this.clients.length], messages, options, this.timeoutMs) as Record<string, unknown>;
-                return { content: toContent(response?.content, 'Gemini'), usage: usageFrom(response?.usage_metadata ?? response?.usage, 'Gemini'), modelUsed: this.model };
+                const metadata = response?.response_metadata as { model_name?: string } | undefined;
+                return { content: toContent(response?.content, 'Gemini'), usage: usageFrom(response?.usage_metadata ?? response?.usage, 'Gemini'), modelUsed: metadata?.model_name || this.model, requestedModel: this.model, provider: 'google' };
             } catch (error) { lastError = error; if (options?.signal?.aborted) throw error; }
         }
         throw lastError instanceof Error ? lastError : new Error('All Gemini keys failed');
@@ -104,7 +107,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
             if (!response.ok) throw new Error(`${this.providerName} API error (${response.status})`);
             if (!Array.isArray(data?.choices) || !data.choices[0] || typeof data.choices[0] !== 'object') throw new Error(`${this.providerName} returned an invalid response payload`);
             const message = (data.choices[0] as Record<string, unknown>).message;
-            return { content: toContent(message && typeof message === 'object' ? (message as Record<string, unknown>).content : undefined, this.providerName), usage: usageFrom(data?.usage, this.providerName), modelUsed: this.modelName };
+            return { content: toContent(message && typeof message === 'object' ? (message as Record<string, unknown>).content : undefined, this.providerName), usage: usageFrom(data?.usage, this.providerName), modelUsed: typeof data?.model === 'string' ? data.model : this.modelName, requestedModel: this.modelName, provider: this.providerName };
         } catch (error) { if (controller.signal.aborted) throw abortError(options?.signal?.aborted ? 'Generation cancelled.' : 'Provider request timed out.'); throw error; }
         finally { clearTimeout(timer); options?.signal?.removeEventListener('abort', cancel); }
     }
@@ -127,9 +130,18 @@ export class OllamaProvider implements LLMProvider {
 export class LLMFactory {
     static hasGemini(): boolean { return configuredGeminiKeys().length > 0; }
     static hasGPT4(): boolean { return Boolean(process.env.OPENAI_API_KEY?.trim()); }
-    static hasDeepSeek(): boolean { return Boolean(process.env.DEEPSEEK_API_KEY?.trim()); }
+    static hasDeepSeek(): boolean { return Boolean(process.env.NVIDIA_DEEPSEEK_API_KEY?.trim() || process.env.DEEPSEEK_API_KEY?.trim()); }
+    static hasGLM(): boolean { return Boolean(process.env.NVIDIA_GLM_API_KEY?.trim()); }
+    static hasKimi(): boolean { return Boolean(process.env.NVIDIA_KIMI_API_KEY?.trim()); }
+    static getGLM(): LLMProvider { return new OpenAICompatibleProvider(process.env.NVIDIA_GLM_API_KEY || '', 'https://integrate.api.nvidia.com/v1', process.env.NVIDIA_GLM_MODEL || 'z-ai/glm-5.3', 'NVIDIA GLM Provider'); }
+    static getKimi(): LLMProvider { return new OpenAICompatibleProvider(process.env.NVIDIA_KIMI_API_KEY || '', 'https://integrate.api.nvidia.com/v1', process.env.NVIDIA_KIMI_MODEL || 'moonshotai/kimi-k3', 'NVIDIA Kimi Provider'); }
     static getGemini(): LLMProvider { return new GeminiProvider(); }
     static getGPT4(): LLMProvider { return new OpenAICompatibleProvider(process.env.OPENAI_API_KEY || '', 'https://api.openai.com/v1', 'gpt-4', 'GPT-4 Provider'); }
-    static getDeepSeek(): LLMProvider { return new OpenAICompatibleProvider(process.env.DEEPSEEK_API_KEY || '', 'https://api.deepseek.com', 'deepseek-chat', 'DeepSeek Provider'); }
+    static getDeepSeek(): LLMProvider {
+        const nvidiaKey = process.env.NVIDIA_DEEPSEEK_API_KEY?.trim();
+        return nvidiaKey
+            ? new OpenAICompatibleProvider(nvidiaKey, 'https://integrate.api.nvidia.com/v1', process.env.NVIDIA_DEEPSEEK_MODEL || 'deepseek-ai/deepseek-v4.1-flash', 'NVIDIA DeepSeek Provider')
+            : new OpenAICompatibleProvider(process.env.DEEPSEEK_API_KEY || '', 'https://api.deepseek.com', 'deepseek-chat', 'DeepSeek Provider');
+    }
     static getOllama(model = 'llama3'): LLMProvider { return new OllamaProvider(model); }
 }

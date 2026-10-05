@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -7,6 +7,9 @@ import {
 } from 'recharts';
 import { SimulationOutput, SimulationConfig } from '../types';
 import { BrutalButton } from './ui/BrutalButton';
+import { IndividualEvaluationPanel } from './IndividualEvaluationPanel';
+import { buildReportData, reportSummary, reportTimeline, reportVisuals } from '../services/reportData';
+import { ArticleExportControls } from './ArticleExportControls';
 import { Download, Sun, Moon, User, Activity, AlertCircle, CheckCircle, PieChart as PieIcon, BarChart as BarIcon, BookOpen, TrendingUp, TrendingDown } from 'lucide-react';
 
 const EVENT_LABELS: Record<string, { label: string; tone: 'critical' | 'warning' | 'positive' | 'info' }> = {
@@ -48,12 +51,14 @@ interface DashboardProps {
   onReset: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config, onReset }) => {
+  const report = useMemo(() => buildReportData({ mode: 'individual', outputs: [originalData], config }), [originalData, config]);
+  const data = { ...originalData, ...reportVisuals(report, 0), summary: reportSummary(report, 0), timeline: reportTimeline(report, 0).map(point => ({ ...point, rawData: originalData.timeline.find(original => original.month === point.month)?.rawData })) };
+  const timeLabel = data.timeUnit === 'turn' ? 'Turno' : 'Mês';
   const [darkMode, setDarkMode] = useState(true);
 
   const downloadReport = () => {
-    const report = JSON.stringify({ generatedAt: new Date().toISOString(), config, result: data }, null, 2);
-    const url = URL.createObjectURL(new Blob([report], { type: 'application/json' }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `framesim-${data.frameworkName.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'report'}.json`;
@@ -117,6 +122,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
             </BrutalButton>
           </div>
         </nav>
+        <ArticleExportControls report={report} />
 
         {data.execution && (
           <div
@@ -171,12 +177,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               <span>CULTURA: {(config.employeeArchetypes || []).slice(0, 2).join(' + ').toUpperCase()}...</span>
             </div>
           </div>
-          <div className="bg-emerald-500/10 p-6 border-l-4 border-emerald-500 rounded-r-lg">
+          <div className="bg-zinc-500/5 p-6 border border-zinc-500/30 rounded">
             <div className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-1">ROI Acumulado</div>
             <div className={`text-6xl font-black font-mono flex items-baseline gap-2 ${data.summary.totalRoi >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {data.summary.totalRoi > 0 ? '+' : ''}{data.summary.totalRoi}%
+              {data.summary.totalRoi === null ? 'Indisponível' : `${data.summary.totalRoi > 0 ? '+' : ''}${data.summary.totalRoi}%`}
             </div>
-            <div className="text-[10px] uppercase font-mono mt-2 opacity-70">Projeção Financeira Realista</div>
+            <div className="text-[10px] uppercase font-mono mt-2 opacity-70">Projeção econômica sintética</div>
           </div>
         </div>
 
@@ -186,12 +192,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
           <div className="absolute top-0 right-0 p-2 opacity-50">
             <span className="text-[10px] uppercase font-mono border border-zinc-500 px-1 rounded">TELEMETRIA DO CICLO</span>
           </div>
-          <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-purple-500">
+          <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-amber-500">
             <Activity className="w-4 h-4" /> Métricas Agênticas
           </h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-3 bg-zinc-500/5 rounded border border-zinc-500/10">
-              <div className="text-[10px] uppercase opacity-60">Qualidade (QPC)</div>
+              <div className="text-[10px] uppercase opacity-60">Plausibilidade (QPC)</div>
               <div className={`text-xl font-black font-mono ${data.agenticMetrics.quality_per_cycle > 80 ? 'text-emerald-500' : 'text-yellow-500'}`}>
                 {data.agenticMetrics.quality_per_cycle}%
               </div>
@@ -260,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               return (
                 <li key={`${event.month}-${event.persona}-${event.type}-${idx}`} className={`border p-3 ${toneClass}`}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <span className="font-mono font-bold">Mês {event.month}</span>
+                    <span className="font-mono font-bold">{timeLabel} {event.month}</span>
                     <span className="font-bold uppercase">{meta.label}</span>
                     <span className="opacity-75">Pessoa: {event.persona === '-' ? 'Equipe' : event.persona}</span>
                   </div>
@@ -348,8 +354,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               <div className="text-3xl font-black text-yellow-500">-{data.businessMetrics.reworkReduction}%</div>
               <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Redução Retrabalho</div>
             </div>
-            <div className="p-4 bg-purple-500/10 rounded border border-purple-500/30 text-center">
-              <div className="text-3xl font-black text-purple-500">+{data.businessMetrics.processAgility}%</div>
+            <div className="p-4 bg-amber-500/10 rounded border border-amber-500/30 text-center">
+              <div className="text-3xl font-black text-amber-500">+{data.businessMetrics.processAgility}%</div>
               <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Agilidade Processos</div>
             </div>
             <div className="p-4 bg-blue-500/10 rounded border border-blue-500/30 text-center">
@@ -397,8 +403,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
             </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 bg-purple-500/10 rounded border border-purple-500/30 text-center">
-              <div className="text-2xl font-black text-purple-500">+{data.companyEvolution.capacityGrowth}%</div>
+            <div className="p-4 bg-amber-500/10 rounded border border-amber-500/30 text-center">
+              <div className="text-2xl font-black text-amber-500">+{data.companyEvolution.capacityGrowth}%</div>
               <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Crescimento Capacidade</div>
             </div>
             <div className={`p-4 rounded border text-center ${data.companyEvolution.breakEvenProjection > 0 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
@@ -432,6 +438,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
       )}
 
       {/* Charts Grid */}
+      <IndividualEvaluationPanel data={data} darkMode={darkMode} />
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
         {/* Main Chart - Dual Axis (Timeline) */}
@@ -443,16 +450,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
             </h3>
             <div className="flex gap-4 text-[10px] font-mono uppercase">
               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500"></div> Adoção (%)</div>
-              <div className="flex items-center gap-1"><div className="w-2 h-2 bg-purple-500"></div> ROI (Var)</div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 bg-amber-500"></div> ROI (Var)</div>
             </div>
           </div>
 
           <div className="h-[320px] w-full">
             <p className="sr-only">
-              Evolução mensal de adoção e ROI, do mês {data.timeline[0]?.month ?? 0} ao mês {data.timeline.at(-1)?.month ?? 0}.
-              A adoção final foi {data.timeline.at(-1)?.adoptionRate ?? 0}% e o ROI final foi {data.timeline.at(-1)?.roi ?? 0}%.
+              Evolução de adoção e ROI por {timeLabel.toLowerCase()}, de {data.timeline[0]?.month ?? 'indisponível'} a {data.timeline.at(-1)?.month ?? 'indisponível'}.
+              Adoção final: {data.timeline.at(-1)?.adoptionRate === null || data.timeline.at(-1)?.adoptionRate === undefined ? 'indisponível' : `${data.timeline.at(-1)?.adoptionRate}%`}. ROI final: {data.timeline.at(-1)?.roi === null || data.timeline.at(-1)?.roi === undefined ? 'indisponível' : `${data.timeline.at(-1)?.roi}%`}.
             </p>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
               <ComposedChart data={data.timeline} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorAdoption" x1="0" y1="0" x2="0" y2="1">
@@ -466,7 +473,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
                   stroke={theme.axisColor}
                   tickLine={false}
                   tick={{ fontSize: 10, fontFamily: 'monospace' }}
-                  tickFormatter={(val) => `M${val}`}
+                  tickFormatter={(val) => `${data.timeUnit === 'turn' ? 'T' : 'M'}${val}`}
                   dy={10}
                   interval="preserveStartEnd"
                 />
@@ -578,7 +585,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               <PieIcon className="w-4 h-4 text-emerald-500" /> Distribuição de Recursos
             </h3>
             <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
                 <PieChart>
                   <Pie
                     data={data.resourceAllocation || []}
@@ -610,7 +617,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               <BarIcon className="w-4 h-4 text-emerald-500" /> Análise de Sentimento
             </h3>
             <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
                 <BarChart data={data.sentimentBreakdown || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.gridColor} />
                   <XAxis type="number" hide />
@@ -635,13 +642,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
           <div className={`p-6 rounded border ${theme.border} ${theme.card} min-h-[300px]`}>
             <h3 className="w-full text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Equilíbrio Sistêmico</h3>
             <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={[
-                  { subject: 'Processos', A: data.timeline[data.timeline.length - 1].efficiency, fullMark: 100 },
-                  { subject: 'Compliance', A: data.timeline[data.timeline.length - 1].compliance, fullMark: 100 },
-                  { subject: 'Cultura', A: data.summary.finalAdoption, fullMark: 100 },
-                  { subject: 'Maturidade', A: data.summary.maturityScore * 10, fullMark: 100 },
-                ]}>
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
+                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.systemicBalance.filter(metric => metric.A !== null)}>
                   <PolarGrid stroke={theme.gridColor} />
                   <PolarAngleAxis dataKey="subject" tick={{ fill: theme.axisColor, fontSize: 10, fontWeight: 'bold' }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />

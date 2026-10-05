@@ -3,9 +3,13 @@ import type { AddressInfo } from 'node:net';
 
 const previousChromaUrl = process.env.CHROMA_URL;
 process.env.CHROMA_URL = 'http://127.0.0.1:1';
+const previousOffline = process.env.FRAMESIM_OFFLINE_TESTS;
+process.env.FRAMESIM_OFFLINE_TESTS = '1';
+const initialEnvironmentKeys = new Set(Object.keys(process.env));
 
 const { app, startupPromise } = await import('../server.js');
 await startupPromise;
+assert.ok(Object.keys(process.env).every(name => initialEnvironmentKeys.has(name)), 'offline server tests may not load real credential files');
 const server = app.listen(0, '127.0.0.1');
 await new Promise<void>((resolve, reject) => {
     server.once('listening', resolve);
@@ -59,4 +63,6 @@ try {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     if (previousChromaUrl === undefined) delete process.env.CHROMA_URL;
     else process.env.CHROMA_URL = previousChromaUrl;
+    if (previousOffline === undefined) delete process.env.FRAMESIM_OFFLINE_TESTS;
+    else process.env.FRAMESIM_OFFLINE_TESTS = previousOffline;
 }

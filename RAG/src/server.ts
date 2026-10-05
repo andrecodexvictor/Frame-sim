@@ -12,10 +12,16 @@ import { createOrchestrator } from './agents/orchestrator.js';
 import { createVectorStore, VectorStoreService } from './services/vectorStore.js';
 import { ProviderGateway, ProviderGatewayError } from './services/ProviderGateway.js';
 import type { SimulationConfig, PersonaProfile } from './types/index.js';
+import { codeRevision, codeStateHash } from './services/RunManifest.js';
+import { validateExperimentAssignment } from './core/experimentProtocol.js';
+import { resolveWorkPolicy } from './core/syntheticWork.js';
 
-// Load .env
-config({ path: path.join(process.cwd(), '../.env') });
-config({ path: path.join(process.cwd(), '.env') });
+// Resolve configuration in this backend; offline tests never load credential files.
+if (process.env.FRAMESIM_OFFLINE_TESTS !== '1') {
+    const backendRoot = fileURLToPath(new URL('../', import.meta.url));
+    config({ path: path.join(backendRoot, '../.env'), quiet: true });
+    config({ path: path.join(backendRoot, '.env'), quiet: true });
+}
 
 export const app = express();
 const PORT = 3002;
@@ -63,7 +69,7 @@ async function loadRealPersonas(): Promise<boolean> {
             for (const p of profiles) {
                 realPersonasById.set(p.id, p);
             }
-            console.log(`✅ Personas reais carregadas: ${realPersonasById.size} (de ${candidate})`);
+            console.log(`✅ Perfis sintéticos do catálogo carregados: ${realPersonasById.size} (de ${candidate})`);
             personasReady = true;
             return true;
         } catch {
@@ -112,6 +118,7 @@ app.get('/api/status', (req, res) => {
         degraded,
         graph: 'langgraph-stategraph-v1',
         providers,
+        providerStatus: providerGateway.providerStatus(),
         providerConfigured,
         providerReachable: 'unknown',
         capabilities: {
@@ -140,9 +147,13 @@ app.post('/api/generate', async (req, res) => {
             seed: req.body?.seed,
             modelPreference: req.body?.modelPreference,
             agentPersona: req.body?.agentPersona,
-            signal: controller.signal
+            signal: controller.signal,
+            timeoutMs: req.body?.timeoutMs,
+            maxAttempts: req.body?.maxAttempts,
+            maxOutputTokens: req.body?.maxOutputTokens,
+            allowFallback: req.body?.allowFallback
         });
-        res.json(result);
+        res.json({ ...result, codeRevision: codeRevision(), codeStateHash: codeStateHash() });
     } catch (error) {
         const gatewayError = error instanceof ProviderGatewayError ? error : undefined;
         res.status(gatewayError?.status || 500).json({
@@ -211,14 +222,17 @@ const generatePersonaFromArchetype = (archetypeId: string, index: number): Perso
 
 // Helper to hydrate Front-end Config into Back-end SimulationConfig
 const generateBackendConfig = (frontendConfig: any): SimulationConfig => {
+    const experiment = frontendConfig.experiment ? validateExperimentAssignment(frontendConfig.experiment) : undefined;
     const frameworkName = String(frontendConfig.frameworks?.[0]?.name || frontendConfig.frameworkName || 'Framework personalizado').slice(0, 160);
     const frameworkId = String(frontendConfig.frameworks?.[0]?.id || frameworkName)
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
         .slice(0, 80) || 'custom';
-    const seed = Number.isFinite(Number(frontendConfig.simulationSeed))
+    const seed = experiment?.scenarioSeed ?? (Number.isFinite(Number(frontendConfig.simulationSeed))
         ? (Number(frontendConfig.simulationSeed) >>> 0)
-        : 0;
+        : 0);
     return {
+        ...(experiment ? { experiment } : {}),
+        task_policy: resolveWorkPolicy(frontendConfig.workloadPolicy),
         framework_config: {
             id: frameworkId,
             name: frameworkName,
@@ -249,6 +263,7 @@ const generateBackendConfig = (frontendConfig: any): SimulationConfig => {
             scenario_id: String(frontendConfig.economicScenarioId || 'base').slice(0, 32),
             seed
         },
+        semantic_evaluation: { enabled: frontendConfig.semanticEvaluation === true, max_requests: 3, timeout_ms: 15_000 },
         parametros_simulacao: {
             duracao_meses: Math.min(Math.max(Number(frontendConfig.durationMonths) || 12, 1), 60),
             acuracia_alvo: 'High',
@@ -269,15 +284,22 @@ app.post('/api/simulate', async (req, res) => {
     try {
         await startupPromise;
         const { query, stakeholders, config, teamSample } = req.body;
+        if (config?.experiment) {
+            try { validateExperimentAssignment(config.experiment); }
+            catch { return res.status(400).json({ error: 'Invalid experiment protocol' }); }
+        }
+        try { resolveWorkPolicy(config?.workloadPolicy); }
+        catch { return res.status(400).json({ error: 'Invalid workload policy' }); }
 
         const queries = (Array.isArray(query) ? query : [query])
             .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
             .map(item => item.trim());
-        if (queries.length === 0 || queries.length > 12 || queries.some(item => item.length > 10_000)
+        if (queries.length === 0 || queries.length > 60 || queries.some(item => item.length > 10_000)
             || !Array.isArray(stakeholders) || stakeholders.length === 0 || stakeholders.length > 50
             || !config || typeof config !== 'object' || Array.isArray(config)) {
             return res.status(400).json({ error: 'Missing query, stakeholders, or config' });
         }
+        if (config.experiment && queries.length !== config.experiment.exogenousSchedule.length) return res.status(400).json({ error: 'Query count differs from paired schedule' });
 
         // HYDRATION STEP: accepts two shapes (retrocompat):
         // (a) new: [{ id, archetype? }] → real persona by id, fallback synthetic
@@ -299,7 +321,7 @@ app.post('/api/simulate', async (req, res) => {
             return res.status(400).json({ error: 'No valid stakeholders provided' });
         }
 
-        console.log(`👥 Personas hidratadas: ${realCount} reais, ${syntheticCount} sintéticas — ${hydratedStakeholders.map(p => p.informacoes_basicas.nome).join(', ')}`);
+        console.log(`👥 Personas hidratadas: ${realCount} do catálogo sintético, ${syntheticCount} sintéticas — ${hydratedStakeholders.map(p => p.informacoes_basicas.nome).join(', ')}`);
 
         // Resolve background team sample (ids → real profiles)
         const teamProfiles: PersonaProfile[] = Array.isArray(teamSample)
@@ -326,6 +348,7 @@ app.post('/api/simulate', async (req, res) => {
         res.json({
             success: true,
             state: result.state,
+            manifest: result.state.manifest,
             roi: result.roi,
             metricas_agenticas: result.state.metricas_agenticas
         });

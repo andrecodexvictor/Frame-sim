@@ -22,6 +22,13 @@ const providerEnvNames = [
     'GEMINI_MODEL',
     'OPENAI_MODEL',
     'DEEPSEEK_MODEL',
+    'NVIDIA_DEEPSEEK_API_KEY',
+    'NVIDIA_DEEPSEEK_MODEL',
+    'NVIDIA_GLM_API_KEY',
+    'NVIDIA_GLM_MODEL',
+    'NVIDIA_KIMI_API_KEY',
+    'NVIDIA_KIMI_MODEL',
+    'TYPESAFE_API_KEY',
 ];
 
 const originalFetch = globalThis.fetch;
@@ -73,7 +80,7 @@ try {
             && !error.message.includes(oversizedPrompt),
     );
     assert.equal(fetchCalls, 0, 'invalid requests must not invoke fetch');
-    assert.deepEqual(validationGateway.capabilities(), { google: false, openai: false, deepseek: false });
+    assert.deepEqual(validationGateway.capabilities(), { google: false, openai: false, deepseek: false, glm: false, kimi: false });
 
     // Google keys rotate between requests while duplicate/empty entries are ignored by the gateway.
     clearProviderEnvironment();
@@ -101,8 +108,9 @@ try {
     assert.equal(firstRotation.attempts, 1);
     assert.equal(firstRotation.degraded, false);
     assert.equal(secondRotation.attempts, 1);
-    assert.equal(decodeURIComponent(rotationCalls[0].url).includes('key=google-one'), true);
-    assert.equal(decodeURIComponent(rotationCalls[1].url).includes('key=google-two'), true);
+    assert.equal((rotationCalls[0].init?.headers as Record<string, string>)['x-goog-api-key'], 'google-one');
+    assert.equal((rotationCalls[1].init?.headers as Record<string, string>)['x-goog-api-key'], 'google-two');
+    assert.equal(rotationCalls[0].url.includes('key='), false, 'provider credentials must stay out of URLs');
     const rotationBody = JSON.parse(String(rotationCalls[0].init?.body)) as {
         generationConfig: {
             temperature: number;
@@ -139,6 +147,7 @@ try {
         content: '{"fallback":true}',
         provider: 'openai',
         model: 'openai-offline',
+        requestedModel: 'openai-offline',
         degraded: true,
         attempts: 2,
     });
@@ -215,7 +224,23 @@ try {
     );
     assert.equal(timeoutFetchAborted, true);
 
-    console.log('  ✓ provider gateway validation, rotation, fallback, timeout, cancellation, and sanitized errors');
+    // NVIDIA keys must never be transmitted to the direct DeepSeek service.
+    clearProviderEnvironment();
+    process.env.NVIDIA_DEEPSEEK_API_KEY = 'nvidia-offline-key';
+    process.env.DEEPSEEK_API_KEY = 'preserved-direct-key';
+    const nvidiaCalls: FetchCall[] = [];
+    globalThis.fetch = async (input, init) => {
+        nvidiaCalls.push({ url: String(input), init });
+        return response({ choices: [{ message: { content: '{"ok":true}' } }] });
+    };
+    const nvidiaResult = await new ProviderGateway().generate({ task: 'simulation', prompt: 'synthetic NVIDIA fixture' });
+    assert.equal(nvidiaCalls[0].url, 'https://integrate.api.nvidia.com/v1/chat/completions');
+    assert.equal((nvidiaCalls[0].init?.headers as Record<string, string>).Authorization, 'Bearer nvidia-offline-key');
+    assert.equal(JSON.parse(String(nvidiaCalls[0].init?.body)).model, 'deepseek-ai/deepseek-v4.1-flash');
+    assert.equal(nvidiaResult.model, 'deepseek-ai/deepseek-v4.1-flash');
+    assert.equal(process.env.DEEPSEEK_API_KEY, 'preserved-direct-key');
+
+    console.log('  ✓ provider gateway validation, rotation, fallback, NVIDIA transport, timeout, cancellation, and sanitized errors');
 } finally {
     globalThis.fetch = originalFetch;
     globalThis.setTimeout = originalSetTimeout;

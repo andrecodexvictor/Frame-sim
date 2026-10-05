@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { MOCK_SIMULATION_RESULT } from '../services/mockData';
+import { buildReportData } from '../services/reportData';
+const exporter = await import('../services/articleExport').catch(() => null);
+assert.ok(exporter, 'native article files must serialize canonical metrics');
+const escape = await import('../services/latexEscape');
+assert.equal(escape.latexEscape('%_&#${}~^\\'), '\\%\\_\\&\\#\\$\\{\\}\\textasciitilde{}\\textasciicircum{}\\textbackslash{}');
+const output = { ...MOCK_SIMULATION_RESULT, frameworkName: 'A & "B" \\input{evil} %', summary: { ...MOCK_SIMULATION_RESULT.summary, totalRoi: -12.345678901, finalAdoption: null }, timeline: [{ month: 1, roi: -1.123456789, adoptionRate: null, compliance: null, efficiency: 80 }] };
+const report = buildReportData({ mode: 'individual', outputs: [output] });
+const files = exporter.createArticleFiles(report);
+for (const name of ['article.tex', 'manifest.json', 'metrics.json', 'data/metrics.csv', 'methodology.tex', 'limitations.tex', 'references.bib', 'figures/flowchart.tex', 'tables/metrics.tex', 'README.md']) assert.ok(name in files, name);
+for (const mode of ['individual', 'comparison', 'batch'] as const) {
+    const diagramFiles = exporter.createArticleFiles(buildReportData({ mode, outputs: [output] }));
+    assert.ok(diagramFiles['figures/flowchart.svg']?.includes('<svg'), 'each mode exports an editable vector flowchart');
+    assert.ok(diagramFiles['figures/flowchart.mmd']?.includes('|Não|'), 'decision branches are labelled');
+    assert.ok(!/^\s*end(?:\s|\(|\[|\{)/m.test(diagramFiles['figures/flowchart.mmd']), 'the Mermaid end keyword cannot be a node identifier');
+    for (const label of ['Início', 'Fim', 'Abstenção']) {
+        assert.ok(diagramFiles['figures/flowchart.svg'].includes(label));
+        assert.ok(diagramFiles['figures/flowchart.tex'].includes(label));
+    }
+    assert.ok(diagramFiles['figures/flowchart.tex'].includes('cycle'), 'decisions use diamond outlines');
+    assert.ok(diagramFiles['figures/flowchart.svg'].includes('<polygon'), 'SVG uses the same decision shapes');
+}
+assert.ok(files['tables/metrics.tex'].includes('-12.345678901'));
+assert.ok(files['tables/metrics.tex'].includes('unavailable'));
+assert.ok(files['tables/metrics.tex'].split('\n').filter(line => line.includes(' & ') && !line.startsWith('\\toprule')).every(line => line.endsWith('\\\\')), 'every data row has a TeX row terminator');
+assert.ok(files['data/metrics.csv'].includes('-12.345678901'));
+assert.ok(!Object.values(files).filter((_, index) => Object.keys(files)[index].endsWith('.tex')).join('\n').includes('\\input{evil}'), 'untrusted text cannot execute TeX');
+assert.ok(Object.keys(files).every(name => !name.includes('..') && !name.startsWith('/')));
+assert.equal(JSON.parse(files['metrics.json']).metrics.find((row: any) => row.id === 'totalRoi' && row.group === 'run').value, -12.345678901);
+const zip = await exporter.createArticleZip(report);
+const JSZip = (await import('jszip')).default;
+const archive = await JSZip.loadAsync(zip);
+assert.equal(await archive.file('article.tex')!.async('string'), files['article.tex']);
+const standalone = exporter.createStandaloneArticle(report);
+assert.ok(!standalone.includes('\\input{figures/') && !standalone.includes('\\input{tables/'));
+assert.ok(standalone.includes('\\begin{document}') && standalone.includes('-12.345678901'));
+const auxiliary = exporter.createArticleFiles(buildReportData({ mode: 'individual', outputs: [{ ...output, resourceAllocation: [{ category: 'Resources_%', amount: 12.3456789 }] }] }));
+assert.ok(auxiliary['data/metrics.csv'].includes('12.3456789'));
+assert.ok(Object.entries(auxiliary).some(([name, source]) => name.startsWith('figures/') && typeof source === 'string' && source.includes('(1,12.3456789)')), 'complementary dashboard chart values have native PGFPlots coordinates');
+const flowReport = buildReportData({ mode: 'individual', outputs: [{ ...output, individualEvaluations: [{ personaId: 'a', runId: 'run', role: 'Engineer', source: 'synthetic', empiricalValidation: 'pending', metrics: [], semantic: {}, limitations: [], leadTimeByClass: [{ classId: 'small-task', unit: 'hours', median: 1.25, nAccepted: 1, nCensored: 1, nMissingTiming: 0, observations: [{ taskId: 'accepted', hours: 1.25, censored: false, evidenceIds: ['e1'] }, { taskId: 'pending', hours: null, censored: true, evidenceIds: ['e2'] }] }] }] }] });
+const flowFiles = exporter.createArticleFiles(flowReport);
+assert.ok(flowFiles['data/metrics.csv'].includes('accepted') && flowFiles['data/metrics.csv'].includes('small-task'), 'duration samples retain task/class identity in CSV');
+assert.ok(Object.values(flowFiles).some(source => typeof source === 'string' && source.includes('(1,1.25)')), 'accepted duration samples have native scientific coordinates');
+const repeatedTurnReport = buildReportData({ mode: 'comparison', outputs: [3, 8].map(featuresDelivered => ({ ...output, timeline: [{ month: 7, roi: featuresDelivered, adoptionRate: null, compliance: null, efficiency: 80, rawData: { featuresDelivered, bugsGenerated: 0, criticalIncidents: 0, teamSize: 2, learningCurveFactor: 1 } }] })) });
+const repeatedTurnFiles = exporter.createArticleFiles(repeatedTurnReport);
+const financialFigure = Object.values(repeatedTurnFiles).find(source => typeof source === 'string' && source.includes('title={auxiliary: financialInput.featuresDelivered}'));
+assert.ok(typeof financialFigure === 'string');
+assert.ok(financialFigure.includes('(1,3) (2,8)'), 'categorical series use unique indices even when runs share a turn');
+assert.ok(Object.entries(repeatedTurnFiles).some(([name, source]) => name.startsWith('figures/') && typeof source === 'string' && source.includes('xlabel={month}') && source.includes('(7,3)')), 'timeline coordinates preserve their actual turn/month');
+assert.ok(financialFigure.includes('Source: synthetic'), 'native figure legends state the recorded evidence source');
+const observedFigureReport = { ...repeatedTurnReport, metrics: repeatedTurnReport.metrics.map(row => row.id === 'financialInput.featuresDelivered' ? { ...row, source: 'observed' } : row) };
+const observedFigure = Object.values(exporter.createArticleFiles(observedFigureReport)).find(source => typeof source === 'string' && source.includes('title={auxiliary: financialInput.featuresDelivered}'));
+assert.ok(typeof observedFigure === 'string');
+assert.ok(observedFigure.includes('Source: observed'), 'figure source labels follow canonical data rather than assuming synthetic');
+console.log('  ✓ native article values, nulls, escaping, fixed paths, ZIP and standalone source');

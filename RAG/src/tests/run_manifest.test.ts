@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { OrchestratorAgent } from '../agents/orchestrator.js';
+import { manifestFixture } from './manifestFixture.js';
+import { artifactHash } from '../services/RunManifest.js';
+import rubric from '../../evals/rubrics/individual-v1.json' with { type: 'json' };
+import { canonicalJSON as sharedCanonical } from '../core/artifactCanonical.js';
+import { createHash } from 'node:crypto';
+assert.equal(artifactHash({ a: 1, A: 2, z: 3 }), createHash('sha256').update(sharedCanonical({ a: 1, A: 2, z: 3 })).digest('hex'), 'browser/server hash order is identical');
+
+const orchestrator = new OrchestratorAgent(undefined, undefined, manifestFixture.dependencies);
+const run = await orchestrator.runSimulation(['first', 'second'], manifestFixture.personas, manifestFixture.config);
+assert.equal(run.state.manifest?.schemaVersion, 1);
+assert.equal(run.state.manifest?.runId, run.state.run_id);
+assert.equal(run.state.manifest?.scenarioSeed, 71);
+assert.equal(run.state.manifest?.dataSource, 'synthetic');
+assert.equal(run.state.manifest?.empiricalValidation, 'pending');
+assert.match(run.state.manifest?.configHash ?? '', /^[a-f0-9]{64}$/);
+assert.match(run.state.manifest?.datasetHash ?? '', /^[a-f0-9]{64}$/);
+assert.equal(run.state.manifest?.rubricHash, artifactHash(rubric), 'manifest identifies the actual rubric and pending policy');
+assert.match(run.state.manifest?.codeRevision ?? '', /^[a-f0-9]{40}$/);
+assert.match(run.state.manifest?.codeStateHash ?? '', /^[a-f0-9]{64}$/);
+assert.deepEqual(run.state.historico.map(output => output.personaId), ['person-a', 'person-b', 'person-a', 'person-b']);
+assert.ok(run.state.manifest?.models.some(model => model.requestedModel === 'gemini-flash-latest' && model.resolvedModel === 'gemini-resolved'));
+assert.ok(run.state.manifest?.models.some(model => model.role === 'critique' && model.resolvedModel === 'z-ai/glm-5.3'));
+const unavailable = new OrchestratorAgent(undefined, undefined, { ...manifestFixture.dependencies, smartRouter: { async route() { throw new Error('offline'); } } });
+const degraded = await unavailable.runSimulation(['first'], manifestFixture.personas, manifestFixture.config);
+assert.equal(degraded.state.manifest?.executionMode, 'degraded');
+console.log('  ✓ run manifest, synthetic origin, stable identities, resolved models and degraded provenance');

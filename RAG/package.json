@@ -10,7 +10,9 @@
         "query": "tsx src/main.ts --query",
         "test": "tsx src/tests/index.test.ts",
         "build": "tsc",
-        "server": "tsx src/server.ts"
+        "server": "tsx src/server.ts",
+        "eval:offline": "tsx src/evals/runner.ts",
+        "eval:online": "tsx src/evals/onlineRunner.ts"
     },
     "dependencies": {
         "@langchain/core": "^0.3.18",

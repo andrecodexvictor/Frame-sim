@@ -1,7 +1,7 @@
 {
   "name": "framesim---enterprise-framework-simulator",
   "private": true,
-  "version": "0.0.0",
+  "version": "8.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,15 +13,20 @@
     "health:keys": "node scripts/api_key_health_check.mjs",
     "health:keys:generate": "node scripts/api_key_health_check.mjs --generate",
     "test:offline": "tsx scripts/root_offline.test.ts",
-    "test:browser": "node scripts/browser_smoke.mjs",
+    "test:browser": "node scripts/browser_report_smoke.mjs",
+    "test:browser:live": "node scripts/browser_smoke.mjs",
     "typecheck": "tsc --noEmit --pretty false && npm --prefix RAG exec tsc -- --noEmit --pretty false",
     "test": "npm run test:offline && npm run test:keys && npm --prefix RAG test",
     "build:all": "npm run build && npm --prefix RAG run build",
     "audit:all": "npm audit --audit-level=moderate && npm --prefix RAG audit --audit-level=moderate",
-    "quality": "npm run typecheck && npm test && npm run build:all && npm run audit:all"
+    "quality": "npm run typecheck && npm test && npm run build:all && npm run audit:all",
+    "test:export": "tsx scripts/article_export.test.ts && tsx scripts/article_download.test.tsx",
+    "test:article-compile": "tsx scripts/article_fixtures.ts && node scripts/article_compile_check.mjs",
+    "export:flowchart": "tsx scripts/flowchart_docs.ts"
   },
   "dependencies": {
     "lucide-react": "^0.555.0",
+    "jszip": "3.10.1",
     "mammoth": "^1.11.0",
     "pdfjs-dist": "^5.4.449",
     "react": "^19.2.0",

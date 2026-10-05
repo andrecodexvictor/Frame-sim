@@ -3,6 +3,9 @@
  */
 
 import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
+import type { RunManifest, PersonaTrace, IndividualEvaluation } from './evaluation.js';
+import type { ExperimentAssignment } from '../core/experimentProtocol.js';
+import type { SyntheticWorkPolicy } from '../core/syntheticWork.js';
 
 // ===== QUERY ROUTING =====
 
@@ -73,6 +76,9 @@ export interface PersonaProfile {
 // ===== SIMULATION CONFIG =====
 
 export interface SimulationConfig {
+    task_policy?: Partial<SyntheticWorkPolicy>;
+    semantic_evaluation?: { enabled: boolean; max_requests: number; timeout_ms: number };
+    experiment?: ExperimentAssignment;
     framework_config?: {
         id: string;
         name: string;
@@ -178,6 +184,9 @@ export interface ROIResult {
 // ===== AGENT OUTPUTS =====
 
 export interface SimulationState {
+    manifest?: RunManifest;
+    personaTraces?: PersonaTrace[];
+    individualEvaluations?: IndividualEvaluation[];
     turno: number;
     moral_time: number;
     velocidade_sprint: number;
@@ -240,6 +249,9 @@ export interface SimulationStep {
 }
 
 export interface PersonaResponse {
+    provider?: string;
+    requestedModel?: string;
+    modelUsed?: string;
     resposta_persona: string;
     emocao_detectada: string;
     impacto_moral: number;  // -10 a +10
@@ -250,6 +262,7 @@ export interface PersonaResponse {
 }
 
 export interface OrchestratorOutput {
+    personaId?: string;
     turno: number;
     stakeholder: string;
     resposta: PersonaResponse;

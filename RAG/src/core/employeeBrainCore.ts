@@ -436,11 +436,14 @@ export function aggregate(brains: EmployeeBrainState[]): AggregateResult {
  * 1 turno = 1 mês, impactoPessoal=0 (sem evento pessoal dirigido), pressão default
  * por mês: 1-2 → 0.7, 3-4 → 0.5, 5+ → 0.35. Reflexão a cada 3 meses.
  */
+export interface OfflineTurnSnapshot { turnId: number; before: EmployeeBrainState[]; after: EmployeeBrainState[]; events: EmergentEvent[]; pressure: number }
 export function simulateTeamOffline(
     profiles: BrainProfileInput[],
     meses: number,
     seedBase: number,
-    pressaoPorMes?: (mes: number) => number
+    pressaoPorMes?: (mes: number) => number,
+    observer?: (snapshot: OfflineTurnSnapshot) => void,
+    randomFor?: (personaId: string, turnId: number) => () => number
 ): { brains: EmployeeBrainState[]; emergentEvents: EmergentEvent[] } {
     const brains = profiles.map((p) => deriveInitialBrain(p, seedBase));
     const rng = mulberry32(seedBase);
@@ -450,20 +453,23 @@ export function simulateTeamOffline(
     const pressaoFn = pressaoPorMes ?? ((mes: number) => (mes <= 2 ? 0.7 : mes <= 4 ? 0.5 : 0.35));
 
     for (let mes = 1; mes <= meses; mes++) {
+        const before = observer ? structuredClone(brains) : [];
+        const eventStart = emergentEvents.length;
         const pressaoBase = pressaoFn(mes);
         let moralDelta = 0;
 
         for (let i = 0; i < brains.length; i++) {
             const ctx: TurnContext = { turno: mes, pressaoBase, impactoPessoal: 0, moralGlobal };
             const updated = updateBrain(brains[i], ctx);
-            const { brain: decided, decisions } = evaluateDecisions(updated, ctx, rng);
+            const policyRandom = randomFor?.(brains[i].personaId, mes) ?? rng;
+            const { brain: decided, decisions } = evaluateDecisions(updated, ctx, policyRandom);
             brains[i] = decided;
 
             for (const d of decisions) {
                 emergentEvents.push({ mes, personaId: decided.personaId, nome: decided.nome, tipo: d.tipo, narrativa: d.narrativa });
                 if (d.efeitos.moralGlobal) moralDelta += d.efeitos.moralGlobal;
                 if (d.efeitos.contagio) {
-                    const novo = applyContagion(brains, decided.personaId, d.efeitos.contagio, rng);
+                    const novo = applyContagion(brains, decided.personaId, d.efeitos.contagio, policyRandom);
                     for (let k = 0; k < brains.length; k++) brains[k] = novo[k];
                 }
             }
@@ -474,6 +480,7 @@ export function simulateTeamOffline(
         if (mes % 3 === 0) {
             for (let i = 0; i < brains.length; i++) brains[i] = reflect(brains[i]);
         }
+        observer?.({ turnId: mes, before, after: structuredClone(brains), events: structuredClone(emergentEvents.slice(eventStart)), pressure: pressaoBase });
     }
 
     return { brains, emergentEvents };

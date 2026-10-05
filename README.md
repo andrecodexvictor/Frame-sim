@@ -1,5 +1,5 @@
 
-# Frame-sim: Deep Enterprise Simulation Kernel v7.1
+# FrameSIM v8.1.0: Enterprise Simulation Kernel
 
 **Frame-sim** é um simulador empresarial avançado projetado para testar a implementação de frameworks de gestão e engenharia (Scrum, SAFe, Spotify, COBIT, ITIL...) em ambientes corporativos complexos.
 
@@ -12,10 +12,10 @@ Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM A
 ## 🧠 Core Features
 
 ### 1. Simulação Multi-Agente & Persona Enrichment
-Simula stakeholders reais e um time completo com base em **arquétipos estendidos**:
+Representa stakeholders e equipes sintéticos com base em **arquétipos estendidos**:
 - **Key Stakeholders**: CEO, CTO, Tech Leads com perfis psicológicos profundos.
 - **Distribuição Realista**: o restante do time (Júniors, Plenos, QA, RH) é gerado automaticamente com base no tamanho da empresa.
-- **Enriquecimento RAG**: personas ganham nomes reais, histórias de fundo e vieses cognitivos extraídos de um banco de perfis (`RAG/profiles.json`).
+- **Enriquecimento RAG**: personas ganham nomes e histórias de fundo sintéticos, extraídos do catálogo de perfis (`RAG/profiles.json`).
 
 ### 2. Roteamento de Cenário Econômico
 Perfis econômicos realistas calibram custos e ROI (Brasil: PME, Startup SP/RJ, Grande Empresa, Interior; Internacional: US Big Tech, LATAM Remoto, Europa Ocidental). Salários, custo de incidentes e valor por feature variam drasticamente conforme o perfil.
@@ -143,7 +143,7 @@ Frame-sim/
 ├── types.ts               # Definições TypeScript compartilhadas
 ├── RAG/                  # Backend agentic Node/Express — projeto independente
 │   ├── src/               # DocumentAgent, CriticAgent, server, chunking...
-│   ├── profiles.json      # ~350 personas reais para enriquecimento
+│   ├── profiles.json      # ~350 perfis sintéticos para enriquecimento
 │   └── package.json
 ├── data/                 # Dados estáticos de cenário/economia
 ├── legacy_v1/             # Versão antiga do simulador (referência histórica)
@@ -163,6 +163,7 @@ Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`
 
 | Versão | Destaques |
 |---|---|
+| v8.1.0 | Avaliações individuais rastreáveis, comparações pareadas, harness de evals offline/online, Jev tipado e exportações nativas de artigo com fluxogramas SVG/Mermaid/TikZ |
 | v4 | SmartRouter multi-LLM, CriticAgent (auto-reflexão), memória de longo prazo via ChromaDB, viés cognitivo nas personas, ruído estocástico no ROI |
 | v5 | Self-Improvement (warmup de auto-calibração), Agent Racing (personas concorrentes + ensemble), DocumentAgent desacoplado, Smart Chunking para documentos grandes (COBIT etc.), Intervalos de Confiança (IC 95%) no batch |
 | v5.1 | Viés Responsivo por tipo de cenário, Surprise Factor (~15%), Framework-Organization Fit, range de ROI realista (-40% a +35%) |
@@ -170,6 +171,18 @@ Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`
 | v8.0 | EmployeeBrain (estado humano determinístico por funcionário), personas reais (350) conectadas ponta a ponta no backend, CriticAgent ativo no loop principal, modelos Gemini migrados para `gemini-2.5-flash`/`GEMINI_MODEL` |
 
 ## 🤝 Contribuindo
+
+O desenvolvimento de avaliações rastreáveis está descrito na [especificação](next_steps/credible_evals_spec.md) e no [checkpoint de execução](.scratch/credible-evals/issues/03-implementation-checkpoint.md). Os dados das simulações são sintéticos; plausibilidade de um modelo não comprova desempenho observado.
+
+Os painéis individual, comparativo e de lote oferecem exportação para artigo: pacote ZIP completo, fonte única `.tex`, snippets PGFPlots/TikZ/booktabs e dados. `metrics.json` registra os mesmos valores canônicos utilizados pelas medidas do painel. Valores ausentes permanecem ausentes; falhas e exclusões são registradas.
+
+Na área de exportação, abra “Fluxograma da simulação e das avaliações” para ver etapas, decisões Sim/Não e caminhos de abstenção. O diagrama também acompanha o pacote em SVG, Mermaid e TikZ, a partir do mesmo grafo. `npm run export:flowchart` regenera as fontes de documentação em `next_steps/`.
+
+Verificações adicionais: `npm run test:export`, `npm run test:article-compile`, `npm --prefix RAG run eval:offline` e `npm --prefix RAG run eval:online -- --dry-run`. O compilador de artigo pode registrar `unavailable`; isso não significa que o PDF foi verificado. Não instalar TeX como efeito colateral deste comando.
+
+O online runner só executa inferência com `--execute`, orçamento explícito (`--budget-usd`, `--max-runs`, `--max-calls`, `--timeout-ms`, `--reservation-usd`) e `--pricing-file` com tetos de custo verificados por provedor/modelo. O modelo inicial está em `RAG/evals/pricing-template.json` e é deliberadamente inválido para execução. Limites adicionais: `--max-input-bytes` (48.000) e `--max-output-tokens` (512). Reservas não são um medidor de cobrança; custo real permanece indisponível. Jev usa resposta tipada de tamanho declarado na precificação, sem alegação de limite de tokens aplicado por sua API. Sem orçamento, usar dry-run. Credenciais ficam exclusivamente em `RAG/.env`.
+
+O harness registra braços determinístico, Jev, cada juiz externo e pipeline completo para o mesmo candidato congelado, preservando discordâncias e falhas. O baseline extrativo executa sem inferência. A fixture `RAG/evals/fixtures/trace-replay-v1.json` permite replay das métricas a partir de traços persistidos: `npm --prefix RAG run eval:offline -- --dataset evals/fixtures/trace-replay-v1.json --output evals/results/trace-replay-v1.json`. O alvo é uma contagem contratual de aceites sintéticos, não um rótulo humano ou medida real.
 
 Pull requests são bem-vindos. Para mudanças maiores, abra uma issue primeiro para discutir o que você gostaria de mudar.
 

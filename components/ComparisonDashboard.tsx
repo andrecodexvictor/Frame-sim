@@ -1,322 +1,47 @@
-
-import React, { useState } from 'react';
-import {
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend
-} from 'recharts';
-import { SimulationOutput, SimulationConfig } from '../types';
+import React, { useMemo, useState } from 'react';
+import { BarChart, Bar, Cell, ErrorBar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Download, Moon, Sun } from 'lucide-react';
+import type { SimulationOutput, SimulationConfig } from '../types';
+import { compareConditions, COMPARISON_METRICS, type ComparisonMetric } from '../services/experimentResults';
 import { BrutalButton } from './ui/BrutalButton';
-import { Download, Moon, Sun, Trophy, TrendingUp, AlertTriangle } from 'lucide-react';
+import { IndividualEvaluationPanel } from './IndividualEvaluationPanel';
+import type { FailedCondition } from '../services/interactiveRuns';
+import { buildReportData } from '../services/reportData';
+import { ArticleExportControls } from './ArticleExportControls';
 
-interface ComparisonDashboardProps {
-  results: SimulationOutput[];
-  config: SimulationConfig;
-  onReset: () => void;
-}
+interface ComparisonDashboardProps { results: SimulationOutput[]; config: SimulationConfig; onReset: () => void; failures?: FailedCondition[] }
+const number = (value: number | null) => value === null ? 'Indisponível' : value.toLocaleString('pt-BR', { maximumFractionDigits: 5 });
+const interval = (bounds: [number, number] | null) => bounds ? `${number(bounds[0])} a ${number(bounds[1])}` : 'Indisponível';
 
-export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ results, config, onReset }) => {
-  const [darkMode, setDarkMode] = useState(true);
-
-  // Theme definition
-  const theme = {
-    bg: darkMode ? 'bg-[#09090b]' : 'bg-[#f4f4f5]',
-    text: darkMode ? 'text-zinc-100' : 'text-zinc-900',
-    card: darkMode ? 'bg-[#18181b] border-zinc-800' : 'bg-white border-zinc-200',
-    border: darkMode ? 'border-zinc-800' : 'border-zinc-300',
-    gridColor: darkMode ? '#27272a' : '#e4e4e7',
-    axisColor: darkMode ? '#71717a' : '#a1a1aa',
-  };
-
-  const colors = ['#10b981', '#a855f7', '#3b82f6', '#f59e0b', '#ef4444'];
-
-  // Determine Winner based on weighted score (Adoption * ROI * Maturity)
-  const sortedResults = [...results].sort((a, b) => {
-    const scoreA = a.summary.finalAdoption + a.summary.maturityScore * 10 + Math.max(0, a.summary.totalRoi);
-    const scoreB = b.summary.finalAdoption + b.summary.maturityScore * 10 + Math.max(0, b.summary.totalRoi);
-    return scoreB - scoreA;
-  });
-  const winner = sortedResults[0];
-
-  // Prepare data for Bar Charts
-  const comparisonData = results.map(r => ({
-    name: r.frameworkName,
-    roi: r.summary.totalRoi,
-    adoption: r.summary.finalAdoption,
-    time: r.summary.monthsToComplete,
-    maturity: r.summary.maturityScore
-  }));
-
-  // Prepare data for Radar Chart
-  const radarData = [
-    { subject: 'ROI', fullMark: 100 },
-    { subject: 'Adoção', fullMark: 100 },
-    { subject: 'Maturidade (x10)', fullMark: 100 },
-    { subject: 'Velocidade (inv)', fullMark: 100 }, // Inverted time
-    { subject: 'Compliance', fullMark: 100 }
-  ].map(metric => {
-    const point: any = { subject: metric.subject };
-    results.forEach(r => {
-      let val = 0;
-      if (metric.subject === 'ROI') val = Math.max(0, r.summary.totalRoi);
-      if (metric.subject === 'Adoção') val = r.summary.finalAdoption;
-      if (metric.subject === 'Maturidade (x10)') val = r.summary.maturityScore * 10;
-      if (metric.subject === 'Velocidade (inv)') val = 100 - Math.min(100, r.summary.monthsToComplete * 2);
-      if (metric.subject === 'Compliance') val = r.timeline[r.timeline.length - 1].compliance;
-      point[r.frameworkName] = val;
-    });
-    return point;
-  });
-
-  return (
-    <div className={`fixed inset-0 z-50 overflow-y-auto ${theme.bg} ${theme.text} transition-colors duration-300 custom-scrollbar`}>
-      <div className={`fixed inset-0 z-0 pointer-events-none opacity-[0.03] ${darkMode ? 'bg-[url("https://grainy-gradients.vercel.app/noise.svg")]' : ''}`} style={{ backgroundSize: '100px 100px' }}></div>
-
-      <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-10 space-y-10">
-
-        {/* Navigation */}
-        <nav className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b ${theme.border} pb-6`}>
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl md:text-4xl font-black tracking-tighter uppercase">
-              FrameSim<span className="text-brutal-green">.VS</span>
-            </h1>
-            <div className={`hidden md:flex px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border ${theme.border} rounded bg-opacity-50`}>
-              Comparison Engine
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'} title={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'} className={`p-2 rounded border ${theme.border} hover:bg-zinc-500/10 transition-colors`}>
-              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-            <BrutalButton variant="secondary" className="text-xs h-9 px-4" onClick={onReset}>Nova Comparação</BrutalButton>
-          </div>
-        </nav>
-
-        {/* Winner Section */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className={`md:col-span-8 p-8 rounded border-2 border-brutal-green ${darkMode ? 'bg-emerald-900/10' : 'bg-emerald-50'} relative overflow-hidden`}>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2 text-brutal-green">
-                <Trophy className="w-6 h-6" />
-                <span className="font-mono font-bold uppercase tracking-widest">Recomendação da Engine</span>
-              </div>
-              <h2 className="text-5xl md:text-7xl font-black uppercase tracking-tighter mb-4">{winner.frameworkName}</h2>
-              <p className="max-w-xl text-sm opacity-80 font-mono">
-                Projeta-se como a opção mais eficiente para o contexto de {config.companySize} funcionários no setor {config.sector}. Apresentou o melhor balanço entre ROI ({winner.summary.totalRoi}%) e Resistência Cultural.
-              </p>
-            </div>
-            <div className="absolute -right-10 -bottom-10 opacity-10 rotate-12">
-              <Trophy className="w-64 h-64" />
-            </div>
-          </div>
-
-          <div className="md:col-span-4 grid grid-cols-1 gap-4">
-            <div className={`p-6 rounded border ${theme.border} ${theme.card} flex flex-col justify-center`}>
-              <span className="text-xs font-mono uppercase opacity-60 mb-2">Melhor ROI Projetado</span>
-              <span className="text-4xl font-black text-purple-500">
-                {results.reduce((prev, curr) => prev.summary.totalRoi > curr.summary.totalRoi ? prev : curr).frameworkName}
-              </span>
-            </div>
-            <div className={`p-6 rounded border ${theme.border} ${theme.card} flex flex-col justify-center`}>
-              <span className="text-xs font-mono uppercase opacity-60 mb-2">Implementação Mais Rápida</span>
-              <span className="text-4xl font-black text-blue-500">
-                {results.reduce((prev, curr) => prev.summary.monthsToComplete < curr.summary.monthsToComplete ? prev : curr).frameworkName}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* Radar Overlay */}
-          <div className={`p-6 rounded border ${theme.border} ${theme.card} min-h-[400px]`}>
-            <h3 className="font-bold text-sm uppercase mb-6 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-orange-500" /> Sobreposição de Atributos
-            </h3>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                  <PolarGrid stroke={theme.gridColor} />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: theme.axisColor, fontSize: 10, fontWeight: 'bold' }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                  {results.map((r, idx) => (
-                    <Radar
-                      key={r.frameworkName}
-                      name={r.frameworkName}
-                      dataKey={r.frameworkName}
-                      stroke={colors[idx % colors.length]}
-                      strokeWidth={2}
-                      fill={colors[idx % colors.length]}
-                      fillOpacity={0.1}
-                    />
-                  ))}
-                  <Legend />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Bar Chart ROI */}
-          <div className={`p-6 rounded border ${theme.border} ${theme.card} min-h-[400px]`}>
-            <h3 className="font-bold text-sm uppercase mb-6 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-emerald-500" /> Comparativo de ROI (%)
-            </h3>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={comparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.gridColor} />
-                  <XAxis type="number" stroke={theme.axisColor} tick={{ fontSize: 10 }} />
-                  <YAxis dataKey="name" type="category" stroke={theme.axisColor} width={80} tick={{ fontSize: 10, fontWeight: 'bold' }} />
-                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#fff', border: '1px solid #333' }} />
-                  <Bar dataKey="roi" radius={[0, 4, 4, 0]}>
-                    {comparisonData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Details Table */}
-        <div className={`p-6 rounded border ${theme.border} ${theme.card} overflow-x-auto`}>
-          <h3 className="font-bold text-sm uppercase mb-6">Detalhamento Head-to-Head</h3>
-          <table className="w-full text-left font-mono text-sm">
-            <thead>
-              <tr className="border-b border-zinc-700">
-                <th className="p-4 uppercase opacity-60">Framework</th>
-                <th className="p-4 uppercase opacity-60">Maturidade Final</th>
-                <th className="p-4 uppercase opacity-60">Tempo (Meses)</th>
-                <th className="p-4 uppercase opacity-60">Risco Principal</th>
-                <th className="p-4 uppercase opacity-60">Ponto Forte</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r, idx) => (
-                <tr key={idx} className="border-b border-zinc-800 hover:bg-zinc-500/5 transition-colors">
-                  <td className="p-4 font-bold" style={{ color: colors[idx % colors.length] }}>{r.frameworkName}</td>
-                  <td className="p-4">{r.summary.maturityScore}/10</td>
-                  <td className="p-4">{r.summary.monthsToComplete}</td>
-                  <td className="p-4 text-red-400 text-xs">{r.risks.find(risk => risk.category === 'Crítico')?.description || r.risks[0].description}</td>
-                  <td className="p-4 text-emerald-400 text-xs italic">"{r.keyPersonas.find(p => p.sentiment > 80)?.impact || 'Alta aceitação técnica'}"</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Business Metrics Comparison (Phase 5) */}
-        {results.some(r => r.businessMetrics) && (
-          <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
-            <h3 className="font-bold text-sm uppercase mb-6">📊 Comparativo de Métricas de Desempenho</h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              {/* Efficiency Gain */}
-              <div className="space-y-2">
-                <div className="text-xs font-mono uppercase opacity-60 text-center">Ganho Eficiência</div>
-                {results.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-emerald-500/10">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
-                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
-                    <span className="text-sm font-black text-emerald-500">+{r.businessMetrics?.efficiencyGain || 0}%</span>
-                  </div>
-                ))}
-              </div>
-              {/* Rework Reduction */}
-              <div className="space-y-2">
-                <div className="text-xs font-mono uppercase opacity-60 text-center">Redução Retrabalho</div>
-                {results.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-yellow-500/10">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
-                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
-                    <span className="text-sm font-black text-yellow-500">-{r.businessMetrics?.reworkReduction || 0}%</span>
-                  </div>
-                ))}
-              </div>
-              {/* Process Agility */}
-              <div className="space-y-2">
-                <div className="text-xs font-mono uppercase opacity-60 text-center">Agilidade</div>
-                {results.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-purple-500/10">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
-                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
-                    <span className="text-sm font-black text-purple-500">+{r.businessMetrics?.processAgility || 0}%</span>
-                  </div>
-                ))}
-              </div>
-              {/* Time to Market */}
-              <div className="space-y-2">
-                <div className="text-xs font-mono uppercase opacity-60 text-center">Time-to-Market</div>
-                {results.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-blue-500/10">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
-                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
-                    <span className="text-sm font-black text-blue-500">-{r.businessMetrics?.timeToMarket || 0}%</span>
-                  </div>
-                ))}
-              </div>
-              {/* Quality Score */}
-              <div className="space-y-2">
-                <div className="text-xs font-mono uppercase opacity-60 text-center">Qualidade</div>
-                {results.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded bg-zinc-500/10">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
-                    <span className="text-xs font-bold flex-1">{r.frameworkName}</span>
-                    <span className="text-sm font-black">{r.businessMetrics?.qualityScore || 0}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Company Evolution Comparison (Phase 5) */}
-        {results.some(r => r.companyEvolution) && (
-          <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
-            <h3 className="font-bold text-sm uppercase mb-6">📈 Comparativo de Evolução Empresarial</h3>
-            <table className="w-full text-left font-mono text-sm">
-              <thead>
-                <tr className="border-b border-zinc-700">
-                  <th className="p-3 uppercase opacity-60">Framework</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Contratações</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Turnover</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Promoções</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Capacidade</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Break-Even</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Maturidade</th>
-                  <th className="p-3 uppercase opacity-60 text-center">Cultura</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r, idx) => (
-                  <tr key={idx} className="border-b border-zinc-800 hover:bg-zinc-500/5">
-                    <td className="p-3 font-bold" style={{ color: colors[idx % colors.length] }}>{r.frameworkName}</td>
-                    <td className="p-3 text-center text-green-500">+{r.companyEvolution?.newHires || 0}</td>
-                    <td className="p-3 text-center text-red-500">{r.companyEvolution?.turnover || 0}%</td>
-                    <td className="p-3 text-center text-amber-500">{r.companyEvolution?.promotions || 0}</td>
-                    <td className="p-3 text-center text-purple-500">+{r.companyEvolution?.capacityGrowth || 0}%</td>
-                    <td className={`p-3 text-center ${(r.companyEvolution?.breakEvenProjection || 0) > 0 ? 'text-blue-500' : 'text-red-500'}`}>
-                      {(r.companyEvolution?.breakEvenProjection || 0) > 0 ? `Mês ${r.companyEvolution?.breakEvenProjection}` : 'N/A'}
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="opacity-50">{r.companyEvolution?.maturityLevelBefore || '-'}</span>
-                      <span className="mx-1">→</span>
-                      <span className="text-emerald-500 font-bold">{r.companyEvolution?.maturityLevelAfter || '-'}</span>
-                    </td>
-                    <td className={`p-3 text-center font-bold ${r.companyEvolution?.culturalShift === 'ENTUSIASTA' ? 'text-emerald-500' :
-                        r.companyEvolution?.culturalShift === 'FAVORÁVEL' ? 'text-green-500' :
-                          r.companyEvolution?.culturalShift === 'NEUTRO' ? 'text-yellow-500' :
-                            'text-red-500'
-                      }`}>{r.companyEvolution?.culturalShift || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-      </div>
-    </div>
-  );
+export const ComparisonDashboard: React.FC<ComparisonDashboardProps> = ({ results, config, onReset, failures = [] }) => {
+    const [darkMode, setDarkMode] = useState(true);
+    const [metric, setMetric] = useState<ComparisonMetric>('totalRoi');
+    const [selectedRun, setSelectedRun] = useState(0);
+    const articleReport = useMemo(() => buildReportData({ mode: 'comparison', outputs: results, config, failures }), [results, config, failures]);
+    const report = articleReport.comparisons[metric]!;
+    const surface = darkMode ? 'bg-[#18181b] border-zinc-700 text-zinc-100' : 'bg-white border-zinc-300 text-zinc-900';
+    const bg = darkMode ? 'bg-[#09090b] text-zinc-100' : 'bg-zinc-100 text-zinc-900';
+    const chartData = report.conditions.filter(condition => condition.statistics.mean !== null).map(condition => ({ id: condition.id, label: `${condition.label} · ${condition.id}`, mean: condition.statistics.mean,
+        error: condition.statistics.interval95 ? [condition.statistics.mean! - condition.statistics.interval95[0], condition.statistics.interval95[1] - condition.statistics.mean!] : undefined }));
+    const labelFor = (id: string) => `${report.conditions.find(condition => condition.id === id)?.label ?? id} · ${id}`;
+    const download = () => {
+        const url = URL.createObjectURL(new Blob([JSON.stringify({ config, results, failures, comparison: report }, null, 2)], { type: 'application/json' }));
+        const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'framesim-comparison.json'; anchor.click(); URL.revokeObjectURL(url);
+    };
+    return <div className={`fixed inset-0 z-50 overflow-y-auto ${bg}`}><main className="max-w-[1400px] mx-auto p-5 md:p-10 space-y-8">
+        <nav className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-500/30 pb-5"><h1 className="text-2xl md:text-3xl font-bold">FrameSIM · Comparação</h1><div className="flex flex-wrap items-center gap-3"><button type="button" className="p-3 rounded border border-zinc-500/40 focus-visible:outline" onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button><BrutalButton variant="secondary" onClick={onReset}>Nova comparação</BrutalButton><BrutalButton onClick={download}><Download size={16} className="mr-2" />Dados JSON</BrutalButton></div></nav>
+        <ArticleExportControls report={articleReport} /><header className="space-y-3 max-w-3xl"><h2 className="text-2xl font-bold">Desempenho por condição</h2><p className="text-sm leading-relaxed">Compare cada dimensão na sua unidade. O delta usa a primeira condição como referência e só aceita pares com mesma equipe, cenário, choques e revisão do código. Uma réplica permite descrever o resultado; não permite estimar um intervalo.</p><p className="text-sm font-medium">Validação empírica pendente · resultados sintéticos dos cenários testados.</p></header>
+        <section className={`border rounded p-5 md:p-6 space-y-5 ${surface}`} aria-label="Medidas comparativas">
+            <div className="flex flex-wrap items-center justify-between gap-4"><h3 className="text-lg font-semibold">Medida da equipe</h3><label className="flex flex-wrap items-center gap-3 text-sm" htmlFor="comparison-metric">Dimensão<select id="comparison-metric" value={metric} onChange={event => setMetric(event.target.value as ComparisonMetric)} className={`min-h-11 border rounded px-3 py-2 focus-visible:outline ${surface}`}>{Object.entries(COMPARISON_METRICS).map(([key, definition]) => <option key={key} value={key}>{definition.label} ({definition.unit})</option>)}</select></label></div>
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm border-collapse"><thead><tr className="border-b border-zinc-500/40"><th scope="col" className="py-3 pr-4">Condição</th><th scope="col" className="pr-4">Média ({report.unit})</th><th scope="col" className="pr-4">IC 95%</th><th scope="col" className="pr-4">n independente</th><th scope="col">Excluídos</th></tr></thead><tbody>{report.conditions.map(condition => <tr key={condition.id} className="border-b border-zinc-500/20"><th scope="row" className="py-3 pr-4 font-medium">{condition.label}<span className="block font-mono text-xs mt-1 break-all">{condition.id}</span></th><td className="pr-4 font-mono tabular-nums">{number(condition.statistics.mean)}</td><td className="pr-4 font-mono tabular-nums">{interval(condition.statistics.interval95)}</td><td className="pr-4 font-mono">{condition.statistics.nIndependent}</td><td className="font-mono">{condition.statistics.nExcluded}</td></tr>)}</tbody></table></div>
+            {chartData.length ? <div className="h-72 min-w-0 w-full"><ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 288 }}><BarChart data={chartData} margin={{ top: 15, right: 20, left: 12, bottom: 25 }}><CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#3f3f46' : '#d4d4d8'} vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11, fill: darkMode ? '#d4d4d8' : '#3f3f46' }} /><YAxis tick={{ fontSize: 11, fill: darkMode ? '#d4d4d8' : '#3f3f46' }} label={{ value: report.unit, angle: -90, position: 'insideLeft' }} /><ReferenceLine y={0} stroke="#71717a" /><Tooltip contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#fff', border: '1px solid #71717a', color: darkMode ? '#fff' : '#18181b' }} /><Bar dataKey="mean" name={COMPARISON_METRICS[metric].label}>{chartData.map(point => <Cell key={point.id} fill={point.mean! < 0 ? '#b45309' : '#047857'} />)}<ErrorBar dataKey="error" width={8} stroke={darkMode ? '#e4e4e7' : '#27272a'} /></Bar></BarChart></ResponsiveContainer></div> : <p className="text-sm">Não há medidas disponíveis nesta dimensão.</p>}
+            <p className="text-xs">Intervalo t sobre execuções independentes quando n ≥ 2. Dados ausentes, fixtures e condições degradadas ficam fora da inferência; perdas são preservadas.</p>
+        </section>
+        <section className={`border rounded p-5 md:p-6 space-y-4 ${surface}`} aria-label="Delta pareado"><h3 className="text-lg font-semibold">Delta pareado · B − A</h3><p className="text-sm max-w-prose">Bootstrap reamostra pares completos no nível da execução. Para dimensões em %, o delta está em pontos percentuais. Nenhuma soma entre escalas escolhe uma condição vencedora.</p>
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-zinc-500/40"><th scope="col" className="py-3 pr-4">A → B</th><th scope="col" className="pr-4">Delta</th><th scope="col" className="pr-4">IC 95%</th><th scope="col" className="pr-4">n independente</th><th scope="col">Pares excluídos</th></tr></thead><tbody>{report.comparisons.map(pair => <tr key={pair.b} className="border-b border-zinc-500/20"><th scope="row" className="py-3 pr-4 font-medium">{labelFor(pair.a)} → {labelFor(pair.b)}</th><td className="pr-4 font-mono">{number(pair.statistics.delta)}</td><td className="pr-4 font-mono">{interval(pair.statistics.interval95)}</td><td className="pr-4 font-mono">{pair.statistics.nIndependent}</td><td className="font-mono">{pair.statistics.nExcluded}</td></tr>)}</tbody></table></div>
+            {report.comparisons.some(pair => pair.excludedReplicas.length) && <details className="text-sm"><summary className="cursor-pointer focus-visible:outline">Por que alguns pares foram excluídos</summary><ul className="list-disc pl-5 space-y-2 mt-3">{report.comparisons.flatMap(pair => pair.excludedReplicas.map(excluded => <li key={`${pair.b}-${excluded.replicaId}`}>{labelFor(pair.b)} · {excluded.replicaId}: {excluded.reason}</li>))}</ul></details>}
+        </section>
+        {!!results.length && <><label htmlFor="comparison-run" className="block text-sm font-medium">Execução para inspecionar pessoas<select id="comparison-run" value={Math.min(selectedRun, results.length - 1)} onChange={event => setSelectedRun(Number(event.target.value))} className={`block w-full mt-2 min-h-11 rounded border px-3 py-2 focus-visible:outline ${surface}`}>{results.map((output, index) => <option key={output.manifest?.runId ?? index} value={index}>{output.frameworkName} · {output.manifest?.protocol?.conditionId ?? index + 1} · réplica {output.manifest?.replicaId ?? 'não registrada'}</option>)}</select></label><IndividualEvaluationPanel data={results[Math.min(selectedRun, results.length - 1)]} darkMode={darkMode} /></>}
+        <details className="text-sm border-t border-zinc-500/30 pt-4"><summary className="cursor-pointer focus-visible:outline">Método e limitações</summary><ul className="list-disc pl-5 space-y-2 mt-3">{report.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>
+    </main></div>;
 };

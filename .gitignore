@@ -28,3 +28,5 @@ next_steps/ApiS_RECOVERED.txt
 
 .context/runtime/
 artifacts/qa/
+.impeccable/
+RAG/evals/results/

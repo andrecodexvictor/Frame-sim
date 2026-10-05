@@ -1,0 +1,683 @@
+{
+  "version": "trace-replay-v1",
+  "cases": [
+    {
+      "id": "trace-case-1",
+      "split": "development",
+      "cohortId": "replay-cohort-1",
+      "personaId": "replay-cohort-1:person-a",
+      "source": "synthetic",
+      "origin": {
+        "name": "FrameSIM offline orchestrator trace replay; acceptance-count contract oracle",
+        "license": "Project fixture",
+        "period": "synthetic-work-v1"
+      },
+      "target": {
+        "kind": "numeric",
+        "value": 0.3333333333333333,
+        "unit": "accepted units / opportunity units"
+      },
+      "input": {
+        "dimension": "delivery",
+        "traces": [
+          {
+            "runId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed",
+            "personaId": "replay-cohort-1:person-a",
+            "turnId": 1,
+            "role": "Engineer",
+            "before": {
+              "personaId": "replay-cohort-1:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 29,
+              "humor": 0,
+              "energia": 87,
+              "engajamento": 50,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 67,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "after": {
+              "personaId": "replay-cohort-1:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 28.629999999999995,
+              "humor": 1.2,
+              "energia": 86,
+              "engajamento": 50.09,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 67,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [
+                {
+                  "turno": 1,
+                  "evento": "neutral: Document the first sampled work block.",
+                  "valencia": 0
+                }
+              ],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "tasks": [
+              {
+                "taskId": "replay-cohort-1%3Aperson-a:1:task-1",
+                "opportunityUnits": 1,
+                "deliveredUnits": 1,
+                "acceptedUnits": 1,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-task-1"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "accepted",
+                "censored": false,
+                "leadTimeHours": 1.25
+              },
+              {
+                "taskId": "replay-cohort-1%3Aperson-a:1:task-2",
+                "opportunityUnits": 1,
+                "deliveredUnits": 0,
+                "acceptedUnits": 0,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-task-2"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "pending",
+                "censored": true
+              },
+              {
+                "taskId": "replay-cohort-1%3Aperson-a:1:task-3",
+                "opportunityUnits": 1,
+                "deliveredUnits": 0,
+                "acceptedUnits": 0,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-task-3"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "pending",
+                "censored": true
+              }
+            ],
+            "source": "synthetic",
+            "events": [
+              {
+                "personaId": "replay-cohort-1:person-a",
+                "type": "brain-transition",
+                "text": "Recorded state transition for turn 1",
+                "kind": "state-transition",
+                "eventId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:0",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "personaId": "replay-cohort-1:person-a",
+                "type": "persona-response",
+                "text": "Documented help",
+                "kind": "narrative",
+                "eventId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:1",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "eventId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-block",
+                "personaId": "replay-cohort-1:person-a",
+                "turnId": 1,
+                "type": "sampled-work-block",
+                "text": "{\"policy\":{\"version\":\"synthetic-work-v1\",\"capacityHours\":2,\"taskEffortHours\":1,\"defectProbability\":0.2,\"reviewProbability\":0.5,\"detectionProbability\":0.9,\"reviewHours\":0.25,\"correctionHours\":0.25,\"incidentProbability\":0.1,\"incidentDowntimeHours\":0.5,\"incidentPressureDelta\":0.1},\"available\":true,\"reservedReviewHours\":0.25,\"usableExecutionHours\":1.75,\"scope\":\"sampled block within turn, not total monthly production\"}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-task-1",
+                "personaId": "replay-cohort-1:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-1%3Aperson-a:1:task-1\",\"opportunityUnits\":1,\"deliveredUnits\":1,\"acceptedUnits\":1,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"accepted\",\"censored\":false,\"leadTimeHours\":1.25,\"effortHours\":1,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-task-2",
+                "personaId": "replay-cohort-1:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-1%3Aperson-a:1:task-2\",\"opportunityUnits\":1,\"deliveredUnits\":0,\"acceptedUnits\":0,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"pending\",\"censored\":true,\"effortHours\":0,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "5a3b597d-47db-4cdd-bd21-6f65fca6baed:replay-cohort-1%3Aperson-a:1:work-task-3",
+                "personaId": "replay-cohort-1:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-1%3Aperson-a:1:task-3\",\"opportunityUnits\":1,\"deliveredUnits\":0,\"acceptedUnits\":0,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"pending\",\"censored\":true,\"effortHours\":0,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "trace-case-2",
+      "split": "calibration",
+      "cohortId": "replay-cohort-2",
+      "personaId": "replay-cohort-2:person-a",
+      "source": "synthetic",
+      "origin": {
+        "name": "FrameSIM offline orchestrator trace replay; acceptance-count contract oracle",
+        "license": "Project fixture",
+        "period": "synthetic-work-v1"
+      },
+      "target": {
+        "kind": "numeric",
+        "value": 0.5,
+        "unit": "accepted units / opportunity units"
+      },
+      "input": {
+        "dimension": "delivery",
+        "traces": [
+          {
+            "runId": "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9",
+            "personaId": "replay-cohort-2:person-a",
+            "turnId": 1,
+            "role": "Engineer",
+            "before": {
+              "personaId": "replay-cohort-2:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 26,
+              "humor": 0,
+              "energia": 79,
+              "engajamento": 50,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 72,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "after": {
+              "personaId": "replay-cohort-2:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 25.08,
+              "humor": 1.2,
+              "energia": 78,
+              "engajamento": 50.09,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 72,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [
+                {
+                  "turno": 1,
+                  "evento": "neutral: Document the first sampled work block.",
+                  "valencia": 0
+                }
+              ],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "tasks": [
+              {
+                "taskId": "replay-cohort-2%3Aperson-a:1:task-1",
+                "opportunityUnits": 1,
+                "deliveredUnits": 1,
+                "acceptedUnits": 1,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:work-task-1"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "accepted",
+                "censored": false,
+                "leadTimeHours": 1.25
+              },
+              {
+                "taskId": "replay-cohort-2%3Aperson-a:1:task-2",
+                "opportunityUnits": 1,
+                "deliveredUnits": 0,
+                "acceptedUnits": 0,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:work-task-2"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "pending",
+                "censored": true
+              }
+            ],
+            "source": "synthetic",
+            "events": [
+              {
+                "personaId": "replay-cohort-2:person-a",
+                "type": "brain-transition",
+                "text": "Recorded state transition for turn 1",
+                "kind": "state-transition",
+                "eventId": "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:0",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "personaId": "replay-cohort-2:person-a",
+                "type": "persona-response",
+                "text": "Documented help",
+                "kind": "narrative",
+                "eventId": "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:1",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "eventId": "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:work-block",
+                "personaId": "replay-cohort-2:person-a",
+                "turnId": 1,
+                "type": "sampled-work-block",
+                "text": "{\"policy\":{\"version\":\"synthetic-work-v1\",\"capacityHours\":2,\"taskEffortHours\":1,\"defectProbability\":0.2,\"reviewProbability\":0.5,\"detectionProbability\":0.9,\"reviewHours\":0.25,\"correctionHours\":0.25,\"incidentProbability\":0.1,\"incidentDowntimeHours\":0.5,\"incidentPressureDelta\":0.1},\"available\":true,\"reservedReviewHours\":0.25,\"usableExecutionHours\":1.75,\"scope\":\"sampled block within turn, not total monthly production\"}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:work-task-1",
+                "personaId": "replay-cohort-2:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-2%3Aperson-a:1:task-1\",\"opportunityUnits\":1,\"deliveredUnits\":1,\"acceptedUnits\":1,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"accepted\",\"censored\":false,\"leadTimeHours\":1.25,\"effortHours\":1,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "a0585a0a-fdcc-4287-b5fe-0cf942fdf0c9:replay-cohort-2%3Aperson-a:1:work-task-2",
+                "personaId": "replay-cohort-2:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-2%3Aperson-a:1:task-2\",\"opportunityUnits\":1,\"deliveredUnits\":0,\"acceptedUnits\":0,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"pending\",\"censored\":true,\"effortHours\":0,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "trace-case-3",
+      "split": "holdout",
+      "cohortId": "replay-cohort-3",
+      "personaId": "replay-cohort-3:person-a",
+      "source": "synthetic",
+      "origin": {
+        "name": "FrameSIM offline orchestrator trace replay; acceptance-count contract oracle",
+        "license": "Project fixture",
+        "period": "synthetic-work-v1"
+      },
+      "target": {
+        "kind": "numeric",
+        "value": 0.5,
+        "unit": "accepted units / opportunity units"
+      },
+      "input": {
+        "dimension": "delivery",
+        "traces": [
+          {
+            "runId": "ad5447b2-c88f-4df5-acb5-96d0e1a80244",
+            "personaId": "replay-cohort-3:person-a",
+            "turnId": 1,
+            "role": "Engineer",
+            "before": {
+              "personaId": "replay-cohort-3:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 24,
+              "humor": 0,
+              "energia": 87,
+              "engajamento": 50,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 74,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "after": {
+              "personaId": "replay-cohort-3:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 22.86,
+              "humor": 1.2,
+              "energia": 86,
+              "engajamento": 50.09,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 74,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [
+                {
+                  "turno": 1,
+                  "evento": "neutral: Document the first sampled work block.",
+                  "valencia": 0
+                }
+              ],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "tasks": [
+              {
+                "taskId": "replay-cohort-3%3Aperson-a:1:task-1",
+                "opportunityUnits": 1,
+                "deliveredUnits": 1,
+                "acceptedUnits": 1,
+                "reworkUnits": 1,
+                "evidenceIds": [
+                  "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:work-task-1"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "accepted",
+                "censored": false,
+                "leadTimeHours": 1.75
+              },
+              {
+                "taskId": "replay-cohort-3%3Aperson-a:1:task-2",
+                "opportunityUnits": 1,
+                "deliveredUnits": 0,
+                "acceptedUnits": 0,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:work-task-2"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "pending",
+                "censored": true
+              }
+            ],
+            "source": "synthetic",
+            "events": [
+              {
+                "personaId": "replay-cohort-3:person-a",
+                "type": "brain-transition",
+                "text": "Recorded state transition for turn 1",
+                "kind": "state-transition",
+                "eventId": "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:0",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "personaId": "replay-cohort-3:person-a",
+                "type": "persona-response",
+                "text": "Documented help",
+                "kind": "narrative",
+                "eventId": "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:1",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "eventId": "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:work-block",
+                "personaId": "replay-cohort-3:person-a",
+                "turnId": 1,
+                "type": "sampled-work-block",
+                "text": "{\"policy\":{\"version\":\"synthetic-work-v1\",\"capacityHours\":2,\"taskEffortHours\":1,\"defectProbability\":0.2,\"reviewProbability\":0.5,\"detectionProbability\":0.9,\"reviewHours\":0.25,\"correctionHours\":0.25,\"incidentProbability\":0.1,\"incidentDowntimeHours\":0.5,\"incidentPressureDelta\":0.1},\"available\":true,\"reservedReviewHours\":0.5,\"usableExecutionHours\":1.5,\"scope\":\"sampled block within turn, not total monthly production\"}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:work-task-1",
+                "personaId": "replay-cohort-3:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-3%3Aperson-a:1:task-1\",\"opportunityUnits\":1,\"deliveredUnits\":1,\"acceptedUnits\":1,\"reworkUnits\":1,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"accepted\",\"censored\":false,\"leadTimeHours\":1.75,\"effortHours\":1.25,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "ad5447b2-c88f-4df5-acb5-96d0e1a80244:replay-cohort-3%3Aperson-a:1:work-task-2",
+                "personaId": "replay-cohort-3:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-3%3Aperson-a:1:task-2\",\"opportunityUnits\":1,\"deliveredUnits\":0,\"acceptedUnits\":0,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"pending\",\"censored\":true,\"effortHours\":0,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "trace-case-4",
+      "split": "holdout",
+      "cohortId": "replay-cohort-4",
+      "personaId": "replay-cohort-4:person-a",
+      "source": "synthetic",
+      "origin": {
+        "name": "FrameSIM offline orchestrator trace replay; acceptance-count contract oracle",
+        "license": "Project fixture",
+        "period": "synthetic-work-v1"
+      },
+      "target": {
+        "kind": "numeric",
+        "value": 0.3333333333333333,
+        "unit": "accepted units / opportunity units"
+      },
+      "input": {
+        "dimension": "delivery",
+        "traces": [
+          {
+            "runId": "52b232e9-af5f-4f25-943c-687d73552e59",
+            "personaId": "replay-cohort-4:person-a",
+            "turnId": 1,
+            "role": "Engineer",
+            "before": {
+              "personaId": "replay-cohort-4:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 30,
+              "humor": 0,
+              "energia": 75,
+              "engajamento": 50,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 63,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "after": {
+              "personaId": "replay-cohort-4:person-a",
+              "nome": "Same Name",
+              "cargo": "Engineer",
+              "estresse": 30.07,
+              "humor": 1.2,
+              "energia": 74,
+              "engajamento": 50.09,
+              "status": "ativo",
+              "turnosEstresseAlto": 0,
+              "turnosAfastado": 0,
+              "resiliencia": 63,
+              "adaptabilidade": 50,
+              "influencia": 50,
+              "workaholic": false,
+              "viesCognitivo": "",
+              "memoria": [
+                {
+                  "turno": 1,
+                  "evento": "neutral: Document the first sampled work block.",
+                  "valencia": 0
+                }
+              ],
+              "reflexao": "",
+              "decisoes": []
+            },
+            "tasks": [
+              {
+                "taskId": "replay-cohort-4%3Aperson-a:1:task-1",
+                "opportunityUnits": 1,
+                "deliveredUnits": 1,
+                "acceptedUnits": 1,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-task-1"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "accepted",
+                "censored": false,
+                "leadTimeHours": 1.5
+              },
+              {
+                "taskId": "replay-cohort-4%3Aperson-a:1:task-2",
+                "opportunityUnits": 1,
+                "deliveredUnits": 0,
+                "acceptedUnits": 0,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-task-2"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "pending",
+                "censored": true
+              },
+              {
+                "taskId": "replay-cohort-4%3Aperson-a:1:task-3",
+                "opportunityUnits": 1,
+                "deliveredUnits": 0,
+                "acceptedUnits": 0,
+                "reworkUnits": 0,
+                "evidenceIds": [
+                  "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-task-3"
+                ],
+                "source": "synthetic",
+                "classId": "Engineer:sampled-unit",
+                "modelVersion": "synthetic-work-v1",
+                "assignedTurnId": 1,
+                "status": "pending",
+                "censored": true
+              }
+            ],
+            "source": "synthetic",
+            "events": [
+              {
+                "personaId": "replay-cohort-4:person-a",
+                "type": "brain-transition",
+                "text": "Recorded state transition for turn 1",
+                "kind": "state-transition",
+                "eventId": "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:0",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "personaId": "replay-cohort-4:person-a",
+                "type": "persona-response",
+                "text": "Documented help",
+                "kind": "narrative",
+                "eventId": "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:1",
+                "turnId": 1,
+                "source": "synthetic"
+              },
+              {
+                "eventId": "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-block",
+                "personaId": "replay-cohort-4:person-a",
+                "turnId": 1,
+                "type": "sampled-work-block",
+                "text": "{\"policy\":{\"version\":\"synthetic-work-v1\",\"capacityHours\":2,\"taskEffortHours\":1,\"defectProbability\":0.2,\"reviewProbability\":0.5,\"detectionProbability\":0.9,\"reviewHours\":0.25,\"correctionHours\":0.25,\"incidentProbability\":0.1,\"incidentDowntimeHours\":0.5,\"incidentPressureDelta\":0.1},\"available\":true,\"reservedReviewHours\":0.5,\"usableExecutionHours\":1.5,\"scope\":\"sampled block within turn, not total monthly production\"}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-task-1",
+                "personaId": "replay-cohort-4:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-4%3Aperson-a:1:task-1\",\"opportunityUnits\":1,\"deliveredUnits\":1,\"acceptedUnits\":1,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"accepted\",\"censored\":false,\"leadTimeHours\":1.5,\"effortHours\":1,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-task-2",
+                "personaId": "replay-cohort-4:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-4%3Aperson-a:1:task-2\",\"opportunityUnits\":1,\"deliveredUnits\":0,\"acceptedUnits\":0,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"pending\",\"censored\":true,\"effortHours\":0,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              },
+              {
+                "eventId": "52b232e9-af5f-4f25-943c-687d73552e59:replay-cohort-4%3Aperson-a:1:work-task-3",
+                "personaId": "replay-cohort-4:person-a",
+                "turnId": 1,
+                "type": "attributed-task-outcome",
+                "text": "{\"taskId\":\"replay-cohort-4%3Aperson-a:1:task-3\",\"opportunityUnits\":1,\"deliveredUnits\":0,\"acceptedUnits\":0,\"reworkUnits\":0,\"evidenceIds\":[],\"source\":\"synthetic\",\"classId\":\"Engineer:sampled-unit\",\"modelVersion\":\"synthetic-work-v1\",\"assignedTurnId\":1,\"status\":\"pending\",\"censored\":true,\"effortHours\":0,\"rejectedForDefect\":false}",
+                "kind": "task-observation",
+                "source": "synthetic"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

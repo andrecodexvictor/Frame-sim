@@ -1,0 +1,28 @@
+{
+  "version": "individual-v1",
+  "dimension": "collaboration",
+  "levels": [
+    "A documented interaction with an identified peer produced no supported helpful outcome, or hindered the peer's task.",
+    "A specific request for help or offer of help to an identified peer is documented; a helpful outcome is not yet confirmed.",
+    "One concrete intervention with an identified peer has a documented helpful outcome on the peer's task.",
+    "Several concrete interventions with identified peers have documented helpful outcomes across separate opportunities."
+  ],
+  "categories": {
+    "supported": "Specific attributed actions and helpful outcomes are documented with identified peers.",
+    "contradictory": "The evidence contains incompatible accounts of the same action or outcome.",
+    "insufficient": "The evidence lacks identified peers, attributed actions or documented outcomes."
+  },
+  "policy": {
+    "version": "collaboration-policy-v1-pending",
+    "calibrationStatus": "pending",
+    "minEvidenceProbability": null,
+    "minDistributionConfidence": null
+  },
+  "weights": null,
+  "limitations": [
+    "No calibration or independent holdout labels have been supplied.",
+    "Score confidence is distribution concentration, not probability of correctness.",
+    "Noul is probability of a condition, not intensity of collaboration.",
+    "Personality and stress are excluded from semantic performance judgments."
+  ]
+}

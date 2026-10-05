@@ -16,6 +16,10 @@ export interface ProviderGenerateRequest {
 }
 
 export interface ProviderGenerateResponse {
+  requestedModel?: string;
+  codeRevision?: string;
+  codeStateHash?: string;
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
   content: string;
   provider: string;
   model: string;
@@ -91,6 +95,10 @@ export async function generateProviderContent(
       content: payload.content,
       provider: payload.provider || 'unknown',
       model: payload.model || 'unknown',
+      requestedModel: payload.requestedModel,
+      codeRevision: payload.codeRevision,
+      codeStateHash: payload.codeStateHash,
+      usage: payload.usage,
       degraded: Boolean(payload.degraded),
       attempts: Number.isFinite(payload.attempts) ? Number(payload.attempts) : 1
     };

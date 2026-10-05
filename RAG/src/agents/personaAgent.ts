@@ -139,7 +139,10 @@ export class PersonaAgent {
                 impacto_moral: clamp(Number(parsed.impacto_moral) || 0, -10, 10),
                 rag_utilizado: parsed.rag_utilizado === true,
                 fonte_rag: typeof parsed.fonte_rag === 'string' ? parsed.fonte_rag : null,
-                degraded: false
+                degraded: false,
+                modelUsed: response.modelUsed,
+                requestedModel: response.requestedModel,
+                provider: response.provider
             };
         } catch (error) {
             if (signal?.aborted) throw error;

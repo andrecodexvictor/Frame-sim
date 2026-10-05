@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { runBatchSimulation, runEnhancedBatchSimulation } from '../services/batchService';
+import { MOCK_SIMULATION_RESULT } from '../services/mockData';
+import type { SimulationConfig } from '../types';
+const config = { frameworks: [{ id: 'a', name: 'A', text: 'A framework' }], simulationMode: 'agentic', companySize: 20, sector: 'tech', currentMaturity: 3, seed: 71, durationMonths: 2, scenarioMode: 'custom', customScenarioText: 'Original scenario', workloadPolicy: { capacityHours: 3 }, semanticEvaluation: true } as SimulationConfig;
+let calls = 0;
+const options = { agenticRun: async (input: SimulationConfig) => {
+    calls++;
+    assert.equal(input.simulationMode, 'agentic');
+    assert.equal(input.customScenarioText, config.customScenarioText);
+    assert.equal(input.currentMaturity, 3);
+    assert.equal(input.workloadPolicy?.capacityHours, 3);
+    assert.equal(input.semanticEvaluation, true);
+    assert.equal(input.experiment?.memoryPolicy, 'isolated');
+    return { ...MOCK_SIMULATION_RESULT, timeUnit: 'turn' as const, summary: { ...MOCK_SIMULATION_RESULT.summary, finalAdoption: null } };
+} };
+const legacy = await runBatchSimulation(config, 2, () => undefined, options);
+assert.equal(calls, 2, 'agentic selection uses the agentic runner for every planned replica');
+assert.equal(legacy.outputs[0].timeUnit, 'turn');
+assert.equal(legacy.summary.averageAdoption, null);
+await runEnhancedBatchSimulation(config, { iterations: 2, enableWarmup: false, enableRacing: false }, () => undefined, options);
+assert.equal(calls, 4);
+console.log('  ✓ batch engine selection preserves protocol, policy and opt-in in both paths');

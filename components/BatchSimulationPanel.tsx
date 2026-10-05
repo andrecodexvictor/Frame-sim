@@ -1,8 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { SimulationConfig } from '../types';
 import { runBatchSimulation, BatchResult, generateCSV } from '../services/batchService';
 import { BatchResultsChart } from './BatchResultsChart';
+import { IndividualEvaluationPanel } from './IndividualEvaluationPanel';
+import { ArticleExportControls } from './ArticleExportControls';
+import { buildReportData } from '../services/reportData';
 import { Download, Play, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface BatchSimulationPanelProps {
@@ -16,6 +19,8 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<BatchResult | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [selectedRun, setSelectedRun] = useState(0);
+    const report = useMemo(() => result ? buildReportData({ mode: 'batch', outputs: result.outputs, config, batch: result }) : null, [result, config]);
 
     const handleRun = async () => {
         setIsRunning(true);
@@ -52,7 +57,7 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
         <div className="w-full max-w-6xl mx-auto p-6">
             <div className="flex justify-between items-center mb-8">
                 <h2 className="text-3xl font-black uppercase tracking-tighter">
-                    Validação em Lote (TCC Evidence)
+                    Simulações em lote
                 </h2>
                 <button
                     onClick={onBack}
@@ -105,7 +110,7 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
                         {isRunning ? (
                             <>Rodando ({progress}/{iterations})...</>
                         ) : (
-                            <><Play className="w-5 h-5" /> Iniciar Validação</>
+                            <><Play className="w-5 h-5" /> Iniciar lote</>
                         )}
                     </button>
                 </div>
@@ -136,20 +141,22 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
                         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                             <p className="text-sm text-gray-500">ROI Médio</p>
                             <p className={`text-2xl font-black ${result.summary.averageRoi >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {result.summary.averageRoi.toFixed(1)}%
+                                {result.summary.averageRoi === null ? 'Indisponível' : `${result.summary.averageRoi.toFixed(1)}%`}
                             </p>
-                            <p className="text-xs text-gray-400">σ = {result.summary.stdDevRoi.toFixed(1)}</p>
+                            <p className="text-xs text-gray-400">Desvio amostral = {result.summary.stdDevRoi === null ? 'indisponível' : result.summary.stdDevRoi.toFixed(1)}</p>
+                            <p className="text-xs mt-2">n independente = {result.summary.nIndependent ?? 'indisponível'} · excluídos = {result.summary.nExcluded ?? 0}</p>
+                            <p className="text-xs mt-2">IC 95%: {result.summary.confidenceInterval95 ? result.summary.confidenceInterval95.map(value => value.toFixed(2)).join(' a ') : 'indisponível'} · {result.summary.intervalMethod}</p>
                         </div>
                         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                             <p className="text-sm text-gray-500">Adoção Média</p>
                             <p className="text-2xl font-black text-blue-500">
-                                {result.summary.averageAdoption.toFixed(1)}%
+                                {result.summary.averageAdoption === null ? 'Indisponível' : `${result.summary.averageAdoption.toFixed(1)}%`}
                             </p>
                         </div>
                         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                            <p className="text-sm text-gray-500">Taxa de Sucesso</p>
-                            <p className="text-2xl font-black text-purple-500">
-                                {result.summary.successRate.toFixed(0)}%
+                            <p className="text-sm text-gray-500">Execuções com ROI positivo</p>
+                            <p className="text-2xl font-black text-zinc-200">
+                                {result.summary.successRate === null ? 'Indisponível' : `${result.summary.successRate.toFixed(0)}%`}
                             </p>
                         </div>
                         <button
@@ -157,12 +164,13 @@ export const BatchSimulationPanel: React.FC<BatchSimulationPanelProps> = ({ conf
                             className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-bold flex flex-col items-center justify-center gap-1 shadow-lg hover:shadow-green-500/30 transition-all"
                         >
                             <Download className="w-6 h-6" />
-                            <span className="text-sm">Exportar Excel (CSV)</span>
+                            <span className="text-sm">Exportar execuções (CSV)</span>
                         </button>
                     </div>
 
                     {/* Charts */}
-                    <BatchResultsChart result={result} />
+                    {report && <><ArticleExportControls report={report} /><BatchResultsChart result={result} report={report} /></>}
+                    {!!result.outputs.length && <><label htmlFor="batch-run" className="block text-sm font-medium">Execução para inspecionar pessoas<select id="batch-run" value={Math.min(selectedRun, result.outputs.length - 1)} onChange={event => setSelectedRun(Number(event.target.value))} className="block w-full min-h-11 mt-2 border border-zinc-500 rounded bg-inherit px-3 py-2 focus-visible:outline">{result.outputs.map((output, index) => <option key={output.manifest?.runId ?? index} value={index}>{output.frameworkName} · réplica {output.manifest?.replicaId ?? index + 1}</option>)}</select></label><IndividualEvaluationPanel data={result.outputs[Math.min(selectedRun, result.outputs.length - 1)]} /></>}
 
                 </div>
             )}

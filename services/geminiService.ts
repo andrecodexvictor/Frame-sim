@@ -1,3 +1,5 @@
+import { normalizeStandardMeasurements } from './standardMeasurements';
+import { incidentContext, resolveWorkPolicy, simulateWorkBlock } from '../RAG/src/core/syntheticWork';
 /// <reference types="vite/client" />
 
 import { SingleSimulationConfig, SimulationOutput } from "../types";
@@ -7,6 +9,10 @@ import { generateRAGContext, injectRAGContext } from "./ragService";
 import { enrichArchetypesToTeam, generateTeamDescription, calculateTeamResistance } from "./personaEnricher";
 import { simulateTeamOffline, hashString, mulberry32 } from "../RAG/src/core/employeeBrainCore";
 import { generateProviderContent } from './providerClient';
+import { TraceRecorder } from '../RAG/src/services/TraceRecorder';
+import { evaluateIndividualMetrics } from '../RAG/src/services/IndividualMetrics';
+import { addressedRandom, commonScenarioSeed } from './experimentProtocol';
+import { createClientRunManifest } from './clientRunManifest';
 
 // Google accepts these JSON-schema enum values over its REST API. Keeping the
 // tiny constants local avoids shipping the provider SDK (and credentials) to
@@ -256,12 +262,10 @@ export const runSimulation = async (
 
     // PERSONA ENRICHMENT: Map archetypes to real personas from profiles.json
     const archetypes = config.employeeArchetypes || ['mid_level', 'senior_staff'];
-    const simulationSeed = config.seed ?? hashString([
-      config.frameworkName,
-      config.companySize,
-      config.sector,
-      config.scenarioContext
-    ].join(':'));
+    const simulationSeed = config.experiment?.scenarioSeed ?? commonScenarioSeed(config);
+    const runId = crypto.randomUUID();
+    const startedAt = new Date().toISOString();
+    const traceRecorder = new TraceRecorder();
     const { team, keyStakeholders, archetypeDistribution } = enrichArchetypesToTeam(
       archetypes,
       config.companySize,
@@ -278,12 +282,22 @@ export const runSimulation = async (
     // EMPLOYEE BRAIN: simulação offline (zero-LLM) de estresse/humor/burnout por pessoa.
     // team já contém keyStakeholders como prefixo (ver enrichArchetypesToTeam) — cap 30 para
     // manter o custo de simulação baixo e o prompt enxuto.
-    const brainSeed = hashString(`${simulationSeed}:${config.frameworkName}:${config.companySize}`);
-    const financialRng = mulberry32(hashString(`${simulationSeed}:${config.frameworkName}:financial`));
+    const brainSeed = simulationSeed;
+    const workPolicy = resolveWorkPolicy(config.workloadPolicy);
     const { brains, emergentEvents: brainEvents } = simulateTeamOffline(
       team.slice(0, 30),
       config.durationMonths || 12,
-      brainSeed
+      brainSeed,
+      config.experiment ? month => { const shock = config.experiment!.exogenousSchedule.find(shock => shock.turnId === month); return Math.min(1, Math.max(0, (month <= 2 ? 0.7 : month <= 4 ? 0.5 : 0.35) + (shock?.pressureDelta ?? 0) + incidentContext(shock, workPolicy).pressureDelta)); } : undefined,
+      snapshot => {
+        const shock = config.experiment?.exogenousSchedule.find(item => item.turnId === snapshot.turnId);
+        traceRecorder.recordTurn(runId, snapshot.turnId, snapshot.before, snapshot.after, [
+          ...snapshot.events.map(event => ({ personaId: event.personaId, type: event.tipo, text: event.narrativa, kind: event.tipo === 'pedir_ajuda' ? 'collaboration' as const : 'decision' as const })),
+          ...(shock ? snapshot.before.map(person => ({ personaId: person.personaId, type: 'environment-shock', text: JSON.stringify(shock), kind: 'exogenous' as const })) : [])
+        ]);
+        traceRecorder.attachWorkTurn(simulateWorkBlock(traceRecorder.snapshot().filter(trace => trace.turnId === snapshot.turnId), { seed: simulationSeed, shock, policy: workPolicy }));
+      },
+      (personaId, turnId) => addressedRandom(simulationSeed, personaId, turnId, `policy:${config.experiment?.conditionId ?? 'standard'}`)
     );
     const brainsAtivos = brains.filter(b => b.status === 'ativo').length;
     const brainsAfastados = brains.filter(b => b.status === 'licenca' || b.status === 'burnout').length;
@@ -325,7 +339,7 @@ export const runSimulation = async (
       config.companySize,
       config.budgetLevel,
       config.frameworkCategory,
-      financialRng
+      addressedRandom(simulationSeed, 'environment', 0, 'framework-fit')
     );
     const fitContext = `
       ANÁLISE DE FIT FRAMEWORK-ORGANIZAÇÃO:
@@ -352,7 +366,7 @@ export const runSimulation = async (
       - Setor: ${config.sector}.
       - Orçamento: ${config.budgetLevel}.
       
-      ECOSSISTEMA HUMANO (Personas Reais do RAG):
+      ECOSSISTEMA HUMANO (Perfis sintéticos do catálogo):
       Resistência Cultural Calculada: ${teamResistance}%
       ${teamDescription}
       
@@ -389,7 +403,7 @@ export const runSimulation = async (
       STAKEHOLDERS E PERSONAS:
       No array 'keyPersonas', você DEVE identificar explicitamente quem são os Stakeholders Críticos.
       Para estes personas, adicione o texto " / STAKEHOLDER" ao final do campo 'role'. 
-      Use nomes e traços psicológicos baseados nos "EXEMPLOS DE PERFIS REAIS" fornecidos acima para dar vida aos personagens.
+      Use nomes e traços psicológicos baseados nos "EXEMPLOS DE PERFIS SINTÉTICOS" fornecidos acima para dar vida aos personagens.
       
       SAÍDA OBRIGATÓRIA:
       - JSON estrito conforme o schema.
@@ -423,125 +437,40 @@ export const runSimulation = async (
     if (!result) {
       throw new Error("Gemini returned empty result");
     }
-    if (!result.timeline || !Array.isArray(result.timeline)) {
-      console.warn("⚠️ Timeline missing or invalid, generating fallback timeline");
-      result.timeline = Array.from({ length: config.durationMonths || 12 }, (_, i) => ({
-        month: i + 1,
-        adoption: Math.min(95, 10 + i * 7),
-        productivity: Math.max(70, 80 + i * 2),
-        roi: -10 + i * 3,
-        rawData: {
-          featuresDelivered: 3 + Math.floor(i * 0.5),
-          bugsGenerated: Math.max(0, 5 - Math.floor(i * 0.3)),
-          criticalIncidents: i < 3 ? 1 : 0,
-          teamSize: config.companySize,
-          learningCurveFactor: Math.min(1.0, 0.7 + i * 0.05)
-        }
-      }));
-    }
-    if (!result.summary) {
-      result.summary = {
-        finalAdoption: 75,
-        totalRoi: 0,
-        maturityScore: 50,
-        monthsToComplete: config.durationMonths || 12,
-        scenarioValidity: 50
-      };
-    }
-
-    // Safety: ensure default validation score if missing
-    if (typeof result.summary.scenarioValidity === 'undefined') {
-      result.summary.scenarioValidity = 50;
-    }
-
-    // Post-Processing: Calculate Deterministic ROI
-    let accumulatedValue = 0;
-    let accumulatedOpEx = 0;
-    let accumulatedCoNQ = 0;
-
-    const processedTimeline = result.timeline.map((monthData: any) => {
-      // Safety check for rawData
-      const rawData = monthData.rawData || {
-        featuresDelivered: 5,
-        bugsGenerated: 2,
-        criticalIncidents: 0,
-        teamSize: config.companySize,
-        learningCurveFactor: 1.0
-      };
-
-      const metrics = calculateMonthlyMetrics(
-        rawData,
-        config as any, // Type assertion needed as SingleSimulationConfig is slightly different from SimulationConfig but compatible for this
-        accumulatedValue,
-        accumulatedOpEx,
-        accumulatedCoNQ,
-        financialRng
-      );
-
-      // Update accumulators
-      accumulatedValue += metrics.valueDelivered;
-      accumulatedOpEx += metrics.opEx;
-      accumulatedCoNQ += metrics.conq;
-
-      return {
-        ...monthData,
-        roi: parseFloat(metrics.accumulatedRoi.toFixed(2)), // Overwrite LLM ROI with calculated one
-        rawData // Keep raw data for transparency
-      };
-    });
+    const measurements = normalizeStandardMeasurements(result, config, simulationSeed);
+    const degraded = providerResponse.degraded || measurements.missingFields.length > 0;
+    for (const key of ['sentimentBreakdown', 'resourceAllocation', 'departmentReadiness', 'risks', 'recommendations']) if (!Array.isArray(result[key])) result[key] = [];
+    if (typeof result.implementationNarrative !== 'string') result.implementationNarrative = 'Narrative unavailable.';
 
     const finalResult = {
       ...result,
-      timeline: processedTimeline,
-      summary: {
-        ...result.summary,
-        totalRoi: accumulatedOpEx > 0
-          ? parseFloat(((accumulatedValue - accumulatedCoNQ - accumulatedOpEx) / accumulatedOpEx * 100).toFixed(2))
-          : 0
-      },
+      manifest: await createClientRunManifest(runId, { ...config, seed: simulationSeed }, team.slice(0, 30), { ...providerResponse, degraded }, startedAt),
+      personaTraces: traceRecorder.snapshot(),
+      individualEvaluations: evaluateIndividualMetrics(traceRecorder.snapshot()),
+      timeUnit: 'month',
+      timeline: measurements.timeline,
+      summary: measurements.summary,
       frameworkName: config.frameworkName,
       execution: {
-        mode: providerResponse.degraded ? 'degraded' : 'live',
+        mode: degraded ? 'degraded' : 'live',
         provider: providerResponse.provider,
         model: providerResponse.model,
         attempts: providerResponse.attempts,
-        seed: config.seed
+        seed: simulationSeed,
+        warning: measurements.missingFields.length ? measurements.missingFields.join(' ') : undefined
       }
     };
 
-    // EMPLOYEE BRAIN: substitui o sentimento inventado pelo LLM pelo humor simulado
-    // deterministicamente, quando a persona citada em keyPersonas bate com um brain.
-    if (Array.isArray(finalResult.keyPersonas)) {
-      finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any, index: number) => {
-        // Guard: nome vazio faria includes('') casar sempre com o primeiro brain.
-        const brain = brains.find(b => b.nome && b.nome.length >= 3 && kp.role?.toLowerCase().includes(b.nome.toLowerCase()));
-        const profile = keyStakeholders.find(p =>
-          p.nome && kp.role?.toLowerCase().includes(p.nome.toLowerCase())
-        ) ?? keyStakeholders[index % Math.max(1, keyStakeholders.length)];
-        const sentiment = brain ? Math.round((brain.humor + 100) / 2) : kp.sentiment;
-        const status = brain?.status ?? 'ativo';
-        const statusNote = status !== 'ativo' ? ` [EmployeeBrain: ${status}]` : '';
-        return {
-          ...kp,
-          sentiment,
-          impact: `${kp.impact}${statusNote}`,
-          ...(profile ? {
-            id: profile.id,
-            name: profile.nome,
-            area: profile.area,
-            motivation: profile.motivacao,
-            cognitiveBias: profile.vies_cognitivo,
-            communicationStyle: profile.estilo_comunicacao,
-            challenge: profile.desafio_atual,
-            preferredFramework: profile.framework_preferido
-          } : {}),
-          status,
-          stress: brain ? Math.round(brain.estresse) : undefined,
-          energy: brain ? Math.round(brain.energia) : undefined,
-          engagement: brain ? Math.round(brain.engajamento) : undefined
-        };
-      });
-    }
+    finalResult.keyPersonas = keyStakeholders.map(profile => {
+      const brain = brains.find(person => person.personaId === profile.id);
+      return { id: profile.id, name: profile.nome, role: profile.cargo, archetype: 'synthetic profile',
+        sentiment: brain ? (brain.humor + 100) / 2 : null,
+        impact: brain?.reflexao || brain?.decisoes.join(' · ') || 'Sem ação individual documentada.',
+        area: profile.area, motivation: profile.motivacao, cognitiveBias: profile.vies_cognitivo,
+        communicationStyle: profile.estilo_comunicacao, challenge: profile.desafio_atual,
+        preferredFramework: profile.framework_preferido, status: brain?.status,
+        stress: brain?.estresse, energy: brain?.energia, engagement: brain?.engajamento };
+    });
     finalResult.emergentEvents = brainEvents.map(e => ({ month: e.mes, persona: e.nome, type: e.tipo, event: e.narrativa }));
 
     return finalResult as SimulationOutput;

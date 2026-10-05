@@ -371,7 +371,8 @@ export const calculateMonthlyMetrics = (
     const maintenanceValue = (opEx * maintenanceBaseRate) * efficiencyMultiplier * complianceMultiplier;
 
     // BASE value before surprise factor
-    let valueDelivered = featureValue + maintenanceValue;
+    const shock = config.experiment?.exogenousSchedule.find(item => item.turnId === rawData.month);
+    let valueDelivered = (featureValue + maintenanceValue) * (shock?.demandMultiplier ?? 1);
 
     // SURPRISE FACTOR: Rare positive boost for exceptional adaptation
     const surprise = calculateSurpriseFactor(rawData, config, rng);
