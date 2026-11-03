@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
     GeminiProvider,
+    LLMFactory,
     OpenAICompatibleProvider,
     type LLMProvider,
     type LLMResponse
@@ -91,6 +92,17 @@ const noPrimary = new SmartRouter({
 assert.match((await noPrimary.route('planeje a estratégia')).name(), /gemini-only/);
 
 const ragRouter = new QueryRouter();
+const pinnedCalls: string[] = [];
+const pinned = new SmartRouter({primary:fakeProvider('pinned','success',pinnedCalls),localRouter:null,gpt:null,gemini:null,deepseek:null});
+assert.equal((await (await pinned.route('critique')).generate('test')).modelUsed, 'pinned');
+assert.deepEqual(pinnedCalls,['pinned']);
+const savedPrimaryEnv = ['GATEWAY_PROVIDER','NVIDIA_API_KEY','NVIDIA_MODEL'].map(name=>[name,process.env[name]] as const);
+try {
+    process.env.GATEWAY_PROVIDER='nvidia';process.env.NVIDIA_API_KEY='offline-secret';process.env.NVIDIA_MODEL='z-ai/offline';
+    assert.equal(LLMFactory.getConfiguredPrimary()?.name(),'NVIDIA NIM');
+} finally {
+    for(const [name,value] of savedPrimaryEnv) {if(value===undefined)delete process.env[name];else process.env[name]=value;}
+}
 assert.equal((await ragRouter.classify('Como o CEO reagiria à mudança?')).mode, 'PERSONA_PURA');
 assert.deepEqual((await ragRouter.classify('Qual o ROI e break-even?')).filters.collections, ['metrics']);
 assert.equal((await ragRouter.classify('Compare Scrum versus Kanban')).mode, 'CENARIO_COMPARATIVO');

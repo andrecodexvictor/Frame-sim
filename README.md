@@ -3,6 +3,8 @@
 
 **Frame-sim** é um simulador empresarial avançado projetado para testar a implementação de frameworks de gestão e engenharia (Scrum, SAFe, Spotify, COBIT, ITIL...) em ambientes corporativos complexos.
 
+As saídas são sintéticas e dependem das premissas do modelo; os perfis não são empregados observados. A revisão de fidelidade corrige preservação de zeros, dados ausentes, cardinalidade e efeitos nominais no modo documental. Esses controles não demonstram validade preditiva ou retorno financeiro real. Consulte [métricas operacionais e recibos nativos](docs/operational-evaluations.md) para calcular erros de processo, produtividade e retrabalho com dados comparáveis e verificar a execução pelo backend.
+
 Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM Agentic** (Gemini, GPT-4, DeepSeek, Ollama) combinada com **RAG (Retrieval-Augmented Generation via ChromaDB)**, **Agentes Autônomos** (CriticAgent, DocumentAgent) e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com variabilidade controlada.
 
 <img width="1507" height="223" alt="image" src="https://github.com/user-attachments/assets/ccdfdca0-eef5-4771-938f-b9a6b34ca23a" />
@@ -12,10 +14,10 @@ Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM A
 ## 🧠 Core Features
 
 ### 1. Simulação Multi-Agente & Persona Enrichment
-Simula stakeholders reais e um time completo com base em **arquétipos estendidos**:
+Modela stakeholders sintéticos e uma equipe com base em **arquétipos estendidos**:
 - **Key Stakeholders**: CEO, CTO, Tech Leads com perfis psicológicos profundos.
 - **Distribuição Realista**: o restante do time (Júniors, Plenos, QA, RH) é gerado automaticamente com base no tamanho da empresa.
-- **Enriquecimento RAG**: personas ganham nomes reais, histórias de fundo e vieses cognitivos extraídos de um banco de perfis (`RAG/profiles.json`).
+- **Enriquecimento RAG**: personas recebem nomes, histórias de fundo e vieses sintéticos de um catálogo de perfis (`RAG/profiles.json`); isso não corresponde a observação ou validação psicométrica de pessoas.
 
 ### 2. Roteamento de Cenário Econômico
 Perfis econômicos realistas calibram custos e ROI (Brasil: PME, Startup SP/RJ, Grande Empresa, Interior; Internacional: US Big Tech, LATAM Remoto, Europa Ocidental). Salários, custo de incidentes e valor por feature variam drasticamente conforme o perfil.
@@ -41,6 +43,9 @@ Tamanho (Startups a Enterprises 2000+ FTEs), cultura ("Startup Caótica" vs "Cor
 - `moral_time`/`velocidade_sprint` do time e `sentiment` de cada persona vêm do agregado desse estado — o LLM só narra e ajusta a confiança (±5).
 - As ~350 personas reais de `RAG/profiles.json` estão conectadas ponta a ponta: hidratadas no `/api/simulate` do backend e usadas pelo `EmployeeBrain`/`PersonaAgent`.
 - `CriticAgent` roda 1x por simulação e sua `plausibility_score` chega ao frontend como `quality_per_cycle` (antes fixo em 100).
+
+### 7. Julgamento Jev (v9 experimental, opcional)
+O backend pode avaliar reações comportamentais somente das personas-chave com `JEV_MODE=active`; `shadow` audita sem alterar o resultado e `off` é o padrão compatível. Burnout, licença, demissão, estado numérico, contágio exato, ROI e demais cálculos continuam determinísticos, e ausência de chave, timeout ou resposta inválida usa fallback local.
 
 ---
 
@@ -132,6 +137,10 @@ Os testes isolados continuam disponíveis como `npm run test:offline`, `npm run 
 | `OLLAMA_BASE_URL` | Não | Endpoint de um Ollama local |
 | `CHROMA_URL` | Não | URL do ChromaDB (default `http://localhost:8000`) |
 | `CORS_ORIGINS` | Não | Origens permitidas pelo Express (default: Vite em `localhost:3000`) |
+| `JEV_MODE` | Não | `off` (default), `shadow` ou `active` para julgamento server-side |
+| `TYPESAFE_API_KEY` | Não | Chave server-side do Jev; nunca é enviada ao frontend |
+| `JEV_MODEL` | Não | Modelo Jev (default `jev-1.13.0`) |
+| `JEV_TIMEOUT_MS` | Não | Timeout por chamada Jev (default `3000`) |
 
 ## 🔧 Estrutura do Projeto
 

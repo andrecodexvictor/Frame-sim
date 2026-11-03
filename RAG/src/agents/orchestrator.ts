@@ -10,7 +10,9 @@ import type {
     QueryClassification,
     SimulationStep,
     SimulationState,
-    ReasoningLogEntry
+    ReasoningLogEntry,
+    PersonaJudgmentSummary,
+    PersonaJudgmentAudit
 } from '../types/index.js';
 import { PersonaAgent } from './personaAgent.js';
 import { ROICalculatorAgent } from './roiCalculator.js';
@@ -24,6 +26,7 @@ import {
     deriveInitialBrain,
     updateBrain,
     evaluateDecisions,
+    evaluateGraveDecisions,
     applyContagion,
     reflect,
     aggregate,
@@ -38,6 +41,9 @@ import { loadFrameworkConfig, type FrameworkConfig } from '../services/framework
 import { loadEconomicScenarios, selectEconomicScenario, type EconomicScenario } from '../services/economicScenarioLoader.js';
 import { ExternalToolStub } from '../services/externalToolStub.js';
 import { HealthMonitor } from '../services/HealthMonitor.js';
+import { PersonaJudgmentModule } from '../services/PersonaJudgmentModule.js';
+import type { PersonaJudgmentEvaluator, PersonaTurnJudgment, PersonaJudgmentDecision } from '../services/PersonaJudgmentModule.js';
+import { JevHttpAdapter } from '../services/JevHttpAdapter.js';
 
 type NarrativeRouter = {
     route(prompt: string): Promise<{
@@ -52,7 +58,7 @@ type NarrativeRouter = {
 };
 
 type MetricsServiceLike = Pick<MetricsService, 'startCycle' | 'calculateMetrics'> &
-    Partial<Pick<MetricsService, 'recordReplan' | 'recordIncident' | 'recordCycle' | 'recordTokens' | 'setRouterChoice' | 'markDegraded'>>;
+    Partial<Pick<MetricsService, 'recordReplan' | 'recordIncident' | 'recordCycle' | 'recordTokens' | 'setRouterChoice' | 'markDegraded' | 'setJevMode' | 'recordPersonaJudgment'>>;
 
 export interface OrchestratorDependencies {
     personaAgent?: Pick<PersonaAgent, 'simulateResponse'>;
@@ -61,6 +67,7 @@ export interface OrchestratorDependencies {
     goalAgent?: Pick<GoalAgent, 'evaluate'>;
     criticAgent?: Pick<CriticAgent, 'critique'>;
     roiCalculator?: Pick<ROICalculatorAgent, 'calculateROI' | 'setVectorStore'>;
+    personaJudgment?: PersonaJudgmentEvaluator;
 }
 
 export const SIMULATION_GRAPH_NODES = [
@@ -80,6 +87,22 @@ const MAX_MEMORY_ENTRY_CHARS = 600;
 const MAX_MEMORY_WRITE_CHARS = 1400;
 const MAX_REASONING_ENTRIES = 50;
 const MAX_REASONING_FIELD_CHARS = 240;
+
+function resolveJevMode(value: unknown): 'off' | 'shadow' | 'active' {
+    return value === 'shadow' || value === 'active' ? value : 'off';
+}
+
+function capJevMode(serverMode: 'off' | 'shadow' | 'active', requestedMode: unknown): 'off' | 'shadow' | 'active' {
+    const modes = ['off', 'shadow', 'active'] as const;
+    const serverIndex = modes.indexOf(serverMode);
+    const requestedIndex = requestedMode === undefined ? serverIndex : modes.indexOf(resolveJevMode(requestedMode));
+    return modes[Math.min(serverIndex, requestedIndex)];
+}
+
+function resolvePositiveNumber(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 const ORCHESTRATOR_PROMPT = `
 Você é o Orquestrador da simulação de engenharia de software "Frame-sim".
@@ -147,6 +170,8 @@ export class OrchestratorAgent {
     private runActive = false;
     private readonly externalTool = new ExternalToolStub();
     private readonly healthMonitor = new HealthMonitor();
+    private readonly personaJudgment: PersonaJudgmentEvaluator;
+    private readonly jevMode: 'off' | 'shadow' | 'active';
     // Moral no início do turno anterior — deriva o impacto pessoal das personas de
     // fundo (que não têm resposta LLM): elas sentem o delta de moral do turno passado.
     private moralPrevTurn = 70;
@@ -167,6 +192,23 @@ export class OrchestratorAgent {
         this.personaAgent = dependencies.personaAgent ?? new PersonaAgent(apiKey);
         this.goalAgent = dependencies.goalAgent ?? new GoalAgent();
         this.criticAgent = dependencies.criticAgent ?? new CriticAgent();
+        this.jevMode = resolveJevMode(process.env.JEV_MODE);
+        const jevTimeoutMs = resolvePositiveNumber(process.env.JEV_TIMEOUT_MS, 3000);
+        const jevKey = process.env.TYPESAFE_API_KEY || process.env.JEV_API_KEY;
+        const jevPort = jevKey
+            ? new JevHttpAdapter({
+                apiKey: jevKey,
+                endpoint: process.env.JEV_ENDPOINT || 'https://api.typesafe.ai/v1/systemone',
+                model: process.env.JEV_MODEL || 'jev-1.13.0',
+                timeoutMs: jevTimeoutMs,
+            })
+            : undefined;
+        this.personaJudgment = dependencies.personaJudgment ?? new PersonaJudgmentModule({
+            port: jevPort,
+            config: { mode: this.jevMode, timeoutMs: jevTimeoutMs },
+            model: process.env.JEV_MODEL || 'jev-1.13.0',
+        });
+        this.metricsService.setJevMode?.(this.jevMode);
 
         this.resetState();
         this.simulationGraph = this.buildSimulationGraph();
@@ -265,6 +307,37 @@ export class OrchestratorAgent {
         this.moralPrevTurn = this.state.moral_time;
 
         const outputs: OrchestratorOutput[] = [];
+        let moralGlobalAcc = 0;
+        let confiancaAcc = 0;
+        // The request can lower the process policy, never raise it. In particular,
+        // JEV_MODE=off remains an absolute server-side kill switch.
+        const jevMode = capJevMode(this.jevMode, config?.jev?.mode);
+        const personaJudgment = await this.personaJudgment.evaluateTurn({
+            situation: query,
+            turno: this.state.turno,
+            config: { mode: jevMode, timeoutMs: config?.jev?.timeoutMs },
+            stakeholders: stakeholders.map(stakeholder => {
+                const brain = this.brains.find(item => item.personaId === stakeholder.id);
+                return {
+                    id: stakeholder.id,
+                    nome: stakeholder.informacoes_basicas.nome,
+                    cargo: stakeholder.informacoes_basicas.cargo,
+                    context: JSON.stringify({psychology:stakeholder.psicologia_comportamento,context:stakeholder.contexto}).slice(0,2000),
+                    isKey: true,
+                    estado: brain ? {
+                        estresse: brain.estresse,
+                        humor: brain.humor,
+                        energia: brain.energia,
+                        engajamento: brain.engajamento,
+                        adaptabilidade: brain.adaptabilidade,
+                        influencia: brain.influencia,
+                        status: brain.status,
+                    } : undefined,
+                };
+            }),
+        }, this.activeSignal);
+        this.recordPersonaJudgment(personaJudgment, jevMode);
+        const judgmentByPersona = new Map(personaJudgment.decisions.map(decision => [decision.personaId, decision]));
 
         // Coletar respostas de cada stakeholder
         for (const stakeholder of stakeholders) {
@@ -272,13 +345,16 @@ export class OrchestratorAgent {
             console.log(`  → Simulando ${stakeholder.informacoes_basicas.nome} (${stakeholder.informacoes_basicas.cargo})`);
 
             const brainIdx = this.brains.findIndex(b => b.personaId === stakeholder.id);
+            const decision = judgmentByPersona.get(stakeholder.id);
+            const narrativeJudgment = jevMode === 'active' && decision?.origin === 'jev' ? this.toJudgmentSummary(decision) : undefined;
 
             const response = await this.personaAgent.simulateResponse(
                 stakeholder,
                 query,
                 config,
                 brainIdx >= 0 ? this.brains[brainIdx] : undefined,
-                this.activeSignal
+                this.activeSignal,
+                narrativeJudgment
             );
             this.throwIfAborted();
             if (response.degraded) {
@@ -291,20 +367,43 @@ export class OrchestratorAgent {
                 `${stakeholder.id}: ${response.degraded ? 'fallback degradado' : response.emocao_detectada}`
             );
 
+            const useAcceptedJudgment = jevMode === 'active' && decision?.origin === 'jev';
+            const effectiveImpact = useAcceptedJudgment ? decision!.effects.moralDelta : response.impacto_moral;
+            const effectiveResponse = useAcceptedJudgment
+                ? { ...response, impacto_moral: effectiveImpact, julgamento: narrativeJudgment }
+                : response;
             if (brainIdx >= 0) {
-                this.brains[brainIdx] = updateBrain(this.brains[brainIdx], {
+                let nextBrain = updateBrain(this.brains[brainIdx], {
                     turno: this.state.turno,
                     pressaoBase,
-                    impactoPessoal: response.impacto_moral,
+                    impactoPessoal: effectiveImpact,
                     moralGlobal: this.state.moral_time,
                     eventoTurno: `${response.emocao_detectada}: ${query.slice(0, 80)}`
                 });
+                if (useAcceptedJudgment) {
+                    nextBrain = {
+                        ...nextBrain,
+                        estresse: clamp(nextBrain.estresse + decision!.effects.stressDelta, 0, 100),
+                        engajamento: clamp(nextBrain.engajamento + decision!.effects.engagementDelta, 0, 100),
+                    };
+                    if (decision!.influencesPeers && decision!.effects.contagion) {
+                        const contagionRng = mulberry32(hashString(`${stakeholder.id}:${this.state.turno}:jev-contagion`));
+                        const contagiados = applyContagion(this.brains, stakeholder.id, {
+                            alvos: decision!.effects.contagion.targets,
+                            humorDelta: decision!.effects.contagion.humorDelta,
+                            estresseDelta: decision!.effects.contagion.stressDelta,
+                        }, contagionRng);
+                        for (let k = 0; k < this.brains.length; k++) this.brains[k] = contagiados[k];
+                    }
+                }
+                this.brains[brainIdx] = nextBrain;
             }
+            if (useAcceptedJudgment) confiancaAcc += decision!.effects.confidenceDelta;
 
             outputs.push({
                 turno: this.state.turno,
                 stakeholder: stakeholder.informacoes_basicas.nome,
-                resposta: response,
+                resposta: effectiveResponse,
                 metricas_atualizadas: {
                     moral_time: this.state.moral_time,
                     velocidade_sprint: this.state.velocidade_sprint,
@@ -328,8 +427,6 @@ export class OrchestratorAgent {
         }
 
         // Decisões emergentes (determinísticas, RNG semeado por persona+turno)
-        let moralGlobalAcc = 0;
-        let confiancaAcc = 0;
         const eventosRhTurno: string[] = [];
         for (let i = 0; i < this.brains.length; i++) {
             if (this.brains[i].status !== 'ativo') continue;
@@ -340,7 +437,12 @@ export class OrchestratorAgent {
                 impactoPessoal: 0,
                 moralGlobal: this.state.moral_time
             };
-            const { brain: decided, decisions } = evaluateDecisions(this.brains[i], ctx, rng);
+            const isKeyWithAcceptedJudgment = jevMode === 'active'
+                && judgmentByPersona.get(this.brains[i].personaId)?.origin === 'jev';
+            const evaluated = isKeyWithAcceptedJudgment
+                ? evaluateGraveDecisions(this.brains[i], ctx, rng)
+                : evaluateDecisions(this.brains[i], ctx, rng);
+            const { brain: decided, decisions } = evaluated;
             this.brains[i] = decided;
 
             for (const d of decisions) {
@@ -558,6 +660,47 @@ export class OrchestratorAgent {
                 this.runActive = false;
             }
         }
+    }
+
+    private toJudgmentSummary(decision: PersonaJudgmentDecision): PersonaJudgmentSummary {
+        return {
+            reaction: decision.reaction,
+            intensity: decision.intensity,
+            moralDirection: decision.moralDirection,
+            influencesPeers: decision.influencesPeers,
+            confidence: decision.confidence,
+            origin: decision.origin,
+            moralDelta: decision.effects.moralDelta,
+        };
+    }
+
+    private recordPersonaJudgment(judgment: PersonaTurnJudgment, mode: 'off' | 'shadow' | 'active'): void {
+        const audit: PersonaJudgmentAudit = {
+            model: judgment.audit.model,
+            origin: judgment.audit.origin,
+            requestHash: judgment.audit.requestHash,
+            confidence: judgment.audit.confidence,
+            latencyMs: judgment.audit.latencyMs,
+            fallbackReason: judgment.audit.fallbackReason,
+            inputTokens: judgment.audit.inputTokens,
+            outputTokens: judgment.audit.outputTokens,
+        };
+        this.state.persona_judgment_audits = [...(this.state.persona_judgment_audits ?? []), audit].slice(-24);
+        this.metricsService.recordPersonaJudgment?.({
+            mode,
+            origin: audit.origin,
+            latencyMs: audit.latencyMs,
+            confidence: audit.confidence,
+            fallbackReason: audit.fallbackReason,
+            inputTokens: audit.inputTokens,
+            outputTokens: audit.outputTokens,
+            model: audit.model,
+        });
+        this.appendReasoning(
+            'avaliar julgamento semântico das personas-chave',
+            'jev_persona',
+            `${mode}/${audit.origin}${audit.fallbackReason ? ` (${audit.fallbackReason})` : ''}`
+        );
     }
 
     getCheckpointThreadCount(): number {

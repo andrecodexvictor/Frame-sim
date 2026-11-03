@@ -10,7 +10,8 @@ import type {
     PersonaProfile,
     PersonaResponse,
     FewShotExample,
-    SimulationConfig
+    SimulationConfig,
+    PersonaJudgmentSummary
 } from '../types/index.js';
 import { clamp, hashString } from '../core/employeeBrainCore.js';
 import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
@@ -73,6 +74,7 @@ Motivação Principal: {motivacao}
 ⚠️ **APLIQUE ESTE VIÉS NA RESPOSTA:**
 {bias}
 {estado_interno}
+{julgamento}
 ## EXEMPLOS DE COMPORTAMENTO (mantenha consistência)
 {examples}
 
@@ -105,7 +107,7 @@ export class PersonaAgent {
     constructor(apiKey?: string) {
         this.llm = apiKey
             ? new GeminiProvider({ keys: [apiKey] })
-            : LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined;
+            : LLMFactory.getConfiguredPrimary() ?? (LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined);
     }
 
     /**
@@ -116,9 +118,10 @@ export class PersonaAgent {
         situacao: string,
         config?: SimulationConfig,
         brain?: EmployeeBrainState,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        judgment?: PersonaJudgmentSummary
     ): Promise<PersonaResponse> {
-        const prompt = this.buildPrompt(persona, situacao, config, brain);
+        const prompt = this.buildPrompt(persona, situacao, config, brain, judgment);
 
         try {
             if (!this.llm) throw new Error('GOOGLE_API_KEY ausente');
@@ -139,6 +142,7 @@ export class PersonaAgent {
                 impacto_moral: clamp(Number(parsed.impacto_moral) || 0, -10, 10),
                 rag_utilizado: parsed.rag_utilizado === true,
                 fonte_rag: typeof parsed.fonte_rag === 'string' ? parsed.fonte_rag : null,
+                julgamento: judgment,
                 degraded: false
             };
         } catch (error) {
@@ -150,6 +154,7 @@ export class PersonaAgent {
                 impacto_moral: 0,
                 rag_utilizado: false,
                 fonte_rag: null,
+                julgamento: judgment,
                 degraded: true
             };
         }
@@ -162,7 +167,8 @@ export class PersonaAgent {
         persona: PersonaProfile,
         situacao: string,
         config?: SimulationConfig,
-        brain?: EmployeeBrainState
+        brain?: EmployeeBrainState,
+        judgment?: PersonaJudgmentSummary
     ): string {
         const { informacoes_basicas: info, psicologia_comportamento: psych, contexto } = persona;
 
@@ -189,6 +195,10 @@ MEMÓRIAS RECENTES: ${memorias}
 REFLEXÃO: ${brain.reflexao || 'nenhuma ainda'}
 `;
         }
+
+        const julgamento = judgment
+            ? `\n## JULGAMENTO COMPORTAMENTAL ACEITO\nReação: ${judgment.reaction}; intensidade: ${judgment.intensity}; direção moral: ${judgment.moralDirection}; influência social: ${judgment.influencesPeers ? 'sim' : 'não'}.\nUse este julgamento como fato para a narrativa. Não invente nem recalcule impacto numérico: o campo impacto_moral da sua resposta será ignorado pelo núcleo quando este julgamento estiver presente.\n`
+            : '';
 
         // Formatar exemplos
         const examplesText = examples
@@ -220,6 +230,7 @@ Empresa: ${config.parametros_simulacao.adaptacao_pme ? 'PME' : 'Enterprise'} com
             .replace('{motivacao}', contexto.motivacao_atual)
             .replace('{bias}', bias)
             .replace('{examples}', examplesText || 'Nenhum exemplo específico disponível')
+            .replace('{julgamento}', julgamento)
             .replace('{contexto}', contextoText)
             .replace('{situacao}', situacao);
     }

@@ -13,7 +13,7 @@ export interface GatewayRequest {
 
 export interface GatewayResponse {
     content: string;
-    provider: 'google' | 'openai' | 'deepseek';
+    provider: 'google' | 'openai' | 'deepseek' | 'nvidia' | 'openrouter';
     model: string;
     degraded: boolean;
     attempts: number;
@@ -70,7 +70,10 @@ function modelFor(requested: string | undefined): string {
 
 function combineSignals(signal?: AbortSignal): { signal: AbortSignal; dispose: () => void } {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort('provider-timeout'), REQUEST_TIMEOUT_MS);
+    const configuredTimeout = Number(process.env.PROVIDER_TIMEOUT_MS);
+    const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout >= 1000
+        ? Math.min(configuredTimeout, 300_000) : REQUEST_TIMEOUT_MS;
+    const timeout = setTimeout(() => controller.abort('provider-timeout'), timeoutMs);
     const relay = () => controller.abort(signal?.reason ?? 'request-cancelled');
     if (signal?.aborted) relay();
     signal?.addEventListener('abort', relay, { once: true });
@@ -99,12 +102,31 @@ function systemInstruction(request: GatewayRequest): string {
 
 export class ProviderGateway {
     private googleCursor = 0;
+    private nvidiaCursor = 0;
+    private nextNvidiaStart=0;
+    private readonly nvidiaStartIntervalMs:number;
+    constructor(intervalMs=Number(process.env.NVIDIA_START_INTERVAL_MS??5000)) {
+        this.nvidiaStartIntervalMs=Number.isFinite(intervalMs)&&intervalMs>=0?intervalMs:5000;
+    }
+    private async nvidiaSlot(signal?:AbortSignal):Promise<void> {
+        const delay=Math.max(0,this.nextNvidiaStart-Date.now());
+        this.nextNvidiaStart=Math.max(this.nextNvidiaStart,Date.now())+this.nvidiaStartIntervalMs;
+        if(signal?.aborted)throw new Error('NVIDIA request aborted');
+        if(!delay)return;
+        await new Promise<void>((resolve,reject)=>{
+            const abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(new Error('NVIDIA request aborted'));};
+            const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},delay);
+            signal?.addEventListener('abort',abort,{once:true});
+        });
+    }
 
     capabilities(): Record<string, boolean> {
         return {
             google: configuredGoogleKeys().length > 0,
             openai: Boolean(process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY),
-            deepseek: Boolean(process.env.DEEPSEEK_API_KEY || process.env.VITE_DEEPSEEK_API_KEY)
+            deepseek: Boolean(process.env.DEEPSEEK_API_KEY || process.env.VITE_DEEPSEEK_API_KEY),
+            nvidia: envValues('NVIDIA_API_KEY').length > 0,
+            openrouter: Boolean(process.env.OPENROUTER_API_KEY)
         };
     }
 
@@ -121,6 +143,42 @@ export class ProviderGateway {
 
         let attempts = 0;
         const failureCodes: string[] = [];
+        if (request.modelPreference?.startsWith('openrouter:') || (!request.modelPreference && process.env.GATEWAY_PROVIDER === 'openrouter')) {
+            const model = request.modelPreference?.slice(11) || process.env.OPENROUTER_MODEL;
+            if (!model || model !== process.env.OPENROUTER_MODEL) {
+                throw new ProviderGatewayError('OpenRouter model is not configured.', 400, false);
+            }
+            if (!process.env.OPENROUTER_API_KEY) throw new ProviderGatewayError('OpenRouter is not configured.', 503, false);
+            try {
+                return { ...await this.generateOpenAICompatible(request, 'openrouter', process.env.OPENROUTER_API_KEY, model), attempts: 1, degraded: false };
+            } catch (error) {
+                if (request.signal?.aborted) throw error;
+                throw new ProviderGatewayError('No configured provider completed the request.', 503, true, [failureCode('openrouter', error)]);
+            }
+        }
+        // Explicit NVIDIA selection is strict: benchmark cells must not silently
+        // switch models/providers when an endpoint fails or exhausts its quota.
+        const nvidiaRequested = request.modelPreference?.startsWith('nvidia:');
+        if (nvidiaRequested || (!request.modelPreference && process.env.GATEWAY_PROVIDER === 'nvidia')) {
+            const model = nvidiaRequested ? request.modelPreference!.slice(7) : process.env.NVIDIA_MODEL;
+            const allowedModels = (process.env.NVIDIA_MODELS || process.env.NVIDIA_MODEL || '').split(',').map(s => s.trim());
+            if (!model || !allowedModels.includes(model)) {
+                throw new ProviderGatewayError('NVIDIA model is not configured.', 400, false);
+            }
+            const keys = envValues('NVIDIA_API_KEY');
+            const start = this.nvidiaCursor++ % Math.max(1, keys.length);
+            for (let offset = 0; offset < keys.length; offset++) {
+                attempts++;
+                try {
+                    const response = await this.generateOpenAICompatible(request, 'nvidia', keys[(start + offset) % keys.length], model);
+                    return { ...response, attempts, degraded: offset > 0 };
+                } catch (error) {
+                    if (request.signal?.aborted) throw error;
+                    failureCodes.push(failureCode('nvidia', error));
+                }
+            }
+            throw new ProviderGatewayError('No configured provider completed the request.', 503, true, failureCodes);
+        }
         const googleKeys = configuredGoogleKeys();
         if (googleKeys.length > 0) {
             const start = this.googleCursor++ % googleKeys.length;
@@ -217,13 +275,17 @@ export class ProviderGateway {
 
     private async generateOpenAICompatible(
         request: GatewayRequest,
-        provider: 'openai' | 'deepseek',
-        apiKey: string
+        provider: 'openai' | 'deepseek' | 'nvidia' | 'openrouter',
+        apiKey: string,
+        nvidiaModel?: string
     ): Promise<Omit<GatewayResponse, 'attempts' | 'degraded'>> {
-        const baseUrl = provider === 'openai' ? 'https://api.openai.com/v1' : 'https://api.deepseek.com';
+        const baseUrl = provider === 'openrouter' ? 'https://openrouter.ai/api/v1'
+            : provider === 'nvidia' ? 'https://integrate.api.nvidia.com/v1'
+            : provider === 'openai' ? 'https://api.openai.com/v1' : 'https://api.deepseek.com';
         const model = provider === 'openai'
             ? (process.env.OPENAI_MODEL || 'gpt-4o-mini')
-            : (process.env.DEEPSEEK_MODEL || 'deepseek-chat');
+            : provider === 'nvidia' || provider === 'openrouter' ? nvidiaModel! : (process.env.DEEPSEEK_MODEL || 'deepseek-chat');
+        if(provider==='nvidia')await this.nvidiaSlot(request.signal);
         const { signal, dispose } = combineSignals(request.signal);
         try {
             const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -236,11 +298,22 @@ export class ProviderGateway {
                 body: JSON.stringify({
                     model,
                     messages: [
-                        { role: 'system', content: systemInstruction(request) },
+                        { role: 'system', content: systemInstruction(request) + (request.responseSchema
+                            ? `\nRequired JSON structure (schema): ${JSON.stringify(request.responseSchema)}` : '') },
                         { role: 'user', content: request.prompt }
                     ],
                     temperature: clampTemperature(request.temperature),
-                    ...(request.task === 'simulation' && provider === 'openai'
+                    ...(provider === 'nvidia' ? {
+                        max_tokens: request.task === 'simulation' ? 16384 : 4096,
+                        seed: typeof request.seed === 'number' ? (request.seed >>> 0) & 0x7fffffff : undefined,
+                        ...(model.startsWith('z-ai/glm-5.3')
+                            ? { reasoning_effort: 'low', chat_template_kwargs: { clear_thinking: true } }
+                            : { chat_template_kwargs: { thinking: false } }),
+                    } : {}),
+                    ...(provider === 'openrouter' ? {
+                        max_tokens: request.task === 'simulation' ? 8192 : 4096,
+                    } : {}),
+                    ...(request.task === 'simulation'
                         ? { response_format: { type: 'json_object' } }
                         : {})
                 })

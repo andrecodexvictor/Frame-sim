@@ -53,6 +53,18 @@ try {
     });
     assert.equal(invalidIngest.status, 400);
     assert.match((await invalidIngest.json() as any).error, /rawText/);
+    for(const route of ['persona-judgment','judge-result','evaluate-operational']) {
+        const invalid=await fetch(`${baseUrl}/${route}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        assert.equal(invalid.status,400);
+    }
+    const operational=await fetch(`${baseUrl}/evaluate-operational`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'offline-missing-baseline',scenario:'Apenas um plano',framework:'Fonte curta'})});
+    assert.equal(operational.status,200);
+    const operationalData=await operational.json() as any;
+    assert.equal(operationalData.metrics.status,'not_evaluated');
+    assert.equal(operationalData.metrics.productivityGainPct.value,null);
+    assert.equal(operationalData.trace.engine,'FrameSim');
+    const receipts=await (await fetch(`${baseUrl}/evaluations/offline-missing-baseline`)).json() as any;
+    assert.ok(receipts.receipts.some((r:any)=>r.traceId===operationalData.trace.traceId));
 
     console.log('  ✓ HTTP status and validation boundaries are integrated and sanitized');
 } finally {

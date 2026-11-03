@@ -12,8 +12,13 @@ import { createOrchestrator } from './agents/orchestrator.js';
 import { createVectorStore, VectorStoreService } from './services/vectorStore.js';
 import { ProviderGateway, ProviderGatewayError } from './services/ProviderGateway.js';
 import type { SimulationConfig, PersonaProfile } from './types/index.js';
+import {StandardJevRuntime} from './services/StandardJevRuntime.js';
+import {EvaluationAudit} from './services/EvaluationAudit.js';
+import {OperationalEvaluationService} from './services/OperationalEvaluationService.js';
 
 // Load .env
+const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+config({ path: path.join(backendRoot, '.env.local') });
 config({ path: path.join(process.cwd(), '../.env') });
 config({ path: path.join(process.cwd(), '.env') });
 
@@ -38,6 +43,9 @@ app.use(cors({
 app.use(express.json({ limit: '2mb' }));
 
 const providerGateway = new ProviderGateway();
+const standardJev = new StandardJevRuntime();
+const evaluationAudit = new EvaluationAudit();
+const operationalEvaluation = new OperationalEvaluationService();
 
 // Dependencies are initialized once, while mutable simulation state is always
 // created per request. This prevents concurrent POSTs from sharing brains/history.
@@ -120,9 +128,62 @@ app.get('/api/status', (req, res) => {
             realPersonas: personasReady,
             vectorStore: vectorStoreReady
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        jev:{mode:standardJev.mode(),configured:standardJev.configured(),counters:standardJev.counters},
+        evaluations:{engine:'FrameSim',audit:evaluationAudit.counters,operational:operationalEvaluation.counters}
     });
 });
+
+app.get('/api/evaluations/:runId',async(req,res)=>{
+    try{return res.json({engine:'FrameSim',receipts:await evaluationAudit.receipts(req.params.runId)});}
+    catch{return res.status(400).json({error:'Invalid evaluation run ID'});}
+});
+
+app.post('/api/evaluate-operational',async(req,res)=>{
+    const body=req.body;
+    if(typeof body?.scenario!=='string'||body.scenario.length>12000||typeof body?.framework!=='string'||body.framework.length>5000
+        ||(body.plan&&(!Array.isArray(body.plan.actions)||body.plan.actions.length>12))||JSON.stringify(body).length>100000)
+        return res.status(400).json({error:'Invalid bounded operational evaluation request'});
+    const controller=new AbortController();const abort=()=>{if(!res.writableEnded)controller.abort();};res.once('close',abort);
+    try{
+        const runId=evaluationAudit.runId(body.runId);
+        const output=await operationalEvaluation.evaluate(body,controller.signal);
+        const trace=await evaluationAudit.record('/api/evaluate-operational',runId,body,output);
+        return res.json({...output,trace});
+    }catch{return res.status(400).json({error:'Invalid operational observations or evaluation identifier'});}
+    finally{res.removeListener('close',abort);}
+});
+
+for(const route of ['/api/persona-judgment','/api/judge-result']) {
+    app.post(route,async(req,res)=>{
+        const controller=new AbortController();
+        const abort=()=>{if(!res.writableEnded)controller.abort('client-disconnected');};
+        res.once('close',abort);
+        try {
+            const body=req.body;
+            if(route==='/api/persona-judgment') {
+                if(typeof body?.situation!=='string' || body.situation.length>12000 || !Number.isInteger(body.turn) || body.turn<1 || body.turn>120
+                    || !Array.isArray(body.stakeholders) || body.stakeholders.length<1 || body.stakeholders.length>12
+                    || body.stakeholders.some((s:any)=>typeof s?.id!=='string' || s.id.length>128 || typeof s.nome!=='string' || s.nome.length>200)
+                    || new Set(body.stakeholders.map((s:any)=>s.id)).size!==body.stakeholders.length) {
+                    return res.status(400).json({error:'Invalid bounded persona judgment request'});
+                }
+                const runId=evaluationAudit.runId(req.get('X-FrameSim-Run-Id'));
+                const output=await standardJev.personas({situation:body.situation,turn:body.turn,stakeholders:body.stakeholders},controller.signal);
+                return res.json({...output,trace:await evaluationAudit.record(route,runId,body,output)});
+            }
+            if(typeof body?.scenario!=='string' || body.scenario.length>12000 || typeof body.framework!=='string' || body.framework.length>5000
+                || !Number.isInteger(body.employees) || body.employees<1 || body.employees>100000 || !body.result?.summary || !Array.isArray(body.result?.timeline)
+                || body.result.timeline.length>120 || JSON.stringify(body).length>120000) {
+                return res.status(400).json({error:'Invalid bounded result judgment request'});
+            }
+            const runId=evaluationAudit.runId(req.get('X-FrameSim-Run-Id'));
+            const output=await standardJev.judge(body,controller.signal);
+            return res.json({...output,trace:await evaluationAudit.record(route,runId,body,output)});
+        }catch {if(!res.destroyed)return res.status(500).json({error:'Jev judgment unavailable'});}
+        finally {res.removeListener('close',abort);}
+    });
+}
 
 app.post('/api/generate', async (req, res) => {
     const controller = new AbortController();
@@ -142,7 +203,8 @@ app.post('/api/generate', async (req, res) => {
             agentPersona: req.body?.agentPersona,
             signal: controller.signal
         });
-        res.json(result);
+        const runId=evaluationAudit.runId(req.get('X-FrameSim-Run-Id'));
+        res.json({...result,trace:await evaluationAudit.record('/api/generate',runId,req.body,result)});
     } catch (error) {
         const gatewayError = error instanceof ProviderGatewayError ? error : undefined;
         res.status(gatewayError?.status || 500).json({

@@ -12,7 +12,7 @@
     "test:keys": "node scripts/api_key_health_check.test.mjs",
     "health:keys": "node scripts/api_key_health_check.mjs",
     "health:keys:generate": "node scripts/api_key_health_check.mjs --generate",
-    "test:offline": "tsx scripts/root_offline.test.ts",
+    "test:offline": "tsx scripts/root_offline.test.ts && tsx scripts/standard_jev.test.ts && tsx scripts/fidelity.test.ts",
     "test:browser": "node scripts/browser_smoke.mjs",
     "typecheck": "tsc --noEmit --pretty false && npm --prefix RAG exec tsc -- --noEmit --pretty false",
     "test": "npm run test:offline && npm run test:keys && npm --prefix RAG test",

@@ -27,4 +27,6 @@ dist-ssr
 next_steps/ApiS_RECOVERED.txt
 
 .context/runtime/
+.context/
+.gortex/
 artifacts/qa/

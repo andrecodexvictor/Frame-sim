@@ -7,6 +7,9 @@ import {
 } from 'recharts';
 import { SimulationOutput, SimulationConfig } from '../types';
 import { BrutalButton } from './ui/BrutalButton';
+import {OperationalMetricsPanel} from './OperationalMetricsPanel';
+import {evaluateOperationalPerformance,type OperationalObservations} from '../RAG/src/core/operationalMetrics';
+import type {OperationalReceipt} from '../services/operationalClient';
 import { Download, Sun, Moon, User, Activity, AlertCircle, CheckCircle, PieChart as PieIcon, BarChart as BarIcon, BookOpen, TrendingUp, TrendingDown } from 'lucide-react';
 
 const EVENT_LABELS: Record<string, { label: string; tone: 'critical' | 'warning' | 'positive' | 'info' }> = {
@@ -50,9 +53,12 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) => {
   const [darkMode, setDarkMode] = useState(true);
+  const [operationalObservations,setOperationalObservations]=useState<OperationalObservations|undefined>(data.operationalEvaluation?{baseline:data.operationalEvaluation.baseline,current:data.operationalEvaluation.current}:config.operationalObservations);
+  const [operationalReceipt,setOperationalReceipt]=useState<OperationalReceipt>();
+  let operationalEvaluation;try{operationalEvaluation=evaluateOperationalPerformance(operationalObservations);}catch{operationalEvaluation=evaluateOperationalPerformance();}
 
   const downloadReport = () => {
-    const report = JSON.stringify({ generatedAt: new Date().toISOString(), config, result: data }, null, 2);
+    const report = JSON.stringify({ generatedAt: new Date().toISOString(), config, result: {...data,operationalEvaluation,operationalReceipt} }, null, 2);
     const url = URL.createObjectURL(new Blob([report], { type: 'application/json' }));
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -130,8 +136,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
                 ? 'a execução terminou com uma resposta de contingência; trate os números como aproximações e valide antes de decidir.'
                 : `${data.execution.provider}/${data.execution.model}, ${data.execution.attempts} tentativa(s).`}
             {data.execution.warning && <span className="block mt-1">Motivo: {data.execution.warning}</span>}
-            {typeof data.execution.seed === 'number' && <span className="block mt-1 font-mono text-xs">Semente do modelo humano: {data.execution.seed} · repete seleção/estado com a mesma entrada; texto do provedor pode variar.</span>}
+            {typeof data.execution.seed === 'number' && <span className="block mt-1 font-mono text-xs">Semente: {data.execution.seed} · fixa seleção e regras determinísticas; decisões de IA e narrativa podem variar.</span>}
           </div>
+        )}
+
+        {data.jev && (
+          <section aria-label="Auditoria Jev" className={`border-b ${theme.border} py-3 text-sm space-y-2`}>
+            <div className="flex flex-wrap gap-x-5 gap-y-1">
+              <strong>Jev: {data.jev.mode}</strong>
+              <span>Lotes: {data.jev.calls}</span>
+              <span>Decisões aceitas: {data.jev.acceptedDecisions}</span>
+              <span>Aplicadas: {data.jev.appliedDecisions}</span>
+              <span>Determinísticas: {data.jev.fallbackDecisions}</span>
+              <span>Juiz final: {data.judgeEvaluation?.valid ? data.judgeEvaluation.model : 'não concluído'}</span>
+            </div>
+            {data.judgeEvaluation?.valid && <div className="flex flex-wrap gap-x-5 gap-y-1">
+              {Object.keys(data.judgeEvaluation.answers || {}).map(name=>{
+                const answer=data.judgeEvaluation?.answers?.[name];
+                if(typeof answer?.score!=='number')return null;
+                return <span key={name}>{({scenario_fit:'Aderência ao cenário',proportionality:'Proporcionalidade',framework_fidelity:'Fidelidade ao framework'} as Record<string,string>)[name] || name}: {answer.score.toFixed(2)}/3</span>;
+              })}
+            </div>}
+          </section>
         )}
 
         <details className={`border-b ${theme.border} pb-4 text-sm`}>
@@ -171,12 +197,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               <span>CULTURA: {(config.employeeArchetypes || []).slice(0, 2).join(' + ').toUpperCase()}...</span>
             </div>
           </div>
-          <div className="bg-emerald-500/10 p-6 border-l-4 border-emerald-500 rounded-r-lg">
+          <div className={`p-6 border ${theme.border} rounded`}>
             <div className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-1">ROI Acumulado</div>
             <div className={`text-6xl font-black font-mono flex items-baseline gap-2 ${data.summary.totalRoi >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
               {data.summary.totalRoi > 0 ? '+' : ''}{data.summary.totalRoi}%
             </div>
-            <div className="text-[10px] uppercase font-mono mt-2 opacity-70">Projeção Financeira Realista</div>
+            <div className="text-[10px] uppercase font-mono mt-2 opacity-70">Projeção financeira sintética</div>
           </div>
         </div>
 
@@ -333,36 +359,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
         </div>
       )}
 
-      {/* Business Metrics Panel (Phase 5) */}
-      {data.businessMetrics && (
-        <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
-          <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-blue-500">
-            <BarIcon className="w-4 h-4" /> Métricas de Desempenho
-          </h3>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="p-4 bg-emerald-500/10 rounded border border-emerald-500/30 text-center">
-              <div className="text-3xl font-black text-emerald-500">+{data.businessMetrics.efficiencyGain}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Ganho Eficiência</div>
-            </div>
-            <div className="p-4 bg-yellow-500/10 rounded border border-yellow-500/30 text-center">
-              <div className="text-3xl font-black text-yellow-500">-{data.businessMetrics.reworkReduction}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Redução Retrabalho</div>
-            </div>
-            <div className="p-4 bg-purple-500/10 rounded border border-purple-500/30 text-center">
-              <div className="text-3xl font-black text-purple-500">+{data.businessMetrics.processAgility}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Agilidade Processos</div>
-            </div>
-            <div className="p-4 bg-blue-500/10 rounded border border-blue-500/30 text-center">
-              <div className="text-3xl font-black text-blue-500">-{data.businessMetrics.timeToMarket}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Time-to-Market</div>
-            </div>
-            <div className="p-4 bg-zinc-500/10 rounded border border-zinc-500/30 text-center">
-              <div className="text-3xl font-black">{data.businessMetrics.qualityScore}</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Score Qualidade</div>
-            </div>
-          </div>
-        </div>
-      )}
+      <OperationalMetricsPanel initial={operationalObservations} darkMode={darkMode} onChange={setOperationalObservations} onRegistered={setOperationalReceipt} scenario={JSON.stringify({employees:config.companySize,sector:config.sector,scenario:config.customScenarioText||config.selectedScenarioId})} framework={data.frameworkName} />
 
       {/* Company Evolution Panel (Phase 5) */}
       {data.companyEvolution && (

@@ -1,4 +1,5 @@
 
+import type {OperationalObservations,OperationalEvaluation} from './RAG/src/core/operationalMetrics';
 export interface FrameworkInput {
   id: string;
   name: string;
@@ -25,6 +26,9 @@ export type CorporateArchetype =
   | 'coo';            // Chief Operating Officer
 
 export interface SimulationConfig {
+  seed?:number;
+  operationalObservations?:OperationalObservations;
+  evaluationMode?: 'blinded-poc';
   frameworks: FrameworkInput[];
   frameworkCategory: 'development' | 'management' | 'governance' | 'hybrid' | string;
   companySize: number;
@@ -53,6 +57,8 @@ export interface SimulationConfig {
 }
 
 export interface SingleSimulationConfig {
+  operationalObservations?:OperationalObservations;
+  evaluationMode?: 'blinded-poc';
   frameworkName: string;
   frameworkText: string;
   frameworkCategory: string;
@@ -80,6 +86,7 @@ export interface SingleSimulationConfig {
 }
 
 export interface SimulationOutput {
+  operationalEvaluation?:OperationalEvaluation;
   frameworkName: string;
   summary: {
     finalAdoption: number;
@@ -201,6 +208,26 @@ export interface SimulationOutput {
     attempts: number;
     seed?: number;
     warning?: string;
+    gatewayTrace?: {engine:string;traceId:string;runId:string;inputSha256:string;outputSha256:string};
+  };
+  jev?: {
+    mode: 'off'|'shadow'|'active';
+    calls: number;
+    acceptedDecisions: number;
+    appliedDecisions: number;
+    fallbackDecisions: number;
+    unavailable: boolean;
+    audits: Array<{model:string;origin:string;requestHash:string;confidence:number;latencyMs:number;inputTokens?:number;outputTokens?:number;fallbackReason?:string;responseReceived?:boolean;acceptedDecisions?:number;appliedDecisions?:number}>;
+  };
+  judgeEvaluation?: {
+    mode: string;
+    valid: boolean;
+    model?: string;
+    answers?: Record<string,{type:string;score?:number;confidence?:number;choice?:string;probabilities?:Record<string,number>}>;
+    inputTokens?: number;
+    outputTokens?: number;
+    latencyMs?: number;
+    error?: string;
   };
 }
 

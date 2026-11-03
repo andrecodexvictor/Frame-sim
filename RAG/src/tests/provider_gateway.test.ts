@@ -11,6 +11,10 @@ type FetchCall = {
 };
 
 const providerEnvNames = [
+    'PROVIDER_TIMEOUT_MS',
+    'OPENROUTER_API_KEY', 'OPENROUTER_MODEL',
+    'GATEWAY_PROVIDER', 'NVIDIA_MODEL', 'NVIDIA_MODELS', 'NVIDIA_API_KEY',
+    ...Array.from({ length: 7 }, (_, index) => `NVIDIA_API_KEY_${index + 1}`),
     'GOOGLE_API_KEY',
     ...Array.from({ length: 7 }, (_, index) => `GOOGLE_API_KEY_${index + 1}`),
     'VITE_API_KEY',
@@ -73,7 +77,53 @@ try {
             && !error.message.includes(oversizedPrompt),
     );
     assert.equal(fetchCalls, 0, 'invalid requests must not invoke fetch');
-    assert.deepEqual(validationGateway.capabilities(), { google: false, openai: false, deepseek: false });
+    assert.deepEqual(validationGateway.capabilities(), { google: false, openai: false, deepseek: false, nvidia: false, openrouter: false });
+
+    clearProviderEnvironment();
+    process.env.NVIDIA_API_KEY = 'nvidia-one';
+    process.env.NVIDIA_API_KEY_1 = 'nvidia-two';
+    process.env.NVIDIA_MODEL = 'deepseek-ai/test';
+    process.env.GATEWAY_PROVIDER = 'nvidia';
+    process.env.GOOGLE_API_KEY = 'must-not-be-used';
+    const nimCalls: FetchCall[] = [];
+    globalThis.fetch = async (input, init) => {
+        nimCalls.push({ url: String(input), init });
+        return response({ choices: [{ message: { content: '{"ok":true}' } }] });
+    };
+    const nim = new ProviderGateway(0);
+    assert.equal((await nim.generate({task:'simulation',prompt:'test',seed:-1})).provider, 'nvidia');
+    await nim.generate({task:'simulation',prompt:'test',modelPreference:'nvidia:deepseek-ai/test'});
+    assert.equal(nimCalls[0].url, 'https://integrate.api.nvidia.com/v1/chat/completions');
+    assert.equal((nimCalls[1].init?.headers as Record<string,string>).Authorization, 'Bearer nvidia-two');
+    const nimBody = JSON.parse(String(nimCalls[0].init?.body));
+    assert.equal(nimBody.model, 'deepseek-ai/test');
+    assert.equal(nimBody.seed, 2147483647);
+    assert.equal(nimBody.max_tokens, 16384);
+    const starts:number[]=[];
+    globalThis.fetch=async()=>{starts.push(Date.now());return response({choices:[{message:{content:'{"ok":true}'}}]});};
+    const paced=new ProviderGateway(25);
+    await Promise.all([paced.generate({task:'simulation',prompt:'paced-one'}),paced.generate({task:'simulation',prompt:'paced-two'})]);
+    assert.ok(starts[1]-starts[0]>=15,'Concurrent NVIDIA callers must share the start interval');
+    await assert.rejects(nim.generate({task:'simulation',prompt:'test',modelPreference:'nvidia:unconfigured'}),
+        (error: unknown) => error instanceof ProviderGatewayError && error.status === 400);
+    globalThis.fetch = async () => response({error:'secret'},429);
+    await assert.rejects(nim.generate({task:'simulation',prompt:'test'}),
+        (error: unknown) => error instanceof ProviderGatewayError && error.failureCodes.length === 2
+            && error.failureCodes.every(code => code === 'nvidia:http-429'));
+
+    clearProviderEnvironment();
+    process.env.OPENROUTER_API_KEY = 'router-secret';
+    process.env.OPENROUTER_MODEL = 'minimax/test';
+    globalThis.fetch = async (input, init) => {
+        assert.equal(String(input), 'https://openrouter.ai/api/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.model, 'minimax/test');
+        assert.equal(body.reasoning, undefined);
+        return response({choices:[{message:{content:'{"ok":true}'}}]});
+    };
+    const routerResult = await new ProviderGateway().generate({task:'simulation',prompt:'test',modelPreference:'openrouter:minimax/test'});
+    assert.equal(routerResult.provider, 'openrouter');
+    assert.equal(routerResult.degraded, false);
 
     // Google keys rotate between requests while duplicate/empty entries are ignored by the gateway.
     clearProviderEnvironment();

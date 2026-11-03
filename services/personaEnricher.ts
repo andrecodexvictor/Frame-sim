@@ -199,12 +199,17 @@ export function enrichArchetypesToTeam(
     const team: CompactPersona[] = [];
     const archetypeDistribution: Record<string, number> = {};
     const random = seededRandom(seed);
+    const targetSize = Math.min(Math.max(1, Math.trunc(companySize) || 50), new Set(profiles.map(p => p.id)).size);
+    const usedIds = new Set<string>();
 
     // Step 1: Selected archetypes become KEY STAKEHOLDERS (1-2 each)
     for (const archetype of archetypes) {
         const count = archetype.includes('ceo') || archetype.includes('cto') ? 1 : 2;
-        const personas = getPersonasForArchetype(archetype, count, random);
+        const personas = getPersonasForArchetype(archetype, targetSize, random)
+            .filter(persona => !usedIds.has(persona.id))
+            .slice(0, Math.min(count, targetSize - keyStakeholders.length));
         keyStakeholders.push(...personas);
+        personas.forEach(persona => usedIds.add(persona.id));
         archetypeDistribution[archetype] = personas.length;
     }
 
@@ -212,12 +217,18 @@ export function enrichArchetypesToTeam(
     const distribution = getRealisticDistribution(companySize);
 
     // Step 3: Fill team with realistic mix (excluding key stakeholders)
-    const usedIds = new Set(keyStakeholders.map(p => p.id));
-
     for (const [role, count] of Object.entries(distribution)) {
-        const rolePersonas = getPersonasForRole(role, count, usedIds, random);
+        const remaining = targetSize - keyStakeholders.length - team.length;
+        if (remaining <= 0) break;
+        const rolePersonas = getPersonasForRole(role, Math.min(count, remaining), usedIds, random);
         team.push(...rolePersonas);
         rolePersonas.forEach(p => usedIds.add(p.id));
+    }
+
+    // Role-specific pools may be smaller than the requested distribution.
+    const remaining = targetSize - keyStakeholders.length - team.length;
+    if (remaining > 0) {
+        team.push(...shuffle((profiles as CompactPersona[]).filter(persona => !usedIds.has(persona.id)), random).slice(0, remaining));
     }
 
     return {
@@ -323,6 +334,7 @@ ${i + 1}. **${p.nome}** (${p.cargo}, ${p.area})
  * Used in Monte Carlo variation
  */
 export function calculateTeamResistance(team: CompactPersona[]): number {
+    if(team.length===0)return 50;
     let resistance = 50; // Base resistance
 
     for (const persona of team) {
@@ -341,5 +353,5 @@ export function calculateTeamResistance(team: CompactPersona[]): number {
     }
 
     // Normalize to 0-100
-    return Math.max(0, Math.min(100, resistance));
+    return Math.max(0, Math.min(100, 50+(resistance-50)/team.length));
 }

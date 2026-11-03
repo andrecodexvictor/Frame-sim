@@ -3,6 +3,7 @@ import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { FrameworkInput, SimulationConfig, SimulationOutput } from './types';
 import { runSimulation } from './services/geminiService';
 import { checkAgenticStatus, runAgenticSimulation } from './services/agenticService';
+import {pairedCaseSeed} from './services/evaluationConfig';
 
 const UploadSection = lazy(() => import('./components/UploadSection').then(m => ({ default: m.UploadSection })));
 const ConfigForm = lazy(() => import('./components/ConfigForm').then(m => ({ default: m.ConfigForm })));
@@ -42,7 +43,7 @@ const App: React.FC = () => {
       setStep('config');
       return;
     }
-    setConfig(simulationConfig);
+    setConfig(simulationConfig.simulationMode==='agentic'?simulationConfig:{...simulationConfig,evaluationMode:'blinded-poc',seed:pairedCaseSeed(simulationConfig)});
     setStep('simulating');
 
     try {
@@ -62,6 +63,9 @@ const App: React.FC = () => {
             : `Cenário Recomendado: ${simulationConfig.selectedScenarioId} (Verificar preset)`;
 
           return runSimulation({
+            evaluationMode:'blinded-poc',
+            seed:pairedCaseSeed(simulationConfig),
+            operationalObservations:simulationConfig.operationalObservations,
             frameworkName: fw.name,
             frameworkText: fw.text,
             frameworkCategory: simulationConfig.frameworkCategory,

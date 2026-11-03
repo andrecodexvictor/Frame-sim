@@ -12,6 +12,15 @@ export interface ChunkMetadata {
     keywords: string[];
     charStart: number;
     charEnd: number;
+    /** Optional semantic fields populated by JevChunkEnricher. */
+    semanticType?: string;
+    retrievalValue?: number;
+    completeness?: 'complete' | 'continuation' | 'incomplete';
+    noise?: boolean;
+    promptInjection?: boolean;
+    semanticConfidence?: number;
+    enrichmentSource?: 'deterministic' | 'jev';
+    enrichmentReason?: string;
 }
 
 export interface DocumentChunk {
@@ -25,6 +34,11 @@ export interface ChunkingResult {
     originalLength: number;
     chunks: DocumentChunk[];
     structure: DocumentStructure;
+}
+
+/** Minimal seam for optional asynchronous semantic post-processing. */
+export interface ChunkEnricher {
+    enrich(result: ChunkingResult, signal?: AbortSignal): Promise<{ result: ChunkingResult }>;
 }
 
 export interface DocumentStructure {
@@ -118,6 +132,19 @@ export class SmartChunker {
             chunks,
             structure
         };
+    }
+
+    /**
+     * Runs the unchanged structural chunker first, then an optional semantic
+     * enricher. The enricher can annotate chunks but cannot affect chunking.
+     */
+    async chunkWithEnrichment(
+        text: string,
+        documentId: string | undefined,
+        enricher: ChunkEnricher,
+        signal?: AbortSignal,
+    ): Promise<ChunkingResult> {
+        return (await enricher.enrich(this.chunk(text, documentId), signal)).result;
     }
 
     /**
