@@ -123,6 +123,8 @@ export interface SimulationOutput {
   }>;
 
   keyPersonas: Array<{
+    identityResolution?: 'resolved' | 'unresolved';
+    stateOrigin?: 'employee-brain' | 'narrative';
     id?: string;
     name?: string;
     role: string;

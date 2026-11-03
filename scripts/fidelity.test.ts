@@ -4,7 +4,8 @@ import {calculateTeamResistance,enrichArchetypesToTeam} from '../services/person
 import {runSimulation} from '../services/geminiService';
 import {pairedCaseSeed} from '../services/evaluationConfig';
 import {runBatchSimulation} from '../services/batchService';
-import type {SingleSimulationConfig,SimulationConfig} from '../types';
+import {mentionsPersonaName,resolvePersonaIdentity} from '../services/personaIdentity';
+import type {SingleSimulationConfig,SimulationConfig,SimulationOutput} from '../types';
 
 (globalThis as any).window=globalThis;
 const config:SingleSimulationConfig={frameworkName:'GEAR',frameworkText:'Fila unica, responsavel identificado e evidencia de recuperacao.',frameworkCategory:'governance',companySize:1,sector:'Servicos',budgetLevel:'low',employeeArchetypes:['ceo'],techDebtLevel:'medium',operationalVelocity:'agile',previousFailures:false,scenarioContext:'Unico trabalhador acumula direcao e operacao; recuperar servico e ordenar demandas.',durationMonths:2,seed:42,economicProfileId:'br_pme',economicScenarioId:'base'};
@@ -16,15 +17,22 @@ assert.equal(calculateTeamResistance([person]),calculateTeamResistance(Array.fro
 for(const size of [1,5,10,25,50,100,150])assert.equal(enrichArchetypesToTeam(['ceo','skeptic'],size,42).team.length,size);
 const caseConfig={...config,frameworks:[{id:'a',name:'GEAR',text:'same document'}]} as unknown as SimulationConfig;
 assert.equal(pairedCaseSeed(caseConfig),pairedCaseSeed({...caseConfig,frameworks:[{id:'b',name:'COBIT',text:'other document'}]}),'UI case seed must exclude treatment labels and texts');
+assert.equal(mentionsPersonaName('Mariana Souza, diretora','Ana Souza'),false,'a name must not match inside another name');
+assert.equal(mentionsPersonaName('ANA SOUZA / diretora','Ana Souza'),true);
+assert.equal(mentionsPersonaName('AAB / tester','A+B'),false);
+assert.equal(mentionsPersonaName('A+B / tester','A+B'),true);
+assert.equal(resolvePersonaIdentity('Ana Souza e Joao Lima',[{id:'a',nome:'Ana Souza'},{id:'b',nome:'Joao Lima'}]),undefined,'multiple people in one role must not be assigned arbitrarily');
+assert.equal(resolvePersonaIdentity('Qualquer texto',[{id:'empty',nome:''}]),undefined);
 
 const originalFetch=globalThis.fetch;
 const prompts:string[]=[];
 const seeds:number[]=[];
 let missingTimeline=false;
+let personaRows:SimulationOutput['keyPersonas']=[];
 globalThis.fetch=async(input,init)=>{
  if(String(input).endsWith('/api/status'))return new Response(JSON.stringify({jev:{mode:'off'}}));
  const body=JSON.parse(String(init?.body));prompts.push(body.prompt);seeds.push(body.seed);
- const content={summary:{finalAdoption:50,totalRoi:0,maturityScore:5,monthsToComplete:2,scenarioValidity:80},implementationNarrative:'Hipotese sintetica.',keyPersonas:[],timeline:missingTimeline?undefined:Array.from({length:2},(_,i)=>({month:i+1,adoptionRate:50,efficiency:100,compliance:0,rawData:{featuresDelivered:0,bugsGenerated:0,criticalIncidents:0,teamSize:1,learningCurveFactor:1}}))};
+ const content={summary:{finalAdoption:50,totalRoi:0,maturityScore:5,monthsToComplete:2,scenarioValidity:80},implementationNarrative:'Hipotese sintetica.',keyPersonas:personaRows,timeline:missingTimeline?undefined:Array.from({length:2},(_,i)=>({month:i+1,adoptionRate:50,efficiency:100,compliance:0,rawData:{featuresDelivered:0,bugsGenerated:0,criticalIncidents:0,teamSize:1,learningCurveFactor:1}}))};
  return new Response(JSON.stringify({provider:'fixture-for-test',model:'test',degraded:false,attempts:1,content:JSON.stringify(content)}));
 };
 try {
@@ -35,6 +43,15 @@ try {
  assert.equal(prompts[0],prompts[1],'blinded prompts and human state must be invariant to the framework label');
  assert.ok(!prompts[0].includes('vasto conhecimento interno'),'comparison must not fill documentary gaps with model prior knowledge');
  assert.ok(!prompts[0].includes('FIT PÉSSIMO'),'comparison must not be primed by framework-name penalties');
+ const expanded=enrichArchetypesToTeam(['ceo'],10,42);
+ const outsideStakeholders=expanded.team.find(p=>!expanded.keyStakeholders.some(s=>s.id===p.id))!;
+ personaRows=[{role:outsideStakeholders.nome+', perfil citado',archetype:'test',sentiment:50,impact:'Proposta sintetica'}];
+ const attribution=await runSimulation({...config,companySize:10,evaluationMode:'blinded-poc'});
+ assert.equal(attribution.keyPersonas[0].id,outsideStakeholders.id,'a persona outside the selected stakeholders must retain its own catalogue identity');
+ personaRows=[{role:'Pessoa sem correspondente no catalogo',archetype:'test',sentiment:50,impact:'Proposta sintetica'}];
+ const unresolved=await runSimulation({...config,evaluationMode:'blinded-poc'});
+ assert.equal(unresolved.keyPersonas[0].id,undefined,'unknown people must not receive another profile by array position');
+ personaRows=[];
  const batchStart=prompts.length;
  const batchConfig={...caseConfig,evaluationMode:'blinded-poc',frameworks:[{id:'a',name:'GEAR',text:config.frameworkText}]} as SimulationConfig;
  await runBatchSimulation(batchConfig,1,()=>{});

@@ -8,6 +8,7 @@ import {
 import { SimulationOutput, SimulationConfig } from '../types';
 import { BrutalButton } from './ui/BrutalButton';
 import {OperationalMetricsPanel} from './OperationalMetricsPanel';
+import {mentionsPersonaName} from '../services/personaIdentity';
 import {evaluateOperationalPerformance,type OperationalObservations} from '../RAG/src/core/operationalMetrics';
 import type {OperationalReceipt} from '../services/operationalClient';
 import { Download, Sun, Moon, User, Activity, AlertCircle, CheckCircle, PieChart as PieIcon, BarChart as BarIcon, BookOpen, TrendingUp, TrendingDown } from 'lucide-react';
@@ -103,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               FrameSim<span className={darkMode ? 'text-emerald-500' : 'text-zinc-900'}></span>
             </h1>
             <div className={`hidden md:flex px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border ${theme.border} rounded bg-opacity-50`}>
-              Deep Simulation Kernel v3.2 (RAG Enabled)
+              Cenário e projeção sintéticos
             </div>
           </div>
 
@@ -129,7 +130,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
             className={`border p-4 text-sm ${data.execution.mode === 'live' ? `${theme.border} opacity-80` : 'border-amber-500 bg-amber-500/10 text-amber-100'}`}
             role={data.execution.mode === 'live' ? 'status' : 'alert'}
           >
-            <strong>{data.execution.mode === 'live' ? 'Execução ao vivo' : 'Resultado degradado'}:</strong>{' '}
+            <strong>{data.execution.mode === 'live' ? 'Inferência real da API' : 'Resultado degradado'}:</strong>{' '}
             {data.execution.mode === 'fixture'
               ? 'os provedores não responderam; estes dados são uma demonstração local e não devem embasar decisões.'
               : data.execution.mode === 'degraded'
@@ -322,10 +323,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
               <TrendingDown className="w-4 h-4 text-red-500" />
             )}
             <span className={(data as any).roiAnalysis.verdict === 'POSITIVO' ? 'text-emerald-500' : 'text-red-500'}>
-              Análise de ROI: {(data as any).roiAnalysis.verdict}
+              Comentário narrativo de ROI: {(data as any).roiAnalysis.verdict}
             </span>
           </h3>
 
+          <p className="text-xs opacity-70 mb-4">Classificação do texto gerado pelo modelo. A projeção financeira recalculada aparece acima; nenhuma das duas é retorno observado.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase opacity-60 mb-2">Fatores Principais</h4>
@@ -365,8 +367,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
       {data.companyEvolution && (
         <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
           <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-cyan-500">
-            <TrendingUp className="w-4 h-4" /> Evolução da Empresa
+            <TrendingUp className="w-4 h-4" /> Equipe descrita na projeção
           </h3>
+          <p className="text-xs opacity-70 mb-4">Porte configurado: {config.companySize} pessoas. As contagens abaixo são descrições do modelo, não observações da empresa.</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <div className="p-4 bg-cyan-500/10 rounded border border-cyan-500/30">
               <div className="flex justify-between items-end">
@@ -523,29 +526,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) =
         <div className="md:col-span-4 grid grid-cols-1 gap-6">
           <div className={`p-6 rounded border ${theme.border} ${theme.card} relative flex-1 flex flex-col`}>
             <h3 className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <User className="w-3 h-3" /> Personas & Stakeholders (RAG)
+              <User className="w-3 h-3" /> Personas e estado simulado
             </h3>
             <div className="space-y-4 overflow-y-auto max-h-[300px] custom-scrollbar pr-2">
               {data.keyPersonas?.map((persona, idx) => {
                 const isStakeholder = persona.role.includes("STAKEHOLDER");
                 const cleanRole = persona.role.replace(" / STAKEHOLDER", "").replace("/ STAKEHOLDER", "");
+                const identityUnresolved=persona.identityResolution==='unresolved'||Boolean(persona.name&&!mentionsPersonaName(cleanRole,persona.name));
 
                 return (
-                  <div key={persona.id || `${cleanRole}-${idx}`} className={`p-3 rounded border ${persona.sentiment > 70 ? 'border-emerald-500/60 bg-emerald-500/5' : persona.sentiment < 40 ? 'border-red-500/60 bg-red-500/5' : 'border-yellow-500/60 bg-yellow-500/5'} ${isStakeholder ? 'ring-1 ring-white/20' : ''}`}>
+                  <div key={`${persona.id||cleanRole}-${idx}`} className={`p-3 rounded border ${identityUnresolved?'border-zinc-500':persona.sentiment > 70 ? 'border-emerald-500/60 bg-emerald-500/5' : persona.sentiment < 40 ? 'border-red-500/60 bg-red-500/5' : 'border-yellow-500/60 bg-yellow-500/5'} ${isStakeholder ? 'ring-1 ring-white/20' : ''}`}>
                     <div className="flex justify-between items-start">
                       <span className="font-mono text-[10px] uppercase opacity-70 flex items-center gap-1">
                         {cleanRole}
                         {isStakeholder && <span className="bg-blue-500 text-white px-1 rounded text-[8px] font-bold">STAKEHOLDER</span>}
                       </span>
-                      <span className="font-bold text-xs" aria-label={`Sentimento ${persona.sentiment} por cento, ${getSentimentLabel(persona.sentiment)}`}>{persona.sentiment}% · {getSentimentLabel(persona.sentiment)}</span>
+                      {identityUnresolved?<span className="text-xs">Não atribuído</span>:<span className="font-bold text-xs" aria-label={`Sentimento ${persona.sentiment} por cento, ${getSentimentLabel(persona.sentiment)}`}>{persona.sentiment}% · {getSentimentLabel(persona.sentiment)}</span>}
                     </div>
-                    <div className="font-bold text-sm my-1">{persona.name || cleanRole}</div>
-                    <div className="text-[11px] opacity-70">{persona.archetype}{persona.area ? ` · ${persona.area}` : ''}{persona.status && persona.status !== 'ativo' ? ` · ${persona.status}` : ''}</div>
+                    <div className="font-bold text-sm my-1">{identityUnresolved?'Perfil não vinculado ao catálogo':persona.name || cleanRole}</div>
+                    {identityUnresolved&&<p className="text-xs mb-2">Identidade sem vínculo único. Os atributos de outra pessoa não são apresentados neste cartão.</p>}
+                    {!identityUnresolved&&persona.stateOrigin==='narrative'&&<p className="text-xs mb-2">Estado individual não simulado; valores narrativos.</p>}
+                    <div className="text-[11px] opacity-70">{persona.archetype}{!identityUnresolved&&persona.area ? ` · ${persona.area}` : ''}{!identityUnresolved&&persona.status && persona.status !== 'ativo' ? ` · ${persona.status}` : ''}</div>
                     <p className="text-xs italic opacity-80 leading-relaxed">"{persona.impact}"</p>
-                    <div className="mt-2 h-1.5 w-full rounded-full bg-zinc-700" role="meter" aria-label={`Aprovação de ${persona.sentiment} por cento`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={persona.sentiment}>
+                    {!identityUnresolved&&<div className="mt-2 h-1.5 w-full rounded-full bg-zinc-700" role="meter" aria-label={`Aprovação de ${persona.sentiment} por cento`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={persona.sentiment}>
                       <div className={`h-full rounded-full ${persona.sentiment >= 70 ? 'bg-emerald-500' : persona.sentiment < 40 ? 'bg-red-500' : 'bg-yellow-500'}`} style={{ width: `${Math.max(0, Math.min(100, persona.sentiment))}%` }} />
-                    </div>
-                    {(persona.cognitiveBias || persona.motivation || persona.communicationStyle || persona.challenge) && (
+                    </div>}
+                    {!identityUnresolved&&(persona.cognitiveBias || persona.motivation || persona.communicationStyle || persona.challenge) && (
                       <details className="mt-3 text-xs">
                         <summary className="cursor-pointer font-semibold underline underline-offset-4">Por que esta pessoa reage assim</summary>
                         <dl className="mt-2 grid gap-2 opacity-80">

@@ -10,6 +10,7 @@ import { generateProviderContent } from './providerClient';
 import {simulateStandardTeam,judgeStandardResult} from './standardJevService';
 import {validateGeneratedSimulation} from './simulationValidation';
 import {evaluateOperationalPerformance} from '../RAG/src/core/operationalMetrics';
+import {resolvePersonaIdentity} from './personaIdentity';
 
 // Google accepts these JSON-schema enum values over its REST API. Keeping the
 // tiny constants local avoids shipping the provider SDK (and credentials) to
@@ -509,29 +510,26 @@ export const runSimulation = async (
     // EMPLOYEE BRAIN: substitui o sentimento inventado pelo LLM pelo humor simulado
     // deterministicamente, quando a persona citada em keyPersonas bate com um brain.
     if (Array.isArray(finalResult.keyPersonas)) {
-      finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any, index: number) => {
-        // Guard: nome vazio faria includes('') casar sempre com o primeiro brain.
-        const brain = brains.find(b => b.nome && b.nome.length >= 3 && kp.role?.toLowerCase().includes(b.nome.toLowerCase()));
-        const profile = keyStakeholders.find(p =>
-          p.nome && kp.role?.toLowerCase().includes(p.nome.toLowerCase())
-        ) ?? keyStakeholders[index % Math.max(1, keyStakeholders.length)];
+      finalResult.keyPersonas = finalResult.keyPersonas.map((kp: any) => {
+        const profile=resolvePersonaIdentity(kp.role,team);
+        const brain=profile?brains.find(b=>b.personaId===profile.id):undefined;
         const sentiment = brain ? Math.round((brain.humor + 100) / 2) : kp.sentiment;
-        const status = brain?.status ?? 'ativo';
-        const statusNote = status !== 'ativo' ? ` [EmployeeBrain: ${status}]` : '';
+        const status=brain?.status;
+        const statusNote = status&&status !== 'ativo' ? ` [EmployeeBrain: ${status}]` : '';
         return {
           ...kp,
           sentiment,
           impact: `${kp.impact}${statusNote}`,
-          ...(profile ? {
-            id: profile.id,
-            name: profile.nome,
-            area: profile.area,
-            motivation: profile.motivacao,
-            cognitiveBias: profile.vies_cognitivo,
-            communicationStyle: profile.estilo_comunicacao,
-            challenge: profile.desafio_atual,
-            preferredFramework: profile.framework_preferido
-          } : {}),
+          id:profile?.id,
+          name:profile?.nome,
+          area:profile?.area,
+          motivation:profile?.motivacao,
+          cognitiveBias:profile?.vies_cognitivo,
+          communicationStyle:profile?.estilo_comunicacao,
+          challenge:profile?.desafio_atual,
+          preferredFramework:profile?.framework_preferido,
+          identityResolution:profile?'resolved':'unresolved',
+          stateOrigin:brain?'employee-brain':'narrative',
           status,
           stress: brain ? Math.round(brain.estresse) : undefined,
           energy: brain ? Math.round(brain.energia) : undefined,
