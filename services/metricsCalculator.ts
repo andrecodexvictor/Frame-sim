@@ -132,6 +132,7 @@ export const calculateSurpriseFactor = (
     config: SimulationConfig,
     random?: RandomSource
 ): { multiplier: number; triggered: boolean; reason?: string } => {
+    if (config.evaluationMode === 'blinded-poc') return {multiplier:1,triggered:false};
     const rng = random ?? deterministicRandom(
         (config as SimulationConfig & { seed?: number }).seed,
         rawData.month,
@@ -145,7 +146,7 @@ export const calculateSurpriseFactor = (
     // Sinais de adaptação excepcional
     const highAdaptation = rawData.learningCurveFactor >= 1.1;
     const lowBugRatio = rawData.bugsGenerated < (rawData.featuresDelivered * 0.3);
-    const highEfficiency = (rawData.efficiency || 100) >= 85;
+    const highEfficiency = (rawData.efficiency ?? 100) >= 85;
     const smallAgileTeam = rawData.teamSize <= 50;
 
     // Calcular probabilidade de surpresa (base 5%, máx 20%)
@@ -357,8 +358,8 @@ export const calculateMonthlyMetrics = (
     // Base: 65%, adjusted by efficiency and compliance
     // Extreme scenarios (critical debt + previous failures) can drop to 55%
     // Good scenarios (low debt, no failures) can reach 75%
-    const efficiencyMultiplier = Math.max(0.4, (rawData.efficiency || 100) / 100);
-    const complianceMultiplier = (rawData.compliance || 100) / 100;
+    const efficiencyMultiplier = Math.max(0, (rawData.efficiency ?? 100) / 100);
+    const complianceMultiplier = (rawData.compliance ?? 100) / 100;
 
     // Dynamic base rate based on tech debt and scenario health
     let maintenanceBaseRate = 0.65; // Neutral starting point

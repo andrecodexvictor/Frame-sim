@@ -16,10 +16,7 @@ export interface ProviderGenerateRequest {
 }
 
 export interface ProviderGenerateResponse {
-  requestedModel?: string;
-  codeRevision?: string;
-  codeStateHash?: string;
-  usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+  trace?: {engine:string;traceId:string;runId:string;inputSha256:string;outputSha256:string};
   content: string;
   provider: string;
   model: string;
@@ -39,7 +36,7 @@ export class ProviderGatewayError extends Error {
   }
 }
 
-function apiBaseUrl(): string {
+export function apiBaseUrl(): string {
   // Vite injects import.meta.env in the browser; Node-based tests/SSR may not.
   const configured = import.meta.env?.VITE_API_URL?.trim();
   return (configured || DEFAULT_API_BASE_URL).replace(/\/$/, '');
@@ -53,7 +50,7 @@ export async function generateProviderContent(
   request: ProviderGenerateRequest
 ): Promise<ProviderGenerateResponse> {
   const timeoutController = new AbortController();
-  const timeoutMs = Math.max(1_000, request.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const timeoutMs = Math.max(1_000, request.timeoutMs ?? (request.task === 'simulation' ? 270_000 : DEFAULT_TIMEOUT_MS));
   const timeoutId = window.setTimeout(() => timeoutController.abort('timeout'), timeoutMs);
   const abortFromCaller = () => timeoutController.abort(request.signal?.reason ?? 'cancelled');
 
@@ -95,12 +92,9 @@ export async function generateProviderContent(
       content: payload.content,
       provider: payload.provider || 'unknown',
       model: payload.model || 'unknown',
-      requestedModel: payload.requestedModel,
-      codeRevision: payload.codeRevision,
-      codeStateHash: payload.codeStateHash,
-      usage: payload.usage,
       degraded: Boolean(payload.degraded),
-      attempts: Number.isFinite(payload.attempts) ? Number(payload.attempts) : 1
+      attempts: Number.isFinite(payload.attempts) ? Number(payload.attempts) : 1,
+      ...(payload.trace?{trace:payload.trace}:{})
     };
   } catch (error) {
     if (error instanceof ProviderGatewayError) throw error;

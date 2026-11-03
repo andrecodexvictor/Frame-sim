@@ -11,6 +11,8 @@ import type {
     SimulationEvent,
     FrameworkPlaybook
 } from '../types/index.js';
+import { SmartChunker } from './SmartChunker.js';
+import { JevChunkEnricher, type EnrichmentResult } from './JevChunkEnricher.js';
 
 // Paths dos documentos
 const DATA_PATHS = {
@@ -28,22 +30,52 @@ export interface LoadedDocuments {
     playbooks: Document[];
 }
 
+export interface DocumentLoaderOptions {
+    /** Enables semantic framework enrichment; defaults to the server JEV_MODE. */
+    enrichFrameworks?: boolean;
+    frameworkEnrichmentMode?: 'off' | 'shadow' | 'active';
+    frameworkChunker?: SmartChunker;
+    frameworkEnricher?: Pick<JevChunkEnricher, 'enrichChunks'>;
+    jevApiKey?: string;
+    jevEndpoint?: string;
+    jevModel?: string;
+    jevTimeoutMs?: number;
+}
+
 export class DocumentLoader {
     private basePath: string;
+    private readonly frameworkChunker: SmartChunker;
+    private readonly frameworkEnricher?: Pick<JevChunkEnricher, 'enrichChunks'>;
 
-    constructor(basePath: string = '.') {
+    constructor(basePath: string = '.', options: DocumentLoaderOptions = {}) {
         this.basePath = basePath;
+        this.frameworkChunker = options.frameworkChunker ?? new SmartChunker();
+        const configuredMode = process.env.JEV_MODE === 'active' || process.env.JEV_MODE === 'shadow'
+            ? process.env.JEV_MODE
+            : 'off';
+        const enrichFrameworks = options.enrichFrameworks ?? configuredMode !== 'off';
+        const enrichmentMode = options.frameworkEnrichmentMode
+            ?? (options.enrichFrameworks === true ? 'active' : configuredMode);
+        this.frameworkEnricher = options.frameworkEnricher ?? (enrichFrameworks
+            ? new JevChunkEnricher({
+                mode: enrichmentMode,
+                apiKey: options.jevApiKey,
+                endpoint: options.jevEndpoint,
+                model: options.jevModel,
+                timeoutMs: options.jevTimeoutMs,
+            })
+            : undefined);
     }
 
     /**
      * Carrega todos os documentos e retorna chunked
      */
-    async loadAll(): Promise<LoadedDocuments> {
+    async loadAll(signal?: AbortSignal): Promise<LoadedDocuments> {
         const [profiles, metrics, events, playbooks] = await Promise.all([
             this.loadProfiles(),
             this.loadMetrics(),
             this.loadEvents(),
-            this.loadPlaybooks()
+            this.loadPlaybooks(signal)
         ]);
 
         return { profiles, metrics, events, playbooks };
@@ -223,7 +255,7 @@ DESCRIÇÃO: ${event.descricao}
     /**
      * Carrega playbooks de frameworks
      */
-    async loadPlaybooks(): Promise<Document[]> {
+    async loadPlaybooks(signal?: AbortSignal): Promise<Document[]> {
         const filePath = `${this.basePath}/${DATA_PATHS.playbooks}`;
         const content = await readFile(filePath, 'utf-8');
         const playbooks: Record<string, FrameworkPlaybook> = JSON.parse(content);
@@ -245,7 +277,41 @@ DESCRIÇÃO: ${event.descricao}
         }
 
         console.log(`📚 Carregados ${documents.length} playbooks`);
-        return documents;
+        if (!this.frameworkEnricher) return documents;
+
+        const enrichedDocuments: Document[] = [];
+        for (const document of documents) {
+            if (signal?.aborted) throw signal.reason ?? new Error('Document loading aborted');
+            const framework = String(document.metadata.framework ?? document.metadata.nome ?? 'framework');
+            const chunked = this.frameworkChunker.chunk(document.pageContent, `framework_${framework}`);
+            const enriched = await this.frameworkEnricher.enrichChunks(chunked, signal);
+            enrichedDocuments.push(...this.toFrameworkDocuments(document, enriched));
+        }
+        return enrichedDocuments;
+    }
+
+    private toFrameworkDocuments(document: Document, enriched: EnrichmentResult): Document[] {
+        return enriched.result.chunks.map(chunk => new Document({
+            pageContent: chunk.content,
+            metadata: {
+                ...document.metadata,
+                chunk_id: chunk.id,
+                chunk_index: chunk.metadata.index,
+                section: chunk.metadata.section,
+                keywords: chunk.metadata.keywords,
+                char_start: chunk.metadata.charStart,
+                char_end: chunk.metadata.charEnd,
+                semantic_type: chunk.metadata.semanticType,
+                retrieval_value: chunk.metadata.retrievalValue,
+                completeness: chunk.metadata.completeness,
+                noise: chunk.metadata.noise,
+                prompt_injection: chunk.metadata.promptInjection,
+                semantic_confidence: chunk.metadata.semanticConfidence,
+                enrichment_source: chunk.metadata.enrichmentSource,
+                enrichment_reason: chunk.metadata.enrichmentReason,
+                enrichment_stats: enriched.stats,
+            },
+        }));
     }
 
     private formatPlaybookForEmbedding(key: string, playbook: FrameworkPlaybook): string {

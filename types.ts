@@ -1,9 +1,5 @@
 
-import type { RunManifest, PersonaTrace, IndividualEvaluation } from './RAG/src/types/evaluation';
-import type { ExperimentAssignment } from './RAG/src/core/experimentProtocol';
-import type { SyntheticWorkPolicy } from './RAG/src/core/syntheticWork';
-export type { RunManifest, PersonaTrace, IndividualEvaluation } from './RAG/src/types/evaluation';
-
+import type {OperationalObservations,OperationalEvaluation} from './RAG/src/core/operationalMetrics';
 export interface FrameworkInput {
   id: string;
   name: string;
@@ -30,9 +26,9 @@ export type CorporateArchetype =
   | 'coo';            // Chief Operating Officer
 
 export interface SimulationConfig {
-  workloadPolicy?: Partial<SyntheticWorkPolicy>;
-  seed?: number;
-  experiment?: ExperimentAssignment;
+  seed?:number;
+  operationalObservations?:OperationalObservations;
+  evaluationMode?: 'blinded-poc';
   frameworks: FrameworkInput[];
   frameworkCategory: 'development' | 'management' | 'governance' | 'hybrid' | string;
   companySize: number;
@@ -58,13 +54,11 @@ export interface SimulationConfig {
 
   // Agentic Mode
   simulationMode?: 'standard' | 'agentic';
-  /** Explicit opt-in for backend typed judgments; disabled by default. */
-  semanticEvaluation?: boolean;
 }
 
 export interface SingleSimulationConfig {
-  workloadPolicy?: Partial<SyntheticWorkPolicy>;
-  experiment?: ExperimentAssignment;
+  operationalObservations?:OperationalObservations;
+  evaluationMode?: 'blinded-poc';
   frameworkName: string;
   frameworkText: string;
   frameworkCategory: string;
@@ -92,16 +86,13 @@ export interface SingleSimulationConfig {
 }
 
 export interface SimulationOutput {
-  timeUnit?: 'month' | 'turn';
-  manifest?: RunManifest;
-  personaTraces?: PersonaTrace[];
-  individualEvaluations?: IndividualEvaluation[];
+  operationalEvaluation?:OperationalEvaluation;
   frameworkName: string;
   summary: {
-    finalAdoption: number | null;
-    totalRoi: number | null;
-    maturityScore: number | null;
-    monthsToComplete: number | null;
+    finalAdoption: number;
+    totalRoi: number;
+    maturityScore: number;
+    monthsToComplete: number;
     scenarioValidity?: number;
   };
 
@@ -118,10 +109,10 @@ export interface SimulationOutput {
 
   timeline: Array<{
     month: number;
-    adoptionRate: number | null;
-    roi: number | null;
-    compliance: number | null;
-    efficiency: number | null;
+    adoptionRate: number;
+    roi: number;
+    compliance: number;
+    efficiency: number;
     rawData?: {
       featuresDelivered: number;
       bugsGenerated: number;
@@ -132,6 +123,8 @@ export interface SimulationOutput {
   }>;
 
   keyPersonas: Array<{
+    identityResolution?: 'resolved' | 'unresolved';
+    stateOrigin?: 'employee-brain' | 'narrative';
     id?: string;
     name?: string;
     role: string;
@@ -211,12 +204,32 @@ export interface SimulationOutput {
 
   // Provenance: prevents fixtures/degraded output from looking like a live run.
   execution?: {
-    mode: 'live' | 'degraded' | 'fixture' | 'failed';
+    mode: 'live' | 'degraded' | 'fixture';
     provider: string;
     model: string;
     attempts: number;
     seed?: number;
     warning?: string;
+    gatewayTrace?: {engine:string;traceId:string;runId:string;inputSha256:string;outputSha256:string};
+  };
+  jev?: {
+    mode: 'off'|'shadow'|'active';
+    calls: number;
+    acceptedDecisions: number;
+    appliedDecisions: number;
+    fallbackDecisions: number;
+    unavailable: boolean;
+    audits: Array<{model:string;origin:string;requestHash:string;confidence:number;latencyMs:number;inputTokens?:number;outputTokens?:number;fallbackReason?:string;responseReceived?:boolean;acceptedDecisions?:number;appliedDecisions?:number}>;
+  };
+  judgeEvaluation?: {
+    mode: string;
+    valid: boolean;
+    model?: string;
+    answers?: Record<string,{type:string;score?:number;confidence?:number;choice?:string;probabilities?:Record<string,number>}>;
+    inputTokens?: number;
+    outputTokens?: number;
+    latencyMs?: number;
+    error?: string;
   };
 }
 
@@ -303,7 +316,7 @@ export interface RaceResult {
 
 export interface EnsembleResult {
   weightedROI: number;
-  weightedAdoption: number | null;
+  weightedAdoption: number;
   confidence: number;
   contributingAgents: string[];
 }
@@ -326,15 +339,11 @@ export interface EnhancedBatchConfig {
 }
 
 export interface BatchSummary {
-  averageRoi: number | null;
-  averageAdoption: number | null;
-  successRate: number | null;
-  stdDevRoi: number | null;
-  minRoi: number | null;
-  maxRoi: number | null;
-  confidenceInterval95: [number, number] | null;
-  nIndependent?: number;
-  nExcluded?: number;
-  intervalMethod?: 'student-t' | 'unavailable';
-  limitations?: string[];
+  averageRoi: number;
+  averageAdoption: number;
+  successRate: number;
+  stdDevRoi: number;
+  minRoi: number;
+  maxRoi: number;
+  confidenceInterval95: [number, number];
 }

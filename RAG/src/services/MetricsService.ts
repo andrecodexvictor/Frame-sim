@@ -11,6 +11,11 @@ export class MetricsService {
     private incidentCount: number = 0;
     private cycleCount: number = 0;
     private degraded = false;
+    private jevMode: 'off' | 'shadow' | 'active' = 'off';
+    private jevCalls = 0;
+    private jevFallbacks = 0;
+    private jevLowConfidence = 0;
+    private jevLatencyMs = 0;
 
     // Cost constants (approximate per 1k tokens)
     private readonly COST_GPT4_INPUT = 0.03;
@@ -33,6 +38,11 @@ export class MetricsService {
         this.incidentCount = 0;
         this.cycleCount = 0;
         this.degraded = false;
+        this.jevMode = 'off';
+        this.jevCalls = 0;
+        this.jevFallbacks = 0;
+        this.jevLowConfidence = 0;
+        this.jevLatencyMs = 0;
     }
 
     recordReplan() {
@@ -67,6 +77,30 @@ export class MetricsService {
         this.degraded = true;
     }
 
+    setJevMode(mode: 'off' | 'shadow' | 'active') {
+        this.jevMode = mode;
+    }
+
+    recordPersonaJudgment(input: {
+        mode: 'off' | 'shadow' | 'active';
+        origin: 'jev' | 'deterministic_fallback';
+        latencyMs?: number;
+        confidence?: number;
+        fallbackReason?: string;
+        inputTokens?: number;
+        outputTokens?: number;
+        model?: string;
+    }) {
+        this.jevMode = input.mode;
+        if (input.mode !== 'off') this.jevCalls++;
+        if (input.origin === 'deterministic_fallback' && (input.mode==='active' || (input.fallbackReason && input.fallbackReason!=='mode_off'))) this.jevFallbacks++;
+        if (input.fallbackReason === 'low_confidence') this.jevLowConfidence++;
+        if (Number.isFinite(input.latencyMs) && (input.latencyMs ?? 0) >= 0) this.jevLatencyMs += input.latencyMs ?? 0;
+        if (input.inputTokens || input.outputTokens) {
+            this.recordTokens(input.inputTokens, input.outputTokens, input.model || 'jev-1.13.0');
+        }
+    }
+
     calculateMetrics(): AgenticMetrics {
         const duration = Date.now() - this.startTime;
 
@@ -87,7 +121,12 @@ export class MetricsService {
             replan_count: this.replanCount,
             risk_incidents: this.incidentCount,
             tir,
-            degraded: this.degraded
+            degraded: this.degraded,
+            jev_mode: this.jevMode,
+            jev_calls: this.jevCalls,
+            jev_fallbacks: this.jevFallbacks,
+            jev_low_confidence: this.jevLowConfidence,
+            jev_latency_ms: this.jevLatencyMs
         };
     }
 }

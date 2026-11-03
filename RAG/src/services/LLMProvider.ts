@@ -94,7 +94,7 @@ export class GeminiProvider implements LLMProvider {
 }
 
 export class OpenAICompatibleProvider implements LLMProvider {
-    constructor(private readonly apiKey: string, private readonly baseURL: string, private readonly modelName: string, private readonly providerName: string, private readonly fetchImpl: typeof fetch = fetch, private readonly defaultTimeoutMs = DEFAULT_TIMEOUT_MS) { }
+    constructor(private readonly apiKey: string, private readonly baseURL: string, private readonly modelName: string, private readonly providerName: string, private readonly fetchImpl: typeof fetch = fetch, private readonly defaultTimeoutMs = DEFAULT_TIMEOUT_MS, private readonly extraBody: Record<string, unknown> = {}) { }
     name(): string { return this.providerName; }
     isAvailable(): boolean { return this.apiKey.trim().length > 0; }
     async generate(prompt: string, systemPrompt?: string, options?: GenerateOptions): Promise<LLMResponse> {
@@ -102,7 +102,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         const controller = new AbortController(); const timeoutMs = timeoutFor(options) || this.defaultTimeoutMs; const cancel = () => controller.abort(options?.signal?.reason ?? 'cancelled');
         if (options?.signal?.aborted) throw abortError('Generation cancelled.'); options?.signal?.addEventListener('abort', cancel, { once: true }); const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
         try {
-            const response = await this.fetchImpl(`${this.baseURL}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` }, signal: controller.signal, body: JSON.stringify({ model: this.modelName, messages: [...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []), { role: 'user', content: prompt }], temperature: 0.7 }) });
+            const response = await this.fetchImpl(`${this.baseURL}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` }, signal: controller.signal, body: JSON.stringify({ ...this.extraBody, model: this.modelName, messages: [...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []), { role: 'user', content: prompt }], temperature: 0.7 }) });
             const data = await response.json().catch(() => null) as Record<string, unknown> | null;
             if (!response.ok) throw new Error(`${this.providerName} API error (${response.status})`);
             if (!Array.isArray(data?.choices) || !data.choices[0] || typeof data.choices[0] !== 'object') throw new Error(`${this.providerName} returned an invalid response payload`);
@@ -128,6 +128,18 @@ export class OllamaProvider implements LLMProvider {
 }
 
 export class LLMFactory {
+    static getConfiguredPrimary(): LLMProvider | null {
+        if (process.env.GATEWAY_PROVIDER === 'nvidia' && process.env.NVIDIA_API_KEY && process.env.NVIDIA_MODEL) {
+            const reasoning = process.env.NVIDIA_MODEL.startsWith('z-ai/glm-5.3')
+                ? {reasoning_effort:'low', chat_template_kwargs:{clear_thinking:true}}
+                : {chat_template_kwargs:{thinking:false}};
+            return new OpenAICompatibleProvider(process.env.NVIDIA_API_KEY, 'https://integrate.api.nvidia.com/v1', process.env.NVIDIA_MODEL, 'NVIDIA NIM', fetch, DEFAULT_TIMEOUT_MS, {max_tokens:4096, ...reasoning});
+        }
+        if (process.env.GATEWAY_PROVIDER === 'openrouter' && process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL) {
+            return new OpenAICompatibleProvider(process.env.OPENROUTER_API_KEY, 'https://openrouter.ai/api/v1', process.env.OPENROUTER_MODEL, 'OpenRouter', fetch, DEFAULT_TIMEOUT_MS, {max_tokens:4096});
+        }
+        return null;
+    }
     static hasGemini(): boolean { return configuredGeminiKeys().length > 0; }
     static hasGPT4(): boolean { return Boolean(process.env.OPENAI_API_KEY?.trim()); }
     static hasDeepSeek(): boolean { return Boolean(process.env.NVIDIA_DEEPSEEK_API_KEY?.trim() || process.env.DEEPSEEK_API_KEY?.trim()); }

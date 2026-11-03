@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -7,9 +7,10 @@ import {
 } from 'recharts';
 import { SimulationOutput, SimulationConfig } from '../types';
 import { BrutalButton } from './ui/BrutalButton';
-import { IndividualEvaluationPanel } from './IndividualEvaluationPanel';
-import { buildReportData, reportSummary, reportTimeline, reportVisuals } from '../services/reportData';
-import { ArticleExportControls } from './ArticleExportControls';
+import {OperationalMetricsPanel} from './OperationalMetricsPanel';
+import {mentionsPersonaName} from '../services/personaIdentity';
+import {evaluateOperationalPerformance,type OperationalObservations} from '../RAG/src/core/operationalMetrics';
+import type {OperationalReceipt} from '../services/operationalClient';
 import { Download, Sun, Moon, User, Activity, AlertCircle, CheckCircle, PieChart as PieIcon, BarChart as BarIcon, BookOpen, TrendingUp, TrendingDown } from 'lucide-react';
 
 const EVENT_LABELS: Record<string, { label: string; tone: 'critical' | 'warning' | 'positive' | 'info' }> = {
@@ -51,14 +52,15 @@ interface DashboardProps {
   onReset: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config, onReset }) => {
-  const report = useMemo(() => buildReportData({ mode: 'individual', outputs: [originalData], config }), [originalData, config]);
-  const data = { ...originalData, ...reportVisuals(report, 0), summary: reportSummary(report, 0), timeline: reportTimeline(report, 0).map(point => ({ ...point, rawData: originalData.timeline.find(original => original.month === point.month)?.rawData })) };
-  const timeLabel = data.timeUnit === 'turn' ? 'Turno' : 'Mês';
+export const Dashboard: React.FC<DashboardProps> = ({ data, config, onReset }) => {
   const [darkMode, setDarkMode] = useState(true);
+  const [operationalObservations,setOperationalObservations]=useState<OperationalObservations|undefined>(data.operationalEvaluation?{baseline:data.operationalEvaluation.baseline,current:data.operationalEvaluation.current}:config.operationalObservations);
+  const [operationalReceipt,setOperationalReceipt]=useState<OperationalReceipt>();
+  let operationalEvaluation;try{operationalEvaluation=evaluateOperationalPerformance(operationalObservations);}catch{operationalEvaluation=evaluateOperationalPerformance();}
 
   const downloadReport = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
+    const report = JSON.stringify({ generatedAt: new Date().toISOString(), config, result: {...data,operationalEvaluation,operationalReceipt} }, null, 2);
+    const url = URL.createObjectURL(new Blob([report], { type: 'application/json' }));
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `framesim-${data.frameworkName.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'report'}.json`;
@@ -102,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
               FrameSim<span className={darkMode ? 'text-emerald-500' : 'text-zinc-900'}></span>
             </h1>
             <div className={`hidden md:flex px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border ${theme.border} rounded bg-opacity-50`}>
-              Deep Simulation Kernel v3.2 (RAG Enabled)
+              Cenário e projeção sintéticos
             </div>
           </div>
 
@@ -122,22 +124,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
             </BrutalButton>
           </div>
         </nav>
-        <ArticleExportControls report={report} />
 
         {data.execution && (
           <div
             className={`border p-4 text-sm ${data.execution.mode === 'live' ? `${theme.border} opacity-80` : 'border-amber-500 bg-amber-500/10 text-amber-100'}`}
             role={data.execution.mode === 'live' ? 'status' : 'alert'}
           >
-            <strong>{data.execution.mode === 'live' ? 'Execução ao vivo' : 'Resultado degradado'}:</strong>{' '}
+            <strong>{data.execution.mode === 'live' ? 'Inferência real da API' : 'Resultado degradado'}:</strong>{' '}
             {data.execution.mode === 'fixture'
               ? 'os provedores não responderam; estes dados são uma demonstração local e não devem embasar decisões.'
               : data.execution.mode === 'degraded'
                 ? 'a execução terminou com uma resposta de contingência; trate os números como aproximações e valide antes de decidir.'
                 : `${data.execution.provider}/${data.execution.model}, ${data.execution.attempts} tentativa(s).`}
             {data.execution.warning && <span className="block mt-1">Motivo: {data.execution.warning}</span>}
-            {typeof data.execution.seed === 'number' && <span className="block mt-1 font-mono text-xs">Semente do modelo humano: {data.execution.seed} · repete seleção/estado com a mesma entrada; texto do provedor pode variar.</span>}
+            {typeof data.execution.seed === 'number' && <span className="block mt-1 font-mono text-xs">Semente: {data.execution.seed} · fixa seleção e regras determinísticas; decisões de IA e narrativa podem variar.</span>}
           </div>
+        )}
+
+        {data.jev && (
+          <section aria-label="Auditoria Jev" className={`border-b ${theme.border} py-3 text-sm space-y-2`}>
+            <div className="flex flex-wrap gap-x-5 gap-y-1">
+              <strong>Jev: {data.jev.mode}</strong>
+              <span>Lotes: {data.jev.calls}</span>
+              <span>Decisões aceitas: {data.jev.acceptedDecisions}</span>
+              <span>Aplicadas: {data.jev.appliedDecisions}</span>
+              <span>Determinísticas: {data.jev.fallbackDecisions}</span>
+              <span>Juiz final: {data.judgeEvaluation?.valid ? data.judgeEvaluation.model : 'não concluído'}</span>
+            </div>
+            {data.judgeEvaluation?.valid && <div className="flex flex-wrap gap-x-5 gap-y-1">
+              {Object.keys(data.judgeEvaluation.answers || {}).map(name=>{
+                const answer=data.judgeEvaluation?.answers?.[name];
+                if(typeof answer?.score!=='number')return null;
+                return <span key={name}>{({scenario_fit:'Aderência ao cenário',proportionality:'Proporcionalidade',framework_fidelity:'Fidelidade ao framework'} as Record<string,string>)[name] || name}: {answer.score.toFixed(2)}/3</span>;
+              })}
+            </div>}
+          </section>
         )}
 
         <details className={`border-b ${theme.border} pb-4 text-sm`}>
@@ -177,12 +198,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
               <span>CULTURA: {(config.employeeArchetypes || []).slice(0, 2).join(' + ').toUpperCase()}...</span>
             </div>
           </div>
-          <div className="bg-zinc-500/5 p-6 border border-zinc-500/30 rounded">
+          <div className={`p-6 border ${theme.border} rounded`}>
             <div className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-1">ROI Acumulado</div>
             <div className={`text-6xl font-black font-mono flex items-baseline gap-2 ${data.summary.totalRoi >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {data.summary.totalRoi === null ? 'Indisponível' : `${data.summary.totalRoi > 0 ? '+' : ''}${data.summary.totalRoi}%`}
+              {data.summary.totalRoi > 0 ? '+' : ''}{data.summary.totalRoi}%
             </div>
-            <div className="text-[10px] uppercase font-mono mt-2 opacity-70">Projeção econômica sintética</div>
+            <div className="text-[10px] uppercase font-mono mt-2 opacity-70">Projeção financeira sintética</div>
           </div>
         </div>
 
@@ -192,12 +213,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
           <div className="absolute top-0 right-0 p-2 opacity-50">
             <span className="text-[10px] uppercase font-mono border border-zinc-500 px-1 rounded">TELEMETRIA DO CICLO</span>
           </div>
-          <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-amber-500">
+          <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-purple-500">
             <Activity className="w-4 h-4" /> Métricas Agênticas
           </h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-3 bg-zinc-500/5 rounded border border-zinc-500/10">
-              <div className="text-[10px] uppercase opacity-60">Plausibilidade (QPC)</div>
+              <div className="text-[10px] uppercase opacity-60">Qualidade (QPC)</div>
               <div className={`text-xl font-black font-mono ${data.agenticMetrics.quality_per_cycle > 80 ? 'text-emerald-500' : 'text-yellow-500'}`}>
                 {data.agenticMetrics.quality_per_cycle}%
               </div>
@@ -266,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
               return (
                 <li key={`${event.month}-${event.persona}-${event.type}-${idx}`} className={`border p-3 ${toneClass}`}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <span className="font-mono font-bold">{timeLabel} {event.month}</span>
+                    <span className="font-mono font-bold">Mês {event.month}</span>
                     <span className="font-bold uppercase">{meta.label}</span>
                     <span className="opacity-75">Pessoa: {event.persona === '-' ? 'Equipe' : event.persona}</span>
                   </div>
@@ -302,10 +323,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
               <TrendingDown className="w-4 h-4 text-red-500" />
             )}
             <span className={(data as any).roiAnalysis.verdict === 'POSITIVO' ? 'text-emerald-500' : 'text-red-500'}>
-              Análise de ROI: {(data as any).roiAnalysis.verdict}
+              Comentário narrativo de ROI: {(data as any).roiAnalysis.verdict}
             </span>
           </h3>
 
+          <p className="text-xs opacity-70 mb-4">Classificação do texto gerado pelo modelo. A projeção financeira recalculada aparece acima; nenhuma das duas é retorno observado.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase opacity-60 mb-2">Fatores Principais</h4>
@@ -339,43 +361,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
         </div>
       )}
 
-      {/* Business Metrics Panel (Phase 5) */}
-      {data.businessMetrics && (
-        <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
-          <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-blue-500">
-            <BarIcon className="w-4 h-4" /> Métricas de Desempenho
-          </h3>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="p-4 bg-emerald-500/10 rounded border border-emerald-500/30 text-center">
-              <div className="text-3xl font-black text-emerald-500">+{data.businessMetrics.efficiencyGain}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Ganho Eficiência</div>
-            </div>
-            <div className="p-4 bg-yellow-500/10 rounded border border-yellow-500/30 text-center">
-              <div className="text-3xl font-black text-yellow-500">-{data.businessMetrics.reworkReduction}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Redução Retrabalho</div>
-            </div>
-            <div className="p-4 bg-amber-500/10 rounded border border-amber-500/30 text-center">
-              <div className="text-3xl font-black text-amber-500">+{data.businessMetrics.processAgility}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Agilidade Processos</div>
-            </div>
-            <div className="p-4 bg-blue-500/10 rounded border border-blue-500/30 text-center">
-              <div className="text-3xl font-black text-blue-500">-{data.businessMetrics.timeToMarket}%</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Time-to-Market</div>
-            </div>
-            <div className="p-4 bg-zinc-500/10 rounded border border-zinc-500/30 text-center">
-              <div className="text-3xl font-black">{data.businessMetrics.qualityScore}</div>
-              <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Score Qualidade</div>
-            </div>
-          </div>
-        </div>
-      )}
+      <OperationalMetricsPanel initial={operationalObservations} darkMode={darkMode} onChange={setOperationalObservations} onRegistered={setOperationalReceipt} scenario={JSON.stringify({employees:config.companySize,sector:config.sector,scenario:config.customScenarioText||config.selectedScenarioId})} framework={data.frameworkName} />
 
       {/* Company Evolution Panel (Phase 5) */}
       {data.companyEvolution && (
         <div className={`p-6 rounded border ${theme.border} ${theme.card}`}>
           <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-widest mb-4 text-cyan-500">
-            <TrendingUp className="w-4 h-4" /> Evolução da Empresa
+            <TrendingUp className="w-4 h-4" /> Equipe descrita na projeção
           </h3>
+          <p className="text-xs opacity-70 mb-4">Porte configurado: {config.companySize} pessoas. As contagens abaixo são descrições do modelo, não observações da empresa.</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <div className="p-4 bg-cyan-500/10 rounded border border-cyan-500/30">
               <div className="flex justify-between items-end">
@@ -403,8 +397,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
             </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 bg-amber-500/10 rounded border border-amber-500/30 text-center">
-              <div className="text-2xl font-black text-amber-500">+{data.companyEvolution.capacityGrowth}%</div>
+            <div className="p-4 bg-purple-500/10 rounded border border-purple-500/30 text-center">
+              <div className="text-2xl font-black text-purple-500">+{data.companyEvolution.capacityGrowth}%</div>
               <div className="text-[10px] uppercase opacity-70 mt-1 font-mono">Crescimento Capacidade</div>
             </div>
             <div className={`p-4 rounded border text-center ${data.companyEvolution.breakEvenProjection > 0 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
@@ -438,7 +432,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
       )}
 
       {/* Charts Grid */}
-      <IndividualEvaluationPanel data={data} darkMode={darkMode} />
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
         {/* Main Chart - Dual Axis (Timeline) */}
@@ -450,16 +443,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
             </h3>
             <div className="flex gap-4 text-[10px] font-mono uppercase">
               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500"></div> Adoção (%)</div>
-              <div className="flex items-center gap-1"><div className="w-2 h-2 bg-amber-500"></div> ROI (Var)</div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 bg-purple-500"></div> ROI (Var)</div>
             </div>
           </div>
 
           <div className="h-[320px] w-full">
             <p className="sr-only">
-              Evolução de adoção e ROI por {timeLabel.toLowerCase()}, de {data.timeline[0]?.month ?? 'indisponível'} a {data.timeline.at(-1)?.month ?? 'indisponível'}.
-              Adoção final: {data.timeline.at(-1)?.adoptionRate === null || data.timeline.at(-1)?.adoptionRate === undefined ? 'indisponível' : `${data.timeline.at(-1)?.adoptionRate}%`}. ROI final: {data.timeline.at(-1)?.roi === null || data.timeline.at(-1)?.roi === undefined ? 'indisponível' : `${data.timeline.at(-1)?.roi}%`}.
+              Evolução mensal de adoção e ROI, do mês {data.timeline[0]?.month ?? 0} ao mês {data.timeline.at(-1)?.month ?? 0}.
+              A adoção final foi {data.timeline.at(-1)?.adoptionRate ?? 0}% e o ROI final foi {data.timeline.at(-1)?.roi ?? 0}%.
             </p>
-            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={data.timeline} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorAdoption" x1="0" y1="0" x2="0" y2="1">
@@ -473,7 +466,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
                   stroke={theme.axisColor}
                   tickLine={false}
                   tick={{ fontSize: 10, fontFamily: 'monospace' }}
-                  tickFormatter={(val) => `${data.timeUnit === 'turn' ? 'T' : 'M'}${val}`}
+                  tickFormatter={(val) => `M${val}`}
                   dy={10}
                   interval="preserveStartEnd"
                 />
@@ -533,29 +526,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
         <div className="md:col-span-4 grid grid-cols-1 gap-6">
           <div className={`p-6 rounded border ${theme.border} ${theme.card} relative flex-1 flex flex-col`}>
             <h3 className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <User className="w-3 h-3" /> Personas & Stakeholders (RAG)
+              <User className="w-3 h-3" /> Personas e estado simulado
             </h3>
             <div className="space-y-4 overflow-y-auto max-h-[300px] custom-scrollbar pr-2">
               {data.keyPersonas?.map((persona, idx) => {
                 const isStakeholder = persona.role.includes("STAKEHOLDER");
                 const cleanRole = persona.role.replace(" / STAKEHOLDER", "").replace("/ STAKEHOLDER", "");
+                const identityUnresolved=persona.identityResolution==='unresolved'||Boolean(persona.name&&!mentionsPersonaName(cleanRole,persona.name));
 
                 return (
-                  <div key={persona.id || `${cleanRole}-${idx}`} className={`p-3 rounded border ${persona.sentiment > 70 ? 'border-emerald-500/60 bg-emerald-500/5' : persona.sentiment < 40 ? 'border-red-500/60 bg-red-500/5' : 'border-yellow-500/60 bg-yellow-500/5'} ${isStakeholder ? 'ring-1 ring-white/20' : ''}`}>
+                  <div key={`${persona.id||cleanRole}-${idx}`} className={`p-3 rounded border ${identityUnresolved?'border-zinc-500':persona.sentiment > 70 ? 'border-emerald-500/60 bg-emerald-500/5' : persona.sentiment < 40 ? 'border-red-500/60 bg-red-500/5' : 'border-yellow-500/60 bg-yellow-500/5'} ${isStakeholder ? 'ring-1 ring-white/20' : ''}`}>
                     <div className="flex justify-between items-start">
                       <span className="font-mono text-[10px] uppercase opacity-70 flex items-center gap-1">
                         {cleanRole}
                         {isStakeholder && <span className="bg-blue-500 text-white px-1 rounded text-[8px] font-bold">STAKEHOLDER</span>}
                       </span>
-                      <span className="font-bold text-xs" aria-label={`Sentimento ${persona.sentiment} por cento, ${getSentimentLabel(persona.sentiment)}`}>{persona.sentiment}% · {getSentimentLabel(persona.sentiment)}</span>
+                      {identityUnresolved?<span className="text-xs">Não atribuído</span>:<span className="font-bold text-xs" aria-label={`Sentimento ${persona.sentiment} por cento, ${getSentimentLabel(persona.sentiment)}`}>{persona.sentiment}% · {getSentimentLabel(persona.sentiment)}</span>}
                     </div>
-                    <div className="font-bold text-sm my-1">{persona.name || cleanRole}</div>
-                    <div className="text-[11px] opacity-70">{persona.archetype}{persona.area ? ` · ${persona.area}` : ''}{persona.status && persona.status !== 'ativo' ? ` · ${persona.status}` : ''}</div>
+                    <div className="font-bold text-sm my-1">{identityUnresolved?'Perfil não vinculado ao catálogo':persona.name || cleanRole}</div>
+                    {identityUnresolved&&<p className="text-xs mb-2">Identidade sem vínculo único. Os atributos de outra pessoa não são apresentados neste cartão.</p>}
+                    {!identityUnresolved&&persona.stateOrigin==='narrative'&&<p className="text-xs mb-2">Estado individual não simulado; valores narrativos.</p>}
+                    <div className="text-[11px] opacity-70">{persona.archetype}{!identityUnresolved&&persona.area ? ` · ${persona.area}` : ''}{!identityUnresolved&&persona.status && persona.status !== 'ativo' ? ` · ${persona.status}` : ''}</div>
                     <p className="text-xs italic opacity-80 leading-relaxed">"{persona.impact}"</p>
-                    <div className="mt-2 h-1.5 w-full rounded-full bg-zinc-700" role="meter" aria-label={`Aprovação de ${persona.sentiment} por cento`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={persona.sentiment}>
+                    {!identityUnresolved&&<div className="mt-2 h-1.5 w-full rounded-full bg-zinc-700" role="meter" aria-label={`Aprovação de ${persona.sentiment} por cento`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={persona.sentiment}>
                       <div className={`h-full rounded-full ${persona.sentiment >= 70 ? 'bg-emerald-500' : persona.sentiment < 40 ? 'bg-red-500' : 'bg-yellow-500'}`} style={{ width: `${Math.max(0, Math.min(100, persona.sentiment))}%` }} />
-                    </div>
-                    {(persona.cognitiveBias || persona.motivation || persona.communicationStyle || persona.challenge) && (
+                    </div>}
+                    {!identityUnresolved&&(persona.cognitiveBias || persona.motivation || persona.communicationStyle || persona.challenge) && (
                       <details className="mt-3 text-xs">
                         <summary className="cursor-pointer font-semibold underline underline-offset-4">Por que esta pessoa reage assim</summary>
                         <dl className="mt-2 grid gap-2 opacity-80">
@@ -585,7 +581,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
               <PieIcon className="w-4 h-4 text-emerald-500" /> Distribuição de Recursos
             </h3>
             <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={data.resourceAllocation || []}
@@ -617,7 +613,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
               <BarIcon className="w-4 h-4 text-emerald-500" /> Análise de Sentimento
             </h3>
             <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.sentimentBreakdown || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.gridColor} />
                   <XAxis type="number" hide />
@@ -642,8 +638,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data: originalData, config
           <div className={`p-6 rounded border ${theme.border} ${theme.card} min-h-[300px]`}>
             <h3 className="w-full text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Equilíbrio Sistêmico</h3>
             <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 320 }}>
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.systemicBalance.filter(metric => metric.A !== null)}>
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={[
+                  { subject: 'Processos', A: data.timeline[data.timeline.length - 1].efficiency, fullMark: 100 },
+                  { subject: 'Compliance', A: data.timeline[data.timeline.length - 1].compliance, fullMark: 100 },
+                  { subject: 'Cultura', A: data.summary.finalAdoption, fullMark: 100 },
+                  { subject: 'Maturidade', A: data.summary.maturityScore * 10, fullMark: 100 },
+                ]}>
                   <PolarGrid stroke={theme.gridColor} />
                   <PolarAngleAxis dataKey="subject" tick={{ fill: theme.axisColor, fontSize: 10, fontWeight: 'bold' }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />

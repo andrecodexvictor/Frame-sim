@@ -194,6 +194,8 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
               <input
                 id="company-size"
                 type="number"
+                min="1"
+                step="1"
                 {...register('companySize', { valueAsNumber: true })}
                 className="w-full p-3 border-2 border-brutal-black font-mono focus:outline-none focus:border-brutal-green dark:bg-zinc-800 dark:text-white dark:border-zinc-600"
               />

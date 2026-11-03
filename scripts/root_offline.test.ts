@@ -1,21 +1,5 @@
 import assert from 'node:assert/strict';
 import type { SimulationConfig } from '../types.ts';
-await import('./persona_identity.test.ts');
-await import('./individual_panel.test.tsx');
-await import('./standard_trace.test.ts');
-await import('./paired_protocol.test.ts');
-await import('./agentic_duration.test.ts');
-await import('./comparison_statistics.test.ts');
-await import('./batch_statistics.test.ts');
-await import('./batch_records.test.ts');
-await import('./batch_engine.test.ts');
-await import('./comparison_results.test.tsx');
-await import('./interactive_records.test.ts');
-await import('./report_data.test.ts');
-await import('./article_export.test.ts');
-await import('./article_download.test.tsx');
-await import('./report_ui.test.tsx');
-await import('./standard_measurements.test.ts');
 
 // providerClient uses window timers because it is shared with the browser bundle.
 // Install only the timer surface needed by these Node-only, offline tests.
@@ -130,6 +114,13 @@ assert.ok(expansionMetrics.opEx > recessionMetrics.opEx);
 
 // Persona selection is seeded and must not depend on Math.random().
 const personasA = enrichArchetypesToTeam(['cto', 'skeptic'], 50, 0x12345678);
+for (const size of [5, 10, 25, 50, 100, 500]) {
+  const enriched = enrichArchetypesToTeam(['ceo', 'overworked', 'skeptic'], size, 20261020);
+  assert.equal(enriched.team.length, Math.min(size, 350), 'team cardinality must match company size up to the unique profile pool');
+  assert.equal(new Set(enriched.team.map(persona => persona.id)).size, enriched.team.length);
+  assert.ok(enriched.keyStakeholders.length <= enriched.team.length);
+  assert.deepEqual(enriched, enrichArchetypesToTeam(['ceo', 'overworked', 'skeptic'], size, 20261020));
+}
 const personasB = enrichArchetypesToTeam(['cto', 'skeptic'], 50, 0x12345678);
 assert.deepEqual(personasA.team.map((persona) => persona.id), personasB.team.map((persona) => persona.id));
 assert.deepEqual(personasA.keyStakeholders.map((persona) => persona.id), personasB.keyStakeholders.map((persona) => persona.id));
@@ -168,9 +159,9 @@ function fixtureOutput(body: any) {
       { group: 'Detratores', value: 20 },
     ],
     resourceAllocation: [],
-    timeline: Array.from({ length: 4 }, (_, index) => ({
-      month: index + 1,
-      adoptionRate: 20,
+    timeline: Array.from({length:Number(body.prompt.match(/exatamente (\d+) meses/)?.[1] || 4)},(_,index)=>({
+      month: index+1,
+      adoptionRate: 50 + score / 2,
       roi: -5,
       compliance: 50,
       efficiency: 80,
@@ -190,6 +181,7 @@ function fixtureOutput(body: any) {
 }
 
 const offlineFetch = async (_url: string, init: RequestInit = {}) => {
+  if(_url.endsWith('/api/status'))return new Response(JSON.stringify({jev:{mode:'off'}}),{status:200});
   const body = JSON.parse(String(init.body || '{}'));
   assert.equal(body.task, 'simulation');
   assert.equal(typeof body.prompt, 'string');

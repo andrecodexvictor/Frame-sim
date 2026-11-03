@@ -31,7 +31,7 @@ try {
     globalThis.fetch = async (input, init) => { calls.push({ url: String(input), init }); return new Response('{}', { status: 503 }); };
     await assert.rejects(gateway.generate({ task: 'simulation', prompt: 'fixture', modelPreference: 'z-ai/glm-5.3' }), ProviderGatewayError);
     assert.equal(calls.length, 1, 'explicit model benchmark must not silently fall back');
-    assert.ok(calls.every(call => call.url.includes('nvidia.com')));
+    assert.ok(calls.every(call => new URL(call.url).hostname === 'integrate.api.nvidia.com'));
 
     const limited = new ProviderGateway();
     calls.length = 0;

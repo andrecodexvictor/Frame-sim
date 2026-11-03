@@ -8,6 +8,7 @@ export enum IntentType {
 }
 
 export interface SmartRouterOptions {
+    primary?: LLMProvider | null;
     localRouter?: LLMProvider | null;
     gpt?: LLMProvider | null;
     gemini?: LLMProvider | null;
@@ -46,6 +47,7 @@ function explicitOrDefault<T>(value: T | null | undefined, factory: () => T | nu
 }
 
 export class SmartRouter {
+    private readonly primary: LLMProvider | null;
     private readonly localRouter: LLMProvider | null;
     private readonly gpt: LLMProvider | null;
     private readonly gemini: LLMProvider | null;
@@ -53,6 +55,7 @@ export class SmartRouter {
     private readonly localTimeoutMs: number;
 
     constructor(options: SmartRouterOptions = {}) {
+        this.primary = explicitOrDefault(options.primary, () => LLMFactory.getConfiguredPrimary());
         this.localRouter = explicitOrDefault(options.localRouter, () => LLMFactory.getOllama('llama3'));
         this.gpt = explicitOrDefault(options.gpt, () => LLMFactory.hasGPT4() ? LLMFactory.getGPT4() : null);
         this.gemini = explicitOrDefault(options.gemini, () => LLMFactory.hasGemini() ? LLMFactory.getGemini() : null);
@@ -61,6 +64,7 @@ export class SmartRouter {
     }
 
     async route(prompt: string): Promise<LLMProvider> {
+        if (this.primary) return this.primary;
         const intent = await this.classifyIntent(prompt);
         const ordered = intent === IntentType.COMPLEX_REASONING
             ? [this.gpt, this.gemini, this.deepseek]

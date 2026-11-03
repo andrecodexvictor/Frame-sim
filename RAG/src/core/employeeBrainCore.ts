@@ -287,25 +287,43 @@ export function updateBrain(brain: EmployeeBrainState, ctx: TurnContext): Employ
  * não-graves (apoiar_mudanca, pedir_ajuda) são independentes e podem coexistir
  * com 1 grave.
  */
-export function evaluateDecisions(
+/**
+ * Avalia somente as decisões graves. Esta função é a fronteira de segurança do
+ * cérebro: Jev nunca decide burnout, licença ou demissão.
+ */
+export function evaluateGraveDecisions(
     brain: EmployeeBrainState,
-    ctx: TurnContext,
+    _ctx: TurnContext,
     rng: () => number
 ): { brain: EmployeeBrainState; decisions: DecisionResult[] } {
     if (brain.status !== 'ativo') return { brain, decisions: [] };
 
+    if (brain.turnosEstresseAlto >= 2 && brain.humor < -40 && rng() < 0.35) {
+        const narrativa = `${brain.nome} (${brain.cargo}) pede demissão após semanas de estresse insustentável.`;
+        return {
+            brain: { ...brain, status: 'pediu_demissao', decisoes: [...brain.decisoes, narrativa] },
+            decisions: [{ tipo: 'pedido_demissao', narrativa, efeitos: { moralGlobal: -8 } }],
+        };
+    }
+    if (brain.estresse > 90 || brain.energia < 15) {
+        const narrativa = `${brain.nome} entra em burnout e precisa se afastar temporariamente.`;
+        return {
+            brain: { ...brain, status: 'licenca', turnosAfastado: 2, decisoes: [...brain.decisoes, narrativa] },
+            decisions: [{ tipo: 'burnout', narrativa, efeitos: {} }],
+        };
+    }
+    return { brain, decisions: [] };
+}
+
+/** Avalia reações comportamentais suaves, sem alterar status terminal. */
+export function evaluateSoftDecisions(
+    brain: EmployeeBrainState,
+    _ctx: TurnContext
+): { brain: EmployeeBrainState; decisions: DecisionResult[] } {
     let b = brain;
     const decisions: DecisionResult[] = [];
 
-    if (b.turnosEstresseAlto >= 2 && b.humor < -40 && rng() < 0.35) {
-        const narrativa = `${b.nome} (${b.cargo}) pede demissão após semanas de estresse insustentável.`;
-        b = { ...b, status: 'pediu_demissao', decisoes: [...b.decisoes, narrativa] };
-        decisions.push({ tipo: 'pedido_demissao', narrativa, efeitos: { moralGlobal: -8 } });
-    } else if (b.estresse > 90 || b.energia < 15) {
-        const narrativa = `${b.nome} entra em burnout e precisa se afastar temporariamente.`;
-        b = { ...b, status: 'licenca', turnosAfastado: 2, decisoes: [...b.decisoes, narrativa] };
-        decisions.push({ tipo: 'burnout', narrativa, efeitos: {} });
-    } else if (b.humor < -30 && b.adaptabilidade < 45) {
+    if (b.humor < -30 && b.adaptabilidade < 45) {
         const narrativa = `${b.nome} passa a fazer resistência passiva, entregando o mínimo.`;
         b = { ...b, engajamento: clamp(b.engajamento - 10, 0, 100), decisoes: [...b.decisoes, narrativa] };
         decisions.push({ tipo: 'resistencia_passiva', narrativa, efeitos: {} });
@@ -339,6 +357,21 @@ export function evaluateDecisions(
     }
 
     return { brain: b, decisions };
+}
+
+/**
+ * Compatibilidade do modo offline: compõe as duas fases na mesma ordem e com o
+ * mesmo consumo de RNG do algoritmo histórico.
+ */
+export function evaluateDecisions(
+    brain: EmployeeBrainState,
+    ctx: TurnContext,
+    rng: () => number
+): { brain: EmployeeBrainState; decisions: DecisionResult[] } {
+    if (brain.status !== 'ativo') return { brain, decisions: [] };
+    const grave = evaluateGraveDecisions(brain, ctx, rng);
+    const soft = evaluateSoftDecisions(grave.brain, ctx);
+    return { brain: soft.brain, decisions: [...grave.decisions, ...soft.decisions] };
 }
 
 // ===== CONTÁGIO =====

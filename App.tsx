@@ -3,8 +3,7 @@ import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { FrameworkInput, SimulationConfig, SimulationOutput } from './types';
 import { runSimulation } from './services/geminiService';
 import { checkAgenticStatus, runAgenticSimulation } from './services/agenticService';
-import { createExperimentAssignment } from './services/experimentProtocol';
-import { collectInteractiveRuns, type FailedCondition } from './services/interactiveRuns';
+import {pairedCaseSeed} from './services/evaluationConfig';
 
 const UploadSection = lazy(() => import('./components/UploadSection').then(m => ({ default: m.UploadSection })));
 const ConfigForm = lazy(() => import('./components/ConfigForm').then(m => ({ default: m.ConfigForm })));
@@ -20,7 +19,6 @@ const App: React.FC = () => {
   const [frameworks, setFrameworks] = useState<FrameworkInput[]>([]);
   const [config, setConfig] = useState<SimulationConfig | null>(null);
   const [results, setResults] = useState<SimulationOutput[]>([]);
-  const [failures, setFailures] = useState<FailedCondition[]>([]);
   const [agenticAvailable, setAgenticAvailable] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -45,18 +43,16 @@ const App: React.FC = () => {
       setStep('config');
       return;
     }
-    setConfig(simulationConfig);
+    setConfig(simulationConfig.simulationMode==='agentic'?simulationConfig:{...simulationConfig,evaluationMode:'blinded-poc',seed:pairedCaseSeed(simulationConfig)});
     setStep('simulating');
 
     try {
-      const experimentId = `interactive-${crypto.randomUUID()}`;
-      const assignment = (frameworkId: string) => createExperimentAssignment(simulationConfig, { experimentId, replicaId: '1', interventionId: frameworkId });
       let promises: Promise<SimulationOutput>[] = [];
 
       if (simulationConfig.simulationMode === 'agentic') {
         // AGENTIC MODE (Node.js Backend)
         promises = simulationConfig.frameworks.map(fw => {
-          const fwConfig = { ...simulationConfig, frameworks: [fw], experiment: assignment(fw.id) };
+          const fwConfig = { ...simulationConfig, frameworks: [fw] };
           return runAgenticSimulation(fwConfig);
         });
       } else {
@@ -67,6 +63,9 @@ const App: React.FC = () => {
             : `Cenário Recomendado: ${simulationConfig.selectedScenarioId} (Verificar preset)`;
 
           return runSimulation({
+            evaluationMode:'blinded-poc',
+            seed:pairedCaseSeed(simulationConfig),
+            operationalObservations:simulationConfig.operationalObservations,
             frameworkName: fw.name,
             frameworkText: fw.text,
             frameworkCategory: simulationConfig.frameworkCategory,
@@ -81,17 +80,13 @@ const App: React.FC = () => {
             scenarioContext: scenarioContext,
             durationMonths: simulationConfig.durationMonths || 12,
             economicProfileId: simulationConfig.economicProfileId,
-            economicScenarioId: simulationConfig.economicScenarioId,
-            workloadPolicy: simulationConfig.workloadPolicy,
-            experiment: assignment(fw.id), seed: assignment(fw.id).scenarioSeed
+            economicScenarioId: simulationConfig.economicScenarioId
           });
         });
       }
 
-      const simulationResults = await collectInteractiveRuns(simulationConfig.frameworks.map((framework, index) => ({ label: framework.name, experiment: assignment(framework.id), run: () => promises[index] })));
-      setResults(simulationResults.outputs);
-      setFailures(simulationResults.failures);
-      if (simulationResults.failures.length) setErrorMessage(`${simulationResults.failures.length} condição(ões) falharam. Os resultados disponíveis e as exclusões foram preservados.`);
+      const simulationResults = await Promise.all(promises);
+      setResults(simulationResults);
       setStep('results');
     } catch (error) {
       console.error("Simulation failed", error);
@@ -106,7 +101,6 @@ const App: React.FC = () => {
     setFrameworks([]);
     setConfig(null);
     setResults([]);
-    setFailures([]);
   };
 
   return (
@@ -138,7 +132,7 @@ const App: React.FC = () => {
               onBack={() => setStep('upload')}
               agenticAvailable={agenticAvailable}
               onBatchMode={(config) => {
-                setConfig(config);
+                setConfig({...config,evaluationMode:'blinded-poc',seed:pairedCaseSeed(config)});
                 setStep('batch');
               }}
             />
@@ -156,7 +150,7 @@ const App: React.FC = () => {
           )}
 
           {step === 'results' && config && (
-            results.length === 1 && failures.length === 0 ? (
+            results.length === 1 ? (
               <Dashboard
                 data={results[0]}
                 config={config}
@@ -165,7 +159,6 @@ const App: React.FC = () => {
             ) : (
               <ComparisonDashboard
                 results={results}
-                failures={failures}
                 config={config}
                 onReset={handleReset}
               />

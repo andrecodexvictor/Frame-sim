@@ -1,7 +1,9 @@
 
-# FrameSIM v8.1.0: Enterprise Simulation Kernel
+# Frame-sim: Deep Enterprise Simulation Kernel v7.1
 
 **Frame-sim** é um simulador empresarial avançado projetado para testar a implementação de frameworks de gestão e engenharia (Scrum, SAFe, Spotify, COBIT, ITIL...) em ambientes corporativos complexos.
+
+As saídas são sintéticas e dependem das premissas do modelo; os perfis não são empregados observados. A revisão de fidelidade corrige preservação de zeros, dados ausentes, cardinalidade e efeitos nominais no modo documental. Esses controles não demonstram validade preditiva ou retorno financeiro real. Consulte [métricas operacionais e recibos nativos](docs/operational-evaluations.md) para calcular erros de processo, produtividade e retrabalho com dados comparáveis e verificar a execução pelo backend.
 
 Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM Agentic** (Gemini, GPT-4, DeepSeek, Ollama) combinada com **RAG (Retrieval-Augmented Generation via ChromaDB)**, **Agentes Autônomos** (CriticAgent, DocumentAgent) e **Modelos Matemáticos Determinísticos** para simular reações humanas, impactos financeiros (ROI) e culturais com variabilidade controlada.
 
@@ -12,13 +14,13 @@ Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM A
 ## 🧠 Core Features
 
 ### 1. Simulação Multi-Agente & Persona Enrichment
-Representa stakeholders e equipes sintéticos com base em **arquétipos estendidos**:
-- **Key Stakeholders**: CEO, CTO, Tech Leads com perfis psicológicos profundos.
+Modela stakeholders sintéticos e uma equipe com base em **arquétipos estendidos**:
+- **Key Stakeholders**: papéis e traços sintéticos de direção e tecnologia, sem validação psicométrica.
 - **Distribuição Realista**: o restante do time (Júniors, Plenos, QA, RH) é gerado automaticamente com base no tamanho da empresa.
-- **Enriquecimento RAG**: personas ganham nomes e histórias de fundo sintéticos, extraídos do catálogo de perfis (`RAG/profiles.json`).
+- **Enriquecimento RAG**: personas recebem nomes, histórias de fundo e vieses sintéticos de um catálogo de perfis (`RAG/profiles.json`); isso não corresponde a observação ou validação psicométrica de pessoas.
 
 ### 2. Roteamento de Cenário Econômico
-Perfis econômicos realistas calibram custos e ROI (Brasil: PME, Startup SP/RJ, Grande Empresa, Interior; Internacional: US Big Tech, LATAM Remoto, Europa Ocidental). Salários, custo de incidentes e valor por feature variam drasticamente conforme o perfil.
+Perfis econômicos fornecem premissas de custos e valor (Brasil: PME, Startup SP/RJ, Grande Empresa, Interior; Internacional: US Big Tech, LATAM Remoto, Europa Ocidental). Salários, custo de incidentes e valor por feature variam conforme o perfil. São parâmetros de simulação; a revisão não demonstrou calibração empírica desses valores.
 
 ### 3. Engine Financeira Determinística + Estocástica
 O LLM gera a narrativa e os dados brutos do cenário, mas **todos os números financeiros são recalculados por um modelo determinístico** — o LLM nunca inventa o ROI final:
@@ -27,7 +29,7 @@ O LLM gera a narrativa e os dados brutos do cenário, mas **todos os números fi
 - **CoNQ (Cost of Non-Quality)**: custo financeiro de bugs e incidentes.
 - **Surprise Factor (~15% de chance)**: adoções excepcionais em equipes com alta adaptação.
 - **Framework-Organization Fit**: compatibilidade framework vs. porte/cultura da organização.
-- **Viés Responsivo**: o range de ROI se ajusta ao cenário (crítico, típico ou favorável), produzindo resultados entre **-40% e +35%**.
+- **Viés Responsivo**: ajusta premissas conforme o cenário crítico, típico ou favorável. O ROI recalculado pode sair dos intervalos ilustrativos de versões anteriores; não representa retorno observado.
 
 ### 4. Métricas de Negócio e Evolução
 Painéis para eficiência, redução de retrabalho, agilidade, crescimento do time, contratações, turnover, promoções e break-even point.
@@ -39,8 +41,11 @@ Tamanho (Startups a Enterprises 2000+ FTEs), cultura ("Startup Caótica" vs "Cor
 - Estado interno por funcionário (estresse, humor, energia, engajamento, memória de 12 eventos, reflexão), derivado do perfil real e atualizado por turno com RNG semeado.
 - Catálogo de decisões humanas determinísticas: pedido de demissão, burnout→licença (com recuperação de humor no retorno), resistência passiva, confronto com liderança, fofoca com contágio social, apoiar mudança, pedir ajuda.
 - `moral_time`/`velocidade_sprint` do time e `sentiment` de cada persona vêm do agregado desse estado — o LLM só narra e ajusta a confiança (±5).
-- As ~350 personas reais de `RAG/profiles.json` estão conectadas ponta a ponta: hidratadas no `/api/simulate` do backend e usadas pelo `EmployeeBrain`/`PersonaAgent`.
+- Os cerca de 350 perfis sintéticos de `RAG/profiles.json` estão conectados ao `/api/simulate` do backend e ao `EmployeeBrain`/`PersonaAgent`; quantidade e integração não demonstram realismo comportamental.
 - `CriticAgent` roda 1x por simulação e sua `plausibility_score` chega ao frontend como `quality_per_cycle` (antes fixo em 100).
+
+### 7. Julgamento Jev (v9 experimental, opcional)
+O backend pode avaliar reações comportamentais somente das personas-chave com `JEV_MODE=active`; `shadow` audita sem alterar o resultado e `off` é o padrão compatível. Burnout, licença, demissão, estado numérico, contágio exato, ROI e demais cálculos continuam determinísticos, e ausência de chave, timeout ou resposta inválida usa fallback local.
 
 ---
 
@@ -132,6 +137,10 @@ Os testes isolados continuam disponíveis como `npm run test:offline`, `npm run 
 | `OLLAMA_BASE_URL` | Não | Endpoint de um Ollama local |
 | `CHROMA_URL` | Não | URL do ChromaDB (default `http://localhost:8000`) |
 | `CORS_ORIGINS` | Não | Origens permitidas pelo Express (default: Vite em `localhost:3000`) |
+| `JEV_MODE` | Não | `off` (default), `shadow` ou `active` para julgamento server-side |
+| `TYPESAFE_API_KEY` | Não | Chave server-side do Jev; nunca é enviada ao frontend |
+| `JEV_MODEL` | Não | Modelo Jev (default `jev-1.13.0`) |
+| `JEV_TIMEOUT_MS` | Não | Timeout por chamada Jev (default `3000`) |
 
 ## 🔧 Estrutura do Projeto
 
@@ -163,7 +172,6 @@ Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`
 
 | Versão | Destaques |
 |---|---|
-| v8.1.0 | Avaliações individuais rastreáveis, comparações pareadas, harness de evals offline/online, Jev tipado e exportações nativas de artigo com fluxogramas SVG/Mermaid/TikZ |
 | v4 | SmartRouter multi-LLM, CriticAgent (auto-reflexão), memória de longo prazo via ChromaDB, viés cognitivo nas personas, ruído estocástico no ROI |
 | v5 | Self-Improvement (warmup de auto-calibração), Agent Racing (personas concorrentes + ensemble), DocumentAgent desacoplado, Smart Chunking para documentos grandes (COBIT etc.), Intervalos de Confiança (IC 95%) no batch |
 | v5.1 | Viés Responsivo por tipo de cenário, Surprise Factor (~15%), Framework-Organization Fit, range de ROI realista (-40% a +35%) |
@@ -171,18 +179,6 @@ Diagramas completos (fluxo de dados, componentes, agentes) em [`ARCHITECTURE.md`
 | v8.0 | EmployeeBrain (estado humano determinístico por funcionário), personas reais (350) conectadas ponta a ponta no backend, CriticAgent ativo no loop principal, modelos Gemini migrados para `gemini-2.5-flash`/`GEMINI_MODEL` |
 
 ## 🤝 Contribuindo
-
-O desenvolvimento de avaliações rastreáveis está descrito na [especificação](next_steps/credible_evals_spec.md) e no [checkpoint de execução](.scratch/credible-evals/issues/03-implementation-checkpoint.md). Os dados das simulações são sintéticos; plausibilidade de um modelo não comprova desempenho observado.
-
-Os painéis individual, comparativo e de lote oferecem exportação para artigo: pacote ZIP completo, fonte única `.tex`, snippets PGFPlots/TikZ/booktabs e dados. `metrics.json` registra os mesmos valores canônicos utilizados pelas medidas do painel. Valores ausentes permanecem ausentes; falhas e exclusões são registradas.
-
-Na área de exportação, abra “Fluxograma da simulação e das avaliações” para ver etapas, decisões Sim/Não e caminhos de abstenção. O diagrama também acompanha o pacote em SVG, Mermaid e TikZ, a partir do mesmo grafo. `npm run export:flowchart` regenera as fontes de documentação em `next_steps/`.
-
-Verificações adicionais: `npm run test:export`, `npm run test:article-compile`, `npm --prefix RAG run eval:offline` e `npm --prefix RAG run eval:online -- --dry-run`. O compilador de artigo pode registrar `unavailable`; isso não significa que o PDF foi verificado. Não instalar TeX como efeito colateral deste comando.
-
-O online runner só executa inferência com `--execute`, orçamento explícito (`--budget-usd`, `--max-runs`, `--max-calls`, `--timeout-ms`, `--reservation-usd`) e `--pricing-file` com tetos de custo verificados por provedor/modelo. O modelo inicial está em `RAG/evals/pricing-template.json` e é deliberadamente inválido para execução. Limites adicionais: `--max-input-bytes` (48.000) e `--max-output-tokens` (512). Reservas não são um medidor de cobrança; custo real permanece indisponível. Jev usa resposta tipada de tamanho declarado na precificação, sem alegação de limite de tokens aplicado por sua API. Sem orçamento, usar dry-run. Credenciais ficam exclusivamente em `RAG/.env`.
-
-O harness registra braços determinístico, Jev, cada juiz externo e pipeline completo para o mesmo candidato congelado, preservando discordâncias e falhas. O baseline extrativo executa sem inferência. A fixture `RAG/evals/fixtures/trace-replay-v1.json` permite replay das métricas a partir de traços persistidos: `npm --prefix RAG run eval:offline -- --dataset evals/fixtures/trace-replay-v1.json --output evals/results/trace-replay-v1.json`. O alvo é uma contagem contratual de aceites sintéticos, não um rótulo humano ou medida real.
 
 Pull requests são bem-vindos. Para mudanças maiores, abra uma issue primeiro para discutir o que você gostaria de mudar.
 

@@ -63,7 +63,10 @@ function modelFor(requested: string | undefined): string {
 
 function combineSignals(signal?: AbortSignal, timeoutMs = REQUEST_TIMEOUT_MS): { signal: AbortSignal; dispose: () => void } {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort('provider-timeout'), timeoutMs);
+    const safeTimeoutMs = Number.isFinite(timeoutMs)
+        ? Math.max(1_000, Math.min(timeoutMs, REQUEST_TIMEOUT_MS))
+        : REQUEST_TIMEOUT_MS;
+    const timeout = setTimeout(() => controller.abort('provider-timeout'), safeTimeoutMs);
     const relay = () => controller.abort(signal?.reason ?? 'request-cancelled');
     if (signal?.aborted) relay();
     signal?.addEventListener('abort', relay, { once: true });

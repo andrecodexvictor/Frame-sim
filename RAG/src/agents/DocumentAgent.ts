@@ -72,7 +72,7 @@ export class DocumentAgent {
     constructor(apiKey?: string) {
         this.llm = apiKey
             ? new GeminiProvider({ keys: [apiKey] })
-            : LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined;
+            : LLMFactory.getConfiguredPrimary() ?? (LLMFactory.hasGemini() ? LLMFactory.getGemini() : undefined);
         this.chunker = new SmartChunker();
         this.vectorStore = new UserFrameworkStore();
     }
