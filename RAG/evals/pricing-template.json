@@ -1,0 +1,11 @@
+{
+  "version": "operator-pricing-template-unverified",
+  "reviewedAt": "",
+  "providers": [
+    { "provider": "google", "model": "gemini-flash-latest", "source": "https://ai.google.dev/gemini-api/docs/pricing", "verified": false, "maximumRequestUSD": null, "maximumInputBytes": 48000, "maximumOutputTokens": 512 },
+    { "provider": "deepseek", "model": "deepseek-ai/deepseek-v4.1-flash", "source": "https://build.nvidia.com", "verified": false, "maximumRequestUSD": null, "maximumInputBytes": 48000, "maximumOutputTokens": 512 },
+    { "provider": "glm", "model": "z-ai/glm-5.3", "source": "https://build.nvidia.com", "verified": false, "maximumRequestUSD": null, "maximumInputBytes": 48000, "maximumOutputTokens": 512 },
+    { "provider": "kimi", "model": "moonshotai/kimi-k3", "source": "https://build.nvidia.com", "verified": false, "maximumRequestUSD": null, "maximumInputBytes": 48000, "maximumOutputTokens": 512 },
+    { "provider": "jev", "model": "jev-latest", "source": "https://docs.typesafe.ai", "verified": false, "maximumRequestUSD": null, "maximumInputBytes": 48000, "maximumOutputTokens": 512 }
+  ]
+}

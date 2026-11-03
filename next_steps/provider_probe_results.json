@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-04T18:45:47.321Z",
+  "syntheticOnly": true,
+  "results": [
+    {
+      "label": "jev_global_existing_key",
+      "httpStatus": 200,
+      "elapsedMs": 1502,
+      "model": "jev-1.13.0",
+      "state": "typed_evaluation_returned",
+      "usage": {
+        "input_tokens": 379,
+        "output_tokens": 38
+      }
+    },
+    {
+      "label": "jev_gateway_local",
+      "httpStatus": 200,
+      "elapsedMs": 1317,
+      "mode": "passthrough",
+      "state": "decision_returned"
+    },
+    {
+      "label": "jev_framesim",
+      "httpStatus": 200,
+      "elapsedMs": 1330,
+      "model": "jev-1.13.0",
+      "state": "typed_evaluation_returned",
+      "usage": {
+        "input_tokens": 379,
+        "output_tokens": 38
+      }
+    },
+    {
+      "label": "NVIDIA_GLM_API_KEY",
+      "httpStatus": 200,
+      "elapsedMs": 4190,
+      "requestedLabel": "glm-5.3",
+      "exactRequestedModelAvailable": true,
+      "catalogHttpStatus": 200,
+      "candidates": [
+        "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash"
+      ],
+      "smokeCandidate": "z-ai/glm-5.3",
+      "candidateOnly": false,
+      "model": "z-ai/glm-5.3",
+      "state": "generation_returned",
+      "usage": {
+        "prompt_tokens": 16,
+        "completion_tokens": 58,
+        "total_tokens": 74,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 56
+        }
+      }
+    },
+    {
+      "label": "NVIDIA_KIMI_API_KEY",
+      "httpStatus": 200,
+      "elapsedMs": 11801,
+      "requestedLabel": "kimi-k3",
+      "exactRequestedModelAvailable": true,
+      "catalogHttpStatus": 200,
+      "candidates": [
+        "moonshotai/kimi-k2.6",
+        "moonshotai/kimi-k3"
+      ],
+      "smokeCandidate": "moonshotai/kimi-k3",
+      "candidateOnly": false,
+      "model": "moonshotai/kimi-k3",
+      "state": "generation_returned",
+      "usage": {
+        "prompt_tokens": 90,
+        "completion_tokens": 39,
+        "total_tokens": 129,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 29
+        }
+      }
+    },
+    {
+      "label": "GOOGLE_API_KEY_4",
+      "httpStatus": 503,
+      "elapsedMs": 1864,
+      "requestedModel": "gemini-flash-latest",
+      "model": null,
+      "state": "failed",
+      "finishReason": null,
+      "usage": null
+    },
+    {
+      "label": "GOOGLE_API_KEY_5",
+      "httpStatus": 200,
+      "elapsedMs": 2071,
+      "requestedModel": "gemini-flash-latest",
+      "model": "gemini-3.8-flash",
+      "state": "generation_returned",
+      "finishReason": "STOP",
+      "usage": {
+        "promptTokenCount": 4,
+        "candidatesTokenCount": 1,
+        "totalTokenCount": 71,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 4
+          }
+        ],
+        "thoughtsTokenCount": 66,
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "label": "NVIDIA_DEEPSEEK_API_KEY",
+      "httpStatus": null,
+      "elapsedMs": 55019,
+      "requestedLabel": "deepseek-v4.1-flash",
+      "exactRequestedModelAvailable": true,
+      "catalogHttpStatus": 200,
+      "candidates": [
+        "deepseek-ai/deepseek-coder-6.7b-instruct",
+        "deepseek-ai/deepseek-v4.1-flash"
+      ],
+      "smokeCandidate": "deepseek-ai/deepseek-v4.1-flash",
+      "candidateOnly": false,
+      "model": "deepseek-ai/deepseek-v4.1-flash",
+      "state": "failed",
+      "usage": null,
+      "failure": "timeout"
+    }
+  ],
+  "previousAttempts": [
+    {
+      "recordedAt": "2026-10-04T18:43:14.107Z",
+      "results": [
+        {
+          "label": "jev_global_existing_key",
+          "httpStatus": 200,
+          "elapsedMs": 1502,
+          "model": "jev-1.13.0",
+          "state": "typed_evaluation_returned",
+          "usage": {
+            "input_tokens": 379,
+            "output_tokens": 38
+          }
+        },
+        {
+          "label": "jev_gateway_local",
+          "httpStatus": 200,
+          "elapsedMs": 1317,
+          "mode": "passthrough",
+          "state": "decision_returned"
+        },
+        {
+          "label": "jev_framesim",
+          "httpStatus": 200,
+          "elapsedMs": 1330,
+          "model": "jev-1.13.0",
+          "state": "typed_evaluation_returned",
+          "usage": {
+            "input_tokens": 379,
+            "output_tokens": 38
+          }
+        },
+        {
+          "label": "GOOGLE_API_KEY_4",
+          "httpStatus": 200,
+          "elapsedMs": 3008,
+          "requestedModel": "gemini-flash-latest",
+          "model": "gemini-3.8-flash",
+          "state": "failed",
+          "usage": {
+            "promptTokenCount": 4,
+            "totalTokenCount": 65,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 4
+              }
+            ],
+            "thoughtsTokenCount": 61,
+            "serviceTier": "standard"
+          }
+        },
+        {
+          "label": "GOOGLE_API_KEY_5",
+          "httpStatus": 200,
+          "elapsedMs": 3100,
+          "requestedModel": "gemini-flash-latest",
+          "model": "gemini-3.8-flash",
+          "state": "generation_returned",
+          "usage": {
+            "promptTokenCount": 4,
+            "candidatesTokenCount": 1,
+            "totalTokenCount": 75,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 4
+              }
+            ],
+            "thoughtsTokenCount": 70,
+            "serviceTier": "standard"
+          }
+        },
+        {
+          "label": "NVIDIA_DEEPSEEK_API_KEY",
+          "httpStatus": null,
+          "elapsedMs": 30010,
+          "requestedLabel": "deepseek-v4.1-flash",
+          "exactRequestedModelAvailable": true,
+          "catalogHttpStatus": 200,
+          "candidates": [
+            "deepseek-ai/deepseek-coder-6.7b-instruct",
+            "deepseek-ai/deepseek-v4.1-flash"
+          ],
+          "smokeCandidate": "deepseek-ai/deepseek-v4.1-flash",
+          "candidateOnly": false,
+          "model": "deepseek-ai/deepseek-v4.1-flash",
+          "state": "failed",
+          "usage": null,
+          "failure": "timeout"
+        },
+        {
+          "label": "NVIDIA_GLM_API_KEY",
+          "httpStatus": 200,
+          "elapsedMs": 4190,
+          "requestedLabel": "glm-5.3",
+          "exactRequestedModelAvailable": true,
+          "catalogHttpStatus": 200,
+          "candidates": [
+            "z-ai/glm-5.3",
+            "z-ai/glm-5.3-flash"
+          ],
+          "smokeCandidate": "z-ai/glm-5.3",
+          "candidateOnly": false,
+          "model": "z-ai/glm-5.3",
+          "state": "generation_returned",
+          "usage": {
+            "prompt_tokens": 16,
+            "completion_tokens": 58,
+            "total_tokens": 74,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 56
+            }
+          }
+        },
+        {
+          "label": "NVIDIA_KIMI_API_KEY",
+          "httpStatus": 200,
+          "elapsedMs": 11801,
+          "requestedLabel": "kimi-k3",
+          "exactRequestedModelAvailable": true,
+          "catalogHttpStatus": 200,
+          "candidates": [
+            "moonshotai/kimi-k2.6",
+            "moonshotai/kimi-k3"
+          ],
+          "smokeCandidate": "moonshotai/kimi-k3",
+          "candidateOnly": false,
+          "model": "moonshotai/kimi-k3",
+          "state": "generation_returned",
+          "usage": {
+            "prompt_tokens": 90,
+            "completion_tokens": 39,
+            "total_tokens": 129,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 29
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "globalJevConfigPreserved": true,
+  "gatewayInstalledVersion": "0.5.0"
+}

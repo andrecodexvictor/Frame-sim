@@ -30,3 +30,5 @@ next_steps/ApiS_RECOVERED.txt
 .context/
 .gortex/
 artifacts/qa/
+.impeccable/
+RAG/evals/results/

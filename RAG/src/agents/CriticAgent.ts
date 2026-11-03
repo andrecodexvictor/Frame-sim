@@ -3,6 +3,9 @@ import { SmartRouter } from '../services/SmartRouter.js';
 import { applySimulationRules, loadSimulationRules, type SimulationRules } from '../services/simulationRulesLoader.js';
 
 export interface CritiqueResult {
+    modelUsed?: string;
+    requestedModel?: string;
+    provider?: string;
     plausibilityScore: number;
     justification: string;
     replanRequired: boolean;
@@ -63,6 +66,9 @@ export class CriticAgent {
             if (validation.triggered.length > 0) console.warn(`⚠️ Validation rules triggered: ${validation.triggered.join(', ')}`);
 
             return {
+                modelUsed: response.modelUsed,
+                requestedModel: response.requestedModel,
+                provider: response.provider,
                 plausibilityScore: validation.score,
                 justification: typeof json.Justificativa === 'string' ? json.Justificativa : 'Justificativa indisponível.',
                 replanRequired: validation.score < this.rules.plausibilityThreshold,

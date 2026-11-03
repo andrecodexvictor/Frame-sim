@@ -10,6 +10,7 @@ import type {
     SimulationEvent
 } from '../types/index.js';
 import { VectorStoreService, SearchResult } from '../services/vectorStore.js';
+import { addressedRandom } from '../core/experimentProtocol.js';
 import { GeminiProvider, LLMFactory, type LLMProvider } from '../services/LLMProvider.js';
 import { clamp, hashString, mulberry32 } from '../core/employeeBrainCore.js';
 
@@ -142,11 +143,13 @@ export class ROICalculatorAgent {
                 config.calibragem_realismo.historico_traumatico.valor,
                 economic?.budgetMultiplier ?? 1,
                 riskNoise,
-                random
+                config.experiment ? addressedRandom(seed, 'environment', mes, 'economic-projection') : random
             );
 
             // Aplicar eventos aleatórios
-            const eventosMes = this.applyEvents(events, config, mes, random);
+            const shock = config.experiment?.exogenousSchedule.find(item => item.turnId === mes);
+            if (shock) projection.value *= shock.demandMultiplier;
+            const eventosMes = this.applyEvents(events, config, mes, config.experiment ? addressedRandom(seed, 'environment', mes, 'economic-events') : random);
             for (const evt of eventosMes) {
                 occurredEventIds.add(evt.id);
                 if (evt.impacto.roi) projection.value += evt.impacto.roi;

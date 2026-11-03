@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { runSimulation } from '../services/geminiService';
+import { createExperimentAssignment } from '../services/experimentProtocol';
+import { MOCK_SIMULATION_RESULT } from '../services/mockData';
+import { enrichArchetypesToTeam } from '../services/personaEnricher';
+import type { SingleSimulationConfig } from '../types';
+(globalThis as any).window = globalThis;
+const originalFetch = globalThis.fetch;
+const experiment = createExperimentAssignment({ seed: 71, durationMonths: 16, scenarioContext: 'fixed' }, { experimentId: 'standard-test', replicaId: '1', interventionId: 'scrum' });
+const config: SingleSimulationConfig = { frameworkName: 'Scrum', frameworkText: '', frameworkCategory: 'development', companySize: 20, sector: 'tech', budgetLevel: 'medium', employeeArchetypes: ['cto', 'skeptic'], techDebtLevel: 'low', operationalVelocity: 'agile', previousFailures: false, scenarioContext: 'fixed', durationMonths: 16, experiment, seed: experiment.scenarioSeed };
+try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ content: JSON.stringify({ ...MOCK_SIMULATION_RESULT, keyPersonas: [{ role: 'Invented person', sentiment: 1, impact: 'Invented fact' }] }), provider: 'google', model: 'gemini-resolved', requestedModel: 'gemini-flash-latest', codeRevision: 'a'.repeat(40), codeStateHash: '1'.repeat(64), degraded: false, attempts: 1 }));
+    const first = await runSimulation(config);
+    const sampleSize = enrichArchetypesToTeam(config.employeeArchetypes, config.companySize, experiment.scenarioSeed).team.slice(0, 30).length;
+    assert.equal(first.personaTraces?.length, sampleSize * 16, 'standard runs preserve every turn of the sampled team, not fictitious unsampled people');
+    assert.equal(first.individualEvaluations?.length, sampleSize);
+    assert.ok(first.personaTraces?.some(trace => trace.tasks.length > 0), 'standard runs record attributed task opportunities');
+    assert.equal(first.manifest?.taskModel?.policy.version, 'synthetic-work-v1');
+    assert.ok(first.keyPersonas.every(person => person.id && person.role !== 'Invented person'), 'narrative names/positions cannot become canonical identity');
+    assert.equal(first.manifest?.codeRevision, 'a'.repeat(40));
+    assert.equal(first.manifest?.codeStateHash, '1'.repeat(64));
+    assert.match(first.manifest?.datasetHash ?? '', /^[a-f0-9]{64}$/);
+    assert.equal(first.manifest?.dataSource, 'synthetic');
+    assert.deepEqual(first.manifest?.protocol?.exogenousSchedule, experiment.exogenousSchedule);
+    const second = await runSimulation({ ...config, frameworkName: 'Kanban', experiment: { ...experiment, conditionId: 'kanban', interventionId: 'kanban' } });
+    assert.deepEqual(first.personaTraces?.slice(0, sampleSize).map(trace => trace.before), second.personaTraces?.slice(0, sampleSize).map(trace => trace.before), 'initial cohort/state is independent of framework label');
+    assert.deepEqual(first.personaTraces?.flatMap(trace => trace.events.filter(event => event.kind === 'exogenous').map(event => event.text)), second.personaTraces?.flatMap(trace => trace.events.filter(event => event.kind === 'exogenous').map(event => event.text)));
+    const incident = await runSimulation({ ...config, experiment: { ...experiment, exogenousSchedule: experiment.exogenousSchedule.map(shock => ({ ...shock, incidentUniform: 0 })) } });
+    assert.equal(incident.personaTraces?.filter(trace => trace.events.some(event => event.type === 'environment-incident')).length, sampleSize * 16);
+    assert.ok(incident.personaTraces!.filter(trace => trace.turnId === 1).some((trace, index) => trace.after.estresse !== first.personaTraces![index].after.estresse), 'standard kernel also applies incident pressure');
+    console.log('  ✓ standard trajectory, canonical IDs, manifest and shared exogenous evidence');
+} finally { globalThis.fetch = originalFetch; }

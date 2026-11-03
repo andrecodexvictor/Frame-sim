@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MOCK_SIMULATION_RESULT } from '../services/mockData';
+import { BatchResultsChart } from '../components/BatchResultsChart';
+import { Dashboard } from '../components/Dashboard';
+import { summarizeOutputs } from '../services/batchService';
+import { buildReportData } from '../services/reportData';
+const output = { ...MOCK_SIMULATION_RESULT, timeUnit: 'turn' as const, summary: { ...MOCK_SIMULATION_RESULT.summary, finalAdoption: null }, timeline: [{ month: 1, adoptionRate: null, roi: null, compliance: null, efficiency: 80 }] };
+const batch = { config: { frameworks: [] } as any, outputs: [output], summary: summarizeOutputs([output]) };
+const markup = renderToStaticMarkup(<BatchResultsChart result={batch} report={buildReportData({ mode: 'batch', outputs: [output], batch })} />);
+assert.ok(!markup.includes('alta previsibilidade'), 'sample dispersion is not predictive validation');
+assert.ok(markup.includes('indisponível') || markup.includes('Indisponível'));
+const dashboard = renderToStaticMarkup(<Dashboard data={output} config={{ frameworks: [], budgetLevel: 'medium', sector: 'technology', companySize: 20, currentMaturity: 2 } as any} onReset={() => undefined} />);
+assert.ok(dashboard.includes('Adoção final: indisponível. ROI final: indisponível.'));
+assert.ok(dashboard.includes('por turno'));
+assert.ok(!dashboard.includes('A adoção final foi 0%'));
+console.log('  ✓ scientific UI preserves missing values and temporal units without predictive claims');

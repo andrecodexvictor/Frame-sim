@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { presentAgenticResult } from '../services/agenticPresentation';
+import { deriveInitialBrain } from '../RAG/src/core/employeeBrainCore';
+import type { SimulationConfig } from '../types';
+import type { SimulationState } from '../RAG/src/types/index';
+
+const a = deriveInitialBrain({ id: 'a', nome: 'Same Name', cargo: 'Engineer' }, 1);
+const b = { ...a, personaId: 'b', humor: -50 };
+const state: SimulationState = { turno: 2, moral_time: 40, velocidade_sprint: 70, confianca_stakeholders: 55, scratchpad: 'Canonical narrative', eventos_disparados: [], historico: [], difficulty_scalar: 1, current_objective: '', funcionarios: [a, b], personaTraces: [], individualEvaluations: [] };
+const config = { frameworks: [{ id: 'scrum', name: 'Scrum', text: '' }] } as SimulationConfig;
+const result = presentAgenticResult({ state, roi: { roi_final: -12, projecao_mensal: [] } }, config);
+assert.equal(result.summary.totalRoi, -12);
+assert.deepEqual(result.keyPersonas.map(person => person.id), ['a', 'b']);
+assert.notEqual(result.keyPersonas[0].sentiment, result.keyPersonas[1].sentiment);
+assert.equal(result.implementationNarrative, state.scratchpad);
+assert.deepEqual(result.personaTraces, state.personaTraces);
+const renamed = presentAgenticResult({ state: { ...state, funcionarios: [{ ...b, nome: 'Changed' }, { ...a, nome: 'Changed' }] } }, config);
+assert.deepEqual(Object.fromEntries(result.keyPersonas.map(person => [person.id, person.sentiment])), Object.fromEntries(renamed.keyPersonas.map(person => [person.id, person.sentiment])));
+assert.equal(renamed.timeline.length, 0, 'presentation cannot fabricate a trajectory');
+console.log('  ✓ canonical agentic presentation, same facts and identity across renaming/reordering');

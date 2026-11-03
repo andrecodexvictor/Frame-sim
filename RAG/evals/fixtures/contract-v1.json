@@ -1,0 +1,9 @@
+{
+  "version": "contract-v1",
+  "cases": [
+    { "id": "dev-1", "split": "development", "cohortId": "synthetic-dev", "personaId": "dev-p", "source": "synthetic", "origin": { "name": "FrameSIM contract fixture", "license": "CC0", "period": "synthetic-v1" }, "target": { "kind": "numeric", "value": 0.8, "unit": "accepted / opportunities" }, "input": { "case": "development" }, "prediction": { "value": 0.7, "confidence": 0.9 } },
+    { "id": "cal-1", "split": "calibration", "cohortId": "synthetic-cal", "personaId": "cal-p", "source": "synthetic", "origin": { "name": "FrameSIM contract fixture", "license": "CC0", "period": "synthetic-v1" }, "target": { "kind": "numeric", "value": 0.8, "unit": "accepted / opportunities" }, "input": { "case": "calibration" }, "prediction": { "value": 0.7, "confidence": 0.9 } },
+    { "id": "test-1", "split": "holdout", "cohortId": "synthetic-test", "personaId": "test-p", "source": "synthetic", "origin": { "name": "FrameSIM contract fixture", "license": "CC0", "period": "synthetic-v1" }, "target": { "kind": "numeric", "value": 0.75, "unit": "accepted / opportunities" }, "input": { "case": "holdout" }, "prediction": { "value": 0.65, "confidence": 0.8 } },
+    { "id": "test-missing", "split": "holdout", "cohortId": "synthetic-test-2", "personaId": "test-missing-p", "source": "synthetic", "origin": { "name": "FrameSIM contract fixture", "license": "CC0", "period": "synthetic-v1" }, "target": { "kind": "numeric", "value": 0.6, "unit": "accepted / opportunities" }, "input": { "case": "missing" }, "prediction": { "value": null } }
+  ]
+}

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { MOCK_SIMULATION_RESULT } from '../services/mockData';
+import { createExperimentAssignment } from '../services/experimentProtocol';
+const service = await import('../services/agenticService');
+const config = { frameworks: [{ id: 'a', name: 'A', text: '' }], companySize: 10, sector: 'tech', durationMonths: 16 } as import('../types').SimulationConfig;
+const queries = service.buildAgenticQueries(config);
+assert.equal(queries.length, 16);
+assert.ok(queries.every((query, index) => query.includes(`Turn ${index + 1}/16`) && !query.includes('Month')));
+assert.throws(() => service.buildAgenticQueries({ ...config, durationMonths: 61 }), /duration/i);
+const experiment = createExperimentAssignment(config, { experimentId: 'test', replicaId: '1', interventionId: 'a' });
+assert.throws(() => service.buildAgenticQueries({ ...config, experiment: { ...experiment, exogenousSchedule: experiment.exogenousSchedule.slice(0, 2) } }), /schedule/i);
+console.log('  ✓ agentic configured duration is an explicit sequence of turns');

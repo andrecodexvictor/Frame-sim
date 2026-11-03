@@ -144,6 +144,10 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({ frameworks, onSubmit, on
 
       <form onSubmit={handleSubmit(onSubmit)} className="bg-white dark:bg-zinc-900 border-4 border-brutal-black dark:border-zinc-700 shadow-hard p-8 space-y-10 transition-colors">
 
+        <label className="flex items-start gap-3 text-sm dark:text-zinc-100">
+          <input type="checkbox" {...register('semanticEvaluation')} disabled={agenticAvailable !== true || !watch('simulationMode')} className="mt-1 w-5 h-5 accent-brutal-green" />
+          <span><strong>Julgamento de evidências com Jev</strong><span className="block mt-1 max-w-prose">Opcional no modo agêntico. Analisa colaboração quando há ações atribuídas a pares identificados. A política sem calibração mantém abstenção; não cria notas onde faltam evidências.</span></span>
+        </label>
         {/* SECTION 1: BASIC CONTEXT */}
         <div className="space-y-6">
           <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-700 pb-2">

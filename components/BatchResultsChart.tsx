@@ -1,178 +1,22 @@
-import React from 'react';
-import {
-    ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    BarChart, Bar, Legend, LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
-} from 'recharts';
-import { BatchResult } from '../services/batchService';
-
-interface BatchResultsChartProps {
-    result: BatchResult;
-}
-
-export const BatchResultsChart: React.FC<BatchResultsChartProps> = ({ result }) => {
-
-    // Data for Scatter Plot (ROI vs Adoption)
-    const scatterData = result.outputs.map((o, i) => ({
-        id: i + 1,
-        roi: o.summary.totalRoi,
-        adoption: o.summary.finalAdoption,
-        validity: o.summary.scenarioValidity
-    }));
-
-    // Data for Histogram (Success vs Failure)
-    const successCount = result.outputs.filter(o => o.summary.totalRoi > 0).length;
-    const failureCount = result.outputs.length - successCount;
-    const barData = [
-        { name: 'Sucesso (ROI > 0)', count: successCount, fill: '#10B981' },
-        { name: 'Prejuízo (ROI < 0)', count: failureCount, fill: '#EF4444' }
-    ];
-
-    // Data for Average Timeline
-    const maxMonths = Math.max(...result.outputs.map(o => o.timeline.length));
-    const timelineData = [];
-
-    for (let m = 1; m <= maxMonths; m++) {
-        const monthRuns = result.outputs
-            .map(o => o.timeline.find(t => t.month === m))
-            .filter(t => t !== undefined);
-
-        if (monthRuns.length > 0) {
-            const avgRoi = monthRuns.reduce((sum, t) => sum + t!.roi, 0) / monthRuns.length;
-            const avgAdoption = monthRuns.reduce((sum, t) => sum + t!.adoptionRate, 0) / monthRuns.length;
-
-            timelineData.push({
-                month: m,
-                avgRoi: parseFloat(avgRoi.toFixed(2)),
-                avgAdoption: parseFloat(avgAdoption.toFixed(2))
-            });
-        }
-    }
-
-    // NEW: Business Metrics Aggregation
-    const businessMetricsData = (() => {
-        const outputs = result.outputs.filter(o => o.businessMetrics);
-        if (outputs.length === 0) return null;
-
-        const avg = (key: keyof NonNullable<typeof outputs[0]['businessMetrics']>) =>
-            outputs.reduce((sum, o) => sum + (o.businessMetrics?.[key] || 0), 0) / outputs.length;
-
-        return [
-            { metric: 'Eficiência', value: avg('efficiencyGain') },
-            { metric: 'Redução Retrabalho', value: avg('reworkReduction') },
-            { metric: 'Agilidade', value: avg('processAgility') },
-            { metric: 'Time-to-Market', value: avg('timeToMarket') },
-            { metric: 'Qualidade', value: avg('qualityScore') },
-        ];
-    })();
-
-    // NEW: Company Evolution Aggregation
-    const evolutionData = (() => {
-        const outputs = result.outputs.filter(o => o.companyEvolution);
-        if (outputs.length === 0) return null;
-
-        const avgBreakEven = outputs.reduce((sum, o) => sum + (o.companyEvolution?.breakEvenProjection || 0), 0) / outputs.length;
-        const avgHires = outputs.reduce((sum, o) => sum + (o.companyEvolution?.newHires || 0), 0) / outputs.length;
-        const avgCapacity = outputs.reduce((sum, o) => sum + (o.companyEvolution?.capacityGrowth || 0), 0) / outputs.length;
-
-        return { avgBreakEven: avgBreakEven.toFixed(1), avgHires: avgHires.toFixed(1), avgCapacity: avgCapacity.toFixed(1) };
-    })();
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
-
-            {/* Chart 1: Consistency Analysis (Scatter) */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Análise de Consistência (ROI x Adoção)</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" dataKey="adoption" name="Adoção" unit="%" domain={[0, 100]} />
-                            <YAxis type="number" dataKey="roi" name="ROI" unit="%" />
-                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                            <Legend />
-                            <Scatter name="Simulações" data={scatterData} fill="#8884d8" />
-                        </ScatterChart>
-                    </ResponsiveContainer>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                    *Clusters indicam alta previsibilidade. Pontos dispersos indicam volatilidade do cenário.
-                </p>
-            </div>
-
-            {/* Chart 2: Success Rate */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Taxa de Sucesso do Framework</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={barData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="count" name="Qtd. Simulações" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Chart 3: Business Metrics Radar (NEW) */}
-            {businessMetricsData && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Métricas de Negócio (Média)</h3>
-                    <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart data={businessMetricsData}>
-                                <PolarGrid />
-                                <PolarAngleAxis dataKey="metric" />
-                                <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                                <Radar name="Média" dataKey="value" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
-                            </RadarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            )}
-
-            {/* Chart 4: Company Evolution Summary (NEW) */}
-            {evolutionData && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Evolução da Empresa (Média)</h3>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                        <div className="p-4 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                            <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{evolutionData.avgBreakEven}</p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">Mês Break-Even</p>
-                        </div>
-                        <div className="p-4 bg-green-100 dark:bg-green-900 rounded-lg">
-                            <p className="text-2xl font-bold text-green-600 dark:text-green-300">{evolutionData.avgHires}</p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">Novas Contratações</p>
-                        </div>
-                        <div className="p-4 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                            <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{evolutionData.avgCapacity}%</p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">Crescimento Capacidade</p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Chart 5: Average Evolution */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 col-span-1 lg:col-span-2">
-                <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Evolução Média (Tendência Central)</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={timelineData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="month" label={{ value: 'Mês', position: 'insideBottomRight', offset: -5 }} />
-                            <YAxis yAxisId="left" label={{ value: 'ROI Médio %', angle: -90, position: 'insideLeft' }} />
-                            <YAxis yAxisId="right" orientation="right" label={{ value: 'Adoção Média %', angle: 90, position: 'insideRight' }} />
-                            <Tooltip />
-                            <Legend />
-                            <Line yAxisId="left" type="monotone" dataKey="avgRoi" stroke="#8884d8" activeDot={{ r: 8 }} name="ROI Médio" />
-                            <Line yAxisId="right" type="monotone" dataKey="avgAdoption" stroke="#82ca9d" name="Adoção Média" />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-        </div>
-    );
+import React, { useMemo } from 'react';
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, ReferenceLine } from 'recharts';
+import type { BatchResult } from '../services/batchService';
+import { buildReportData, type ReportData } from '../services/reportData';
+const number = (value: number | null) => value === null ? 'Indisponível' : value.toLocaleString('pt-BR', { maximumFractionDigits: 8 });
+export const BatchResultsChart: React.FC<{ result: BatchResult; report?: ReportData }> = ({ result, report: supplied }) => {
+    const fallback: ReportData = useMemo(() => supplied ?? buildReportData({ mode: 'batch', outputs: result.outputs, batch: result }), [result, supplied]);
+    const metrics = fallback.metrics;
+    const value = (runId: string, id: string) => metrics.find(row => row.runId === runId && row.group === 'run' && row.id === id)?.value ?? null;
+    const scatter = fallback.runs.filter(run => run.status === 'completed' && value(run.id, 'totalRoi') !== null && value(run.id, 'finalAdoption') !== null).map(run => ({ id: run.id, roi: value(run.id, 'totalRoi'), adoption: value(run.id, 'finalAdoption') }));
+    return <div className="space-y-6 w-full">
+        <section className="border border-zinc-500/40 rounded p-5 space-y-4" aria-label="Métricas do lote"><h3 className="text-lg font-semibold">Medidas das réplicas independentes</h3><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-zinc-500/40"><th scope="col" className="py-3 pr-4">Medida</th><th scope="col" className="pr-4">Média</th><th scope="col" className="pr-4">Unidade</th><th scope="col" className="pr-4">IC 95%</th><th scope="col" className="pr-4">n independente</th><th scope="col">Excluídos</th></tr></thead><tbody>{metrics.filter(row => row.group === 'aggregate').map(row => <tr key={row.key} className="border-b border-zinc-500/20"><th scope="row" className="py-3 pr-4 font-medium">{row.label}</th><td className="pr-4 font-mono tabular-nums">{number(row.value)}</td><td className="pr-4">{row.unit}</td><td className="pr-4 font-mono">{row.interval95 ? row.interval95.map(number).join(' a ') : 'Indisponível'}</td><td className="pr-4 font-mono">{row.nIndependent}</td><td className="font-mono">{row.nExcluded}</td></tr>)}</tbody></table></div><p className="text-xs">Dispersão descreve estes cenários sintéticos. A capacidade de prever resultados observados permanece sem validação. Falhas, fixtures e execuções degradadas ficam fora das médias.</p></section>
+        <section className="border border-zinc-500/40 rounded p-5 space-y-4"><h3 className="text-lg font-semibold">ROI projetado × adoção simulada</h3>{scatter.length ? <div className="h-64 min-w-0"><ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 256 }}><ScatterChart><CartesianGrid strokeDasharray="3 3" stroke="#52525b" /><XAxis type="number" dataKey="adoption" name="Adoção" unit="%" /><YAxis type="number" dataKey="roi" name="ROI" unit="%" /><Tooltip cursor={{ strokeDasharray: '3 3' }} /><ReferenceLine y={0} stroke="#71717a" /><Scatter name="Execuções disponíveis" data={scatter} fill="#047857" /></ScatterChart></ResponsiveContainer></div> : <p className="text-sm">Indisponível: o gráfico exige ROI e adoção na mesma execução.</p>}</section>
+        {(['month', 'turn'] as const).map(timeUnit => {
+            const timeline = metrics.filter(row => row.group === 'aggregate-timeline' && row.timeUnit === timeUnit);
+            if (!timeline.length) return null;
+            const points = [...new Set(timeline.map(row => row.turnId!))].sort((a, b) => a - b).map(turn => ({ turn, roi: timeline.find(row => row.id === 'roi' && row.turnId === turn)?.value ?? null, adoption: timeline.find(row => row.id === 'adoptionRate' && row.turnId === turn)?.value ?? null }));
+            return <section key={timeUnit} className="border border-zinc-500/40 rounded p-5 space-y-4"><h3 className="text-lg font-semibold">Evolução média por {timeUnit === 'turn' ? 'turno' : 'mês'}</h3>{points.some(point => point.roi !== null || point.adoption !== null) ? <div className="h-72 min-w-0"><ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 288 }}><LineChart data={points}><CartesianGrid strokeDasharray="3 3" stroke="#52525b" /><XAxis dataKey="turn" /><YAxis unit="%" /><Tooltip /><Legend /><ReferenceLine y={0} stroke="#71717a" /><Line dataKey="roi" name="ROI projetado (%)" stroke="#b45309" connectNulls={false} /><Line dataKey="adoption" name="Adoção simulada (%)" stroke="#047857" connectNulls={false} /></LineChart></ResponsiveContainer></div> : <p className="text-sm">Indisponível: nenhuma trajetória tem estas dimensões medidas.</p>}<p className="text-xs">Médias por ponto usam apenas réplicas elegíveis com a dimensão disponível. Lacunas e valores negativos são preservados.</p></section>;
+        })}
+        <details className="text-sm"><summary className="cursor-pointer focus-visible:outline">Todas as tentativas do lote</summary><ul className="list-disc pl-5 mt-3 space-y-2">{fallback.runs.map(run => <li key={run.id}>Réplica {run.replicaId}: {run.status} · ROI {number(value(run.id, 'totalRoi'))}% · adoção {number(value(run.id, 'finalAdoption'))}%</li>)}</ul></details>
+    </div>;
 };

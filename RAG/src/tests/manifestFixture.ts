@@ -1,0 +1,13 @@
+import type { PersonaProfile, SimulationConfig } from '../types/index.js';
+
+const persona = (id: string): PersonaProfile => ({ id, tipo: 'Tech', informacoes_basicas: { nome: 'Same Name', genero: 'X', idade: 30, cargo: 'Engineer', area: 'Tech', tempo_empresa: '', tempo_carreira: '', formacao: '', localizacao: '', neurodivergencia: null }, psicologia_comportamento: { 'Estilo de Comunicação': '', 'Abordagem ao Trabalho': '', 'Gestão de Conflitos': '', 'Relação com Tecnologia': '', 'Liderança e Influência': '', 'Relação com Processos': '', 'Gestão de Estresse': 'Resiliente', 'Motivadores Principais': '' }, habilidades: { hard_skills: [], soft_skills: [] }, contexto: { framework_preferido: '', opiniao_agil: '', desafio_atual: '', motivacao_atual: '' }, historia: 'synthetic', ace_metadata: { A: '', C: '', E: '', resumo_compacto: '', tags_busca: [] } });
+export const manifestFixture = {
+    personas: [persona('person-a'), persona('person-b')],
+    config: { framework_config: { id: 'scrum', name: 'Scrum', source: 'catalog' }, contexto_estrutural: { categoria_cenario: { valor: 'Management', opcoes: [] }, setor_atuacao: { valor: 'Tech', opcoes: [] }, tamanho_ftes: { valor: 10, descricao: '' }, orcamento_disponivel: { valor: 'Medium', opcoes: [] } }, calibragem_realismo: { divida_tecnica: { valor: 'Média', opcoes: [] }, velocidade_operacional: { valor: 'Ágil', opcoes: [] }, historico_traumatico: { valor: false, descricao: '' } }, ecossistema_humano: { distribuicao_selecionada: [], descricao: '' }, contexto_situacional: { cenario_atual: 'fixed scenario', opcoes: [] }, parametros_simulacao: { duracao_meses: 16, acuracia_alvo: 'High', adaptacao_pme: true, seed: 71 } } as SimulationConfig,
+    dependencies: {
+        personaAgent: { async simulateResponse() { return { resposta_persona: 'Documented help', emocao_detectada: 'neutral', impacto_moral: 0, rag_utilizado: false, fonte_rag: null, modelUsed: 'gemini-resolved', requestedModel: 'gemini-flash-latest', provider: 'google' }; } },
+        smartRouter: { async route() { return { name: () => 'fixture-router', async generate() { return { content: '{"confianca_delta":0,"eventos_disparados":[]}', modelUsed: 'gemini-resolved', requestedModel: 'gemini-flash-latest', provider: 'google' }; } }; } },
+        criticAgent: { async critique() { return { plausibilityScore: 88, justification: 'synthetic', replanRequired: false, modelUsed: 'z-ai/glm-5.3', provider: 'glm' }; } },
+        roiCalculator: { setVectorStore() {}, async calculateROI() { return { projecao_mensal: [], roi_final: -2, break_even_mes: null, eventos_ocorridos: [], confianca_estimativa: 'Baixa' as const }; } },
+    },
+};

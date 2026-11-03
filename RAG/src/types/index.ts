@@ -3,6 +3,9 @@
  */
 
 import type { EmployeeBrainState } from '../core/employeeBrainCore.js';
+import type { RunManifest, PersonaTrace, IndividualEvaluation } from './evaluation.js';
+import type { ExperimentAssignment } from '../core/experimentProtocol.js';
+import type { SyntheticWorkPolicy } from '../core/syntheticWork.js';
 
 // ===== QUERY ROUTING =====
 
@@ -73,11 +76,9 @@ export interface PersonaProfile {
 // ===== SIMULATION CONFIG =====
 
 export interface SimulationConfig {
-    /** Optional server-side Jev kill switch; environment remains the default. */
-    jev?: {
-        mode?: 'off' | 'shadow' | 'active';
-        timeoutMs?: number;
-    };
+    task_policy?: Partial<SyntheticWorkPolicy>;
+    semantic_evaluation?: { enabled: boolean; max_requests: number; timeout_ms: number };
+    experiment?: ExperimentAssignment;
     framework_config?: {
         id: string;
         name: string;
@@ -183,6 +184,9 @@ export interface ROIResult {
 // ===== AGENT OUTPUTS =====
 
 export interface SimulationState {
+    manifest?: RunManifest;
+    personaTraces?: PersonaTrace[];
+    individualEvaluations?: IndividualEvaluation[];
     turno: number;
     moral_time: number;
     velocidade_sprint: number;
@@ -202,8 +206,6 @@ export interface SimulationState {
     degraded_reasons?: string[];
     run_id?: string;
     metricas_agenticas?: AgenticMetrics;
-    /** Bounded per-turn audit records for persona judgments. */
-    persona_judgment_audits?: PersonaJudgmentAudit[];
     /** Concise, bounded audit trail for the main agentic actions in a run. */
     reasoning_log?: ReasoningLogEntry[];
     /** A bounded suggestion recorded when the single replan was insufficient. */
@@ -247,6 +249,9 @@ export interface SimulationStep {
 }
 
 export interface PersonaResponse {
+    provider?: string;
+    requestedModel?: string;
+    modelUsed?: string;
     resposta_persona: string;
     emocao_detectada: string;
     impacto_moral: number;  // -10 a +10
@@ -254,34 +259,10 @@ export interface PersonaResponse {
     fonte_rag: string | null;
     /** Provider/parsing fallback was used for this response. */
     degraded?: boolean;
-    /** Accepted semantic judgment used to guide narrative; no provider payload. */
-    julgamento?: PersonaJudgmentSummary;
-}
-
-export type PersonaJudgmentOrigin = 'jev' | 'deterministic_fallback';
-
-export interface PersonaJudgmentSummary {
-    reaction: string;
-    intensity: string;
-    moralDirection: 'negative' | 'neutral' | 'positive';
-    influencesPeers: boolean;
-    confidence: number;
-    origin: PersonaJudgmentOrigin;
-    moralDelta: number;
-}
-
-export interface PersonaJudgmentAudit {
-    model: string;
-    origin: PersonaJudgmentOrigin;
-    requestHash: string;
-    confidence: number;
-    latencyMs: number;
-    fallbackReason?: string;
-    inputTokens?: number;
-    outputTokens?: number;
 }
 
 export interface OrchestratorOutput {
+    personaId?: string;
     turno: number;
     stakeholder: string;
     resposta: PersonaResponse;
@@ -307,11 +288,6 @@ export interface AgenticMetrics {
     /** Taxa de incidência de risco: incidentes / turnos, em percentual. */
     tir: number;
     degraded: boolean;
-    jev_mode?: 'off' | 'shadow' | 'active';
-    jev_calls?: number;
-    jev_fallbacks?: number;
-    jev_low_confidence?: number;
-    jev_latency_ms?: number;
 }
 
 // ===== FEW-SHOT EXAMPLES =====

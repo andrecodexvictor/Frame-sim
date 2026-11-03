@@ -1,13 +1,21 @@
 
 import { SimulationConfig, SimulationOutput } from '../types';
-import { runSimulation } from './geminiService';
+import { presentAgenticResult } from './agenticPresentation';
 import { SingleSimulationConfig } from '../types';
 import { enrichArchetypesToTeam } from './personaEnricher';
 import { hashString } from '../RAG/src/core/employeeBrainCore';
+import { commonScenarioSeed } from './experimentProtocol';
 
 const API_URL = (import.meta.env?.VITE_API_URL?.trim() || 'http://localhost:3002/api').replace(/\/$/, '');
 const STATUS_TIMEOUT_MS = 4_000;
 const SIMULATION_TIMEOUT_MS = 180_000;
+
+export function buildAgenticQueries(config: SimulationConfig): string[] {
+    const turns = config.durationMonths ?? 12;
+    if (!Number.isInteger(turns) || turns < 1 || turns > 60) throw new Error('Invalid agentic duration');
+    if (config.experiment && config.experiment.exogenousSchedule.length !== turns) throw new Error('Agentic duration differs from paired schedule');
+    return Array.from({ length: turns }, (_, index) => `Turn ${index + 1}/${turns}: Simulate adoption of ${config.frameworks[0].name} for a ${config.companySize} company in ${config.sector}. Continue the recorded trajectory. Context: ${config.customScenarioText || config.selectedScenarioId || 'recommended'}`);
+}
 
 export interface AgenticStatus {
     available: boolean;
@@ -53,12 +61,7 @@ export const runAgenticSimulation = async (
     // hydrate the full 350-persona profiles instead of synthetic ones.
     let stakeholders: Array<{ id: string; archetype?: string }> | string[];
     let teamSample: string[] = [];
-    const simulationSeed = hashString([
-        config.frameworks[0]?.name || 'framework',
-        config.companySize,
-        config.sector,
-        config.customScenarioText || config.selectedScenarioId || 'recommended'
-    ].join(':'));
+    const simulationSeed = config.experiment?.scenarioSeed ?? commonScenarioSeed(config);
     try {
         const archetypes = config.employeeArchetypes || [];
         const { team, keyStakeholders } = enrichArchetypesToTeam(archetypes, config.companySize, simulationSeed);
@@ -71,7 +74,7 @@ export const runAgenticSimulation = async (
     }
 
     const payload = {
-        query: `Simulate adoption of ${config.frameworks[0].name} for a ${config.companySize} company in ${config.sector}. Context: ${config.customScenarioText || config.selectedScenarioId}`,
+        query: buildAgenticQueries(config),
         stakeholders,
         teamSample,
         config: { ...config, simulationSeed }
@@ -99,114 +102,7 @@ export const runAgenticSimulation = async (
         const agenticData = await response.json();
         console.log('✅ Agentic simulation completed, generating rich output...');
 
-        // EMPLOYEE BRAIN: estado individual da equipe (fatos), quando o backend o fornece.
-        // Campo é opcional (integração em andamento no backend) — degrada graciosamente.
-        const funcionarios: Array<{ personaId: string; nome: string; cargo: string; estresse: number; humor: number; status: string; decisoes: string[] }> = agenticData.state?.funcionarios || [];
-        const eventosRh: string[] = agenticData.state?.eventos_rh || [];
-
-        let employeeBrainSection = '';
-        if (funcionarios.length > 0) {
-            const rows = funcionarios.slice(0, 15).map(f => {
-                const ultimaDecisao = f.decisoes?.[f.decisoes.length - 1] || '-';
-                return `${f.nome} | ${f.cargo} | ${f.estresse} | ${f.humor} | ${f.status} | ${ultimaDecisao}`;
-            }).join('\n');
-            employeeBrainSection = `
-                [ESTADO INDIVIDUAL DA EQUIPE (fatos, via EmployeeBrain)]
-                nome | cargo | estresse | humor | status | última decisão
-                ${rows}
-
-                Eventos de RH do período: ${eventosRh.length > 0 ? eventosRh.join(', ') : 'nenhum evento crítico'}
-            `;
-        }
-
-        // STEP 2: Use Normal Simulation Logic for Rich Output
-        // This ensures the same visual quality as the normal mode
-        // But we inject the Agentic state as additional context
-        const singleConfig: SingleSimulationConfig = {
-            frameworkName: config.frameworks[0].name,
-            frameworkText: config.frameworks[0].text,
-            frameworkCategory: config.frameworkCategory,
-            companySize: config.companySize,
-            sector: config.sector,
-            budgetLevel: config.budgetLevel,
-            currentMaturity: config.currentMaturity,
-            employeeArchetypes: config.employeeArchetypes,
-            techDebtLevel: config.techDebtLevel,
-            operationalVelocity: config.operationalVelocity,
-            previousFailures: config.previousFailures,
-            scenarioContext: `
-                [CONTEXTO GERADO POR SIMULAÇÃO AGÊNTICA PROFUNDA]
-                
-                Estado Final da Simulação:
-                - Moral do Time: ${agenticData.state?.moral_time ?? 70}%
-                - Velocidade: ${agenticData.state?.velocidade_sprint ?? 65}%
-                - Confiança Stakeholders: ${agenticData.state?.confianca_stakeholders ?? 60}%
-                - Turnos Simulados: ${agenticData.state?.turno ?? 0}
-                
-                Insights (Scratchpad do Orquestrador):
-                ${agenticData.state?.scratchpad || 'Simulação concluída sem observações críticas.'}
-                
-                Eventos Disparados:
-                ${(agenticData.state?.eventos_disparados || []).join(', ') || 'Nenhum evento crítico'}
-                
-                ROI Calculado pelo Agente:
-                ${typeof agenticData.roi?.roi_final === 'number' ? agenticData.roi.roi_final.toFixed(2) + '%' : 'Pendente cálculo detalhado'}
-                ${employeeBrainSection}
-                INSTRUÇÃO: Use estes dados da simulação agêntica como BASE para gerar números e narrativas consistentes.
-            `,
-            durationMonths: config.durationMonths || 12,
-            economicProfileId: config.economicProfileId,
-            economicScenarioId: config.economicScenarioId,
-            seed: simulationSeed
-        };
-
-        // Run the normal simulation with the Agentic context injected
-        const richOutput = await runSimulation(singleConfig, { signal: requestController.signal });
-        const timeToSolveMs = Date.now() - startedAt;
-
-        // EMPLOYEE BRAIN: sobrescreve o sentimento inventado pelo LLM com o humor real
-        // simulado pelo backend, quando a persona citada em keyPersonas bate com um funcionário.
-        if (funcionarios.length > 0 && Array.isArray(richOutput.keyPersonas)) {
-            richOutput.keyPersonas = richOutput.keyPersonas.map(kp => {
-                // Guard: nome vazio faria includes('') casar sempre com o primeiro brain.
-                const f = funcionarios.find(fn => fn.nome && fn.nome.length >= 3 && kp.role?.toLowerCase().includes(fn.nome.toLowerCase()));
-                if (!f) return kp;
-                const sentiment = Math.round((f.humor + 100) / 2);
-                const statusNote = f.status !== 'ativo' ? ` [EmployeeBrain: ${f.status}]` : '';
-                return { ...kp, sentiment, impact: `${kp.impact}${statusNote}` };
-            });
-        }
-
-        // EMPLOYEE BRAIN: eventos de RH + decisões graves viram emergentEvents (month ≈ turno atual)
-        const turno = agenticData.state?.turno ?? (config.durationMonths || 12);
-        const gravesDecisoes = funcionarios
-            .filter(f => f.status !== 'ativo')
-            .map(f => ({ month: turno, persona: f.nome, type: f.status, event: f.decisoes?.[f.decisoes.length - 1] || `${f.nome} mudou de status para ${f.status}` }));
-        const eventosRhMapped = eventosRh.map(e => ({ month: turno, persona: '-', type: 'evento_rh', event: e }));
-        const emergentEvents = [...gravesDecisoes, ...eventosRhMapped];
-
-        // Add Agentic Metrics to the output (for developer observability)
-        // metricas_agenticas ainda não é retornado pelo backend (integração em andamento) —
-        // usa fallback quando ausente, mas o tempo de execução é sempre medido de verdade.
-        // plausibility_score vem do CriticAgent (orchestrator.runSimulation), 1x por simulação.
-        const backendMetrics = agenticData.metricas_agenticas || agenticData.state?.metricas_agenticas;
-        return {
-            ...richOutput,
-            ...(emergentEvents.length > 0 ? { emergentEvents } : {}),
-            agenticMetrics: {
-                quality_per_cycle: backendMetrics?.quality_per_cycle ?? agenticData.state?.plausibility_score ?? 0,
-                time_to_solve_ms: timeToSolveMs,
-                cost_estimate_usd: backendMetrics?.cost_estimate_usd ?? 0,
-                total_tokens: backendMetrics?.total_tokens ?? 0,
-                router_choice: backendMetrics?.router_choice ?? 'unknown',
-                input_tokens: backendMetrics?.input_tokens ?? 0,
-                output_tokens: backendMetrics?.output_tokens ?? 0,
-                replan_count: backendMetrics?.replan_count ?? 0,
-                risk_incidents: backendMetrics?.risk_incidents ?? 0,
-                tir: backendMetrics?.tir ?? 0,
-                degraded: Boolean(backendMetrics?.degraded || agenticData.state?.degraded)
-            }
-        };
+        return presentAgenticResult(agenticData, config);
 
     } catch (error) {
         console.error('Agentic Simulation Failed:', error);

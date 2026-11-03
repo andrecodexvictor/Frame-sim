@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+const protocol = await import('../services/experimentProtocol').catch(() => null);
+assert.ok(protocol, 'the paired experimental protocol must be implemented');
+const base = { companySize: 20, sector: 'tech', budgetLevel: 'medium', employeeArchetypes: ['cto', 'skeptic'], scenarioMode: 'custom', customScenarioText: 'fixed scenario', durationMonths: 16, seed: 77 };
+const a = protocol.createExperimentAssignment({ ...base, frameworks: [{ id: 'a', name: 'A', text: '' }] }, { experimentId: 'test', replicaId: '1', interventionId: 'a' });
+const b = protocol.createExperimentAssignment({ ...base, frameworks: [{ id: 'b', name: 'B', text: '' }] }, { experimentId: 'test', replicaId: '1', interventionId: 'b' });
+assert.equal(a.scenarioSeed, b.scenarioSeed);
+assert.deepEqual(a.exogenousSchedule, b.exogenousSchedule, 'same replica receives exactly the same exogenous shocks');
+assert.equal(a.memoryPolicy, 'isolated');
+const spendPolicy = protocol.addressedRandom(a.scenarioSeed, 'person', 1, 'policy:a');
+for (let i = 0; i < 1000; i++) spendPolicy();
+assert.equal(protocol.addressedRandom(a.scenarioSeed, 'environment', 2, 'demand')(), protocol.addressedRandom(b.scenarioSeed, 'environment', 2, 'demand')(), 'policy draws cannot shift environmental randomness');
+const reversed = protocol.createExperimentAssignment(base, { experimentId: 'test', replicaId: '1', interventionId: 'b' });
+assert.deepEqual(reversed.exogenousSchedule, a.exogenousSchedule, 'arm order cannot change the schedule');
+assert.notDeepEqual(protocol.createExperimentAssignment(base, { experimentId: 'test', replicaId: '2', interventionId: 'a' }).exogenousSchedule, a.exogenousSchedule);
+const { enrichArchetypesToTeam } = await import('../services/personaEnricher');
+assert.deepEqual(enrichArchetypesToTeam(['cto', 'skeptic'], 20, a.scenarioSeed).team.map(person => person.id), enrichArchetypesToTeam(['cto', 'skeptic'], 20, b.scenarioSeed).team.map(person => person.id));
+console.log('  ✓ common cohort/shocks, addressed RNG, independent replicas and arm-order invariance');

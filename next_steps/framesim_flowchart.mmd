@@ -1,0 +1,36 @@
+flowchart TD
+    start(["Início"])
+    config["Configurar cenário, equipe<br/>e rubrica versionada"]
+    protocol["Registrar manifesto e seeds<br/>Parear equipe e choques"]
+    trace["Simular e registrar traços<br/>personaId / turnId / eventId"]
+    evidence{"Há evidência<br/>atribuída?"}
+    missing["Registrar indisponível<br/>sem inventar uma nota"]
+    metrics["Medir por persona<br/>com denominadores"]
+    judges["Jev: julgamento tipado<br/>Gemini / DeepSeek: geração<br/>GLM / Kimi: juiz distinto"]
+    calibration{"Evidência e calibração<br/>suficientes?"}
+    abstain["Abstenção<br/>Revisão independente<br/>quando disponível"]
+    accept["Aceitar julgamento<br/>com origem e cobertura"]
+    compare["Individual / comparação / lote<br/>Réplicas pareadas, ICs<br/>e exclusões identificadas"]
+    report["ReportData canônico<br/>Evidências e limitações"]
+    dashboard["Exibir no dashboard<br/>Dados sintéticos identificados"]
+    export["Exportar artigo e dados<br/>LaTeX / PGFPlots / CSV / ZIP"]
+    finish(["Fim"])
+    start --> config
+    config --> protocol
+    protocol --> trace
+    trace --> evidence
+    evidence -->|Não| missing
+    evidence -->|Sim| metrics
+    missing --> abstain
+    metrics --> judges
+    judges --> calibration
+    calibration -->|Não| abstain
+    calibration -->|Sim| accept
+    abstain --> compare
+    accept --> compare
+    compare --> report
+    report --> dashboard
+    dashboard --> export
+    export --> finish
+    classDef step fill:#dedede,stroke:#333,color:#171717;
+    class start,config,protocol,trace,evidence,missing,metrics,judges,calibration,abstain,accept,compare,report,dashboard,export,finish step;
