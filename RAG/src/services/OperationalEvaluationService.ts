@@ -7,7 +7,7 @@ export class OperationalEvaluationService {
         this.counters.evaluations++;
         if(!input.plan)return {valid:true,metrics,mechanisms:{valid:false,reason:'no_plan',scope:'not_evaluated'}};
         const keys=[...new Set([process.env.TYPESAFE_API_KEY,process.env.TYPESAFE_API_KEY_1].filter((s):s is string=>Boolean(s)))];
-        if(process.env.JEV_MODE==='off'||!keys.length)return {valid:false,metrics,mechanisms:{valid:false,reason:'judge_unavailable',scope:'plan_mechanisms_only'}};
+        if(!['active','shadow'].includes(process.env.JEV_MODE||'off')||!keys.length)return {valid:false,metrics,mechanisms:{valid:false,reason:'judge_unavailable',scope:'plan_mechanisms_only'}};
         const criteria={explicit_supported:'The plan specifies an actionable mechanism, grounded in the supplied document, to address this dimension. This is proposed work, not a measured benefit.',mentioned_only:'The dimension is mentioned or implied, but the plan does not specify a grounded actionable mechanism.',absent_or_unsupported:'No relevant mechanism is supplied, or its proposed operation is unsupported or contradictory.'};
         const questions={
             process_error_mitigation:{type:'choice',instructions:'Does `plan` specify a mechanism to prevent or detect process errors, such as lost requests, duplicate records, unauthorized changes or failed handoffs, in the supplied `scenario` and `framework`? Judge the mechanism, not the framework name or a claim of achieved error reduction.',criteria},
