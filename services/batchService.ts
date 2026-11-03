@@ -2,6 +2,7 @@
 import { SimulationConfig, SimulationOutput, SingleSimulationConfig, EnhancedBatchConfig, WarmupResult, BatchSummary, OptimizedParameters, RacingConfig, AgentConfig, AgentResult, RaceResult, RacingMetrics } from '../types';
 import { runSimulation } from './geminiService';
 import { hashString } from '../RAG/src/core/employeeBrainCore';
+import {pairedCaseSeed} from './evaluationConfig';
 
 export interface BatchResult {
     config: SimulationConfig;
@@ -34,6 +35,7 @@ function normalizeScore(value: unknown, fallback = 50): number {
 }
 
 function seedFor(config: SimulationConfig, label: string): number {
+    if(config.evaluationMode==='blinded-poc')return hashString(`${pairedCaseSeed(config)}:${label}`);
     return hashString([
         config.frameworks[0]?.name || 'framework',
         config.companySize,
@@ -122,6 +124,8 @@ class FrontendSelfImprovementService {
                 economicProfileId: config.economicProfileId,
                 economicScenarioId: config.economicScenarioId,
                 temperature: candidateParams.temperature,
+                evaluationMode:config.evaluationMode,
+                operationalObservations:config.operationalObservations,
                 seed: seedFor(config, `warmup:${i}`)
             };
 
@@ -218,6 +222,8 @@ class FrontendAgentRacingService {
                 temperature: agent.temperature,
                 modelPreference: agent.model,
                 agentPersona: agent.persona,
+                evaluationMode:config.evaluationMode,
+                operationalObservations:config.operationalObservations,
                 seed: seedFor(config, `race:${agent.id}`)
             };
 
@@ -365,6 +371,8 @@ export const runEnhancedBatchSimulation = async (
                     economicProfileId: config.economicProfileId,
                     economicScenarioId: config.economicScenarioId,
                     temperature: optimalParams?.temperature,
+                    evaluationMode:config.evaluationMode,
+                    operationalObservations:config.operationalObservations,
                     seed: seedFor(config, `batch:${i}`)
                 };
                 result = await runSimulation(singleConfig);
@@ -429,6 +437,8 @@ export const runBatchSimulation = async (
             durationMonths: config.durationMonths || 12,
             economicProfileId: config.economicProfileId,
             economicScenarioId: config.economicScenarioId,
+            evaluationMode:config.evaluationMode,
+            operationalObservations:config.operationalObservations,
             seed: seedFor(config, `legacy-batch:${i}`)
         };
 

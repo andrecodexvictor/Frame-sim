@@ -132,7 +132,7 @@ const App: React.FC = () => {
               onBack={() => setStep('upload')}
               agenticAvailable={agenticAvailable}
               onBatchMode={(config) => {
-                setConfig(config);
+                setConfig({...config,evaluationMode:'blinded-poc',seed:pairedCaseSeed(config)});
                 setStep('batch');
               }}
             />

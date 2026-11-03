@@ -3,6 +3,7 @@ import {calculateMonthlyMetrics} from '../services/metricsCalculator';
 import {calculateTeamResistance,enrichArchetypesToTeam} from '../services/personaEnricher';
 import {runSimulation} from '../services/geminiService';
 import {pairedCaseSeed} from '../services/evaluationConfig';
+import {runBatchSimulation} from '../services/batchService';
 import type {SingleSimulationConfig,SimulationConfig} from '../types';
 
 (globalThis as any).window=globalThis;
@@ -18,10 +19,11 @@ assert.equal(pairedCaseSeed(caseConfig),pairedCaseSeed({...caseConfig,frameworks
 
 const originalFetch=globalThis.fetch;
 const prompts:string[]=[];
+const seeds:number[]=[];
 let missingTimeline=false;
 globalThis.fetch=async(input,init)=>{
  if(String(input).endsWith('/api/status'))return new Response(JSON.stringify({jev:{mode:'off'}}));
- const body=JSON.parse(String(init?.body));prompts.push(body.prompt);
+ const body=JSON.parse(String(init?.body));prompts.push(body.prompt);seeds.push(body.seed);
  const content={summary:{finalAdoption:50,totalRoi:0,maturityScore:5,monthsToComplete:2,scenarioValidity:80},implementationNarrative:'Hipotese sintetica.',keyPersonas:[],timeline:missingTimeline?undefined:Array.from({length:2},(_,i)=>({month:i+1,adoptionRate:50,efficiency:100,compliance:0,rawData:{featuresDelivered:0,bugsGenerated:0,criticalIncidents:0,teamSize:1,learningCurveFactor:1}}))};
  return new Response(JSON.stringify({provider:'fixture-for-test',model:'test',degraded:false,attempts:1,content:JSON.stringify(content)}));
 };
@@ -33,6 +35,12 @@ try {
  assert.equal(prompts[0],prompts[1],'blinded prompts and human state must be invariant to the framework label');
  assert.ok(!prompts[0].includes('vasto conhecimento interno'),'comparison must not fill documentary gaps with model prior knowledge');
  assert.ok(!prompts[0].includes('FIT PÉSSIMO'),'comparison must not be primed by framework-name penalties');
+ const batchStart=prompts.length;
+ const batchConfig={...caseConfig,evaluationMode:'blinded-poc',frameworks:[{id:'a',name:'GEAR',text:config.frameworkText}]} as SimulationConfig;
+ await runBatchSimulation(batchConfig,1,()=>{});
+ await runBatchSimulation({...batchConfig,frameworks:[{id:'b',name:'COBIT 2019',text:config.frameworkText}]},1,()=>{});
+ assert.equal(prompts[batchStart],prompts[batchStart+1],'batch must preserve documentary mode across framework labels');
+ assert.equal(seeds[batchStart],seeds[batchStart+1],'batch repetition seed must exclude treatment labels');
  missingTimeline=true;
  const invalid=await runSimulation(config);
  assert.equal(invalid.execution?.mode,'fixture','missing observed fields must never be labeled live');
