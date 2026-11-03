@@ -15,12 +15,12 @@ Ao contrário de "quizzes" simples, o Frame-sim utiliza uma engine **Multi-LLM A
 
 ### 1. Simulação Multi-Agente & Persona Enrichment
 Modela stakeholders sintéticos e uma equipe com base em **arquétipos estendidos**:
-- **Key Stakeholders**: CEO, CTO, Tech Leads com perfis psicológicos profundos.
+- **Key Stakeholders**: papéis e traços sintéticos de direção e tecnologia, sem validação psicométrica.
 - **Distribuição Realista**: o restante do time (Júniors, Plenos, QA, RH) é gerado automaticamente com base no tamanho da empresa.
 - **Enriquecimento RAG**: personas recebem nomes, histórias de fundo e vieses sintéticos de um catálogo de perfis (`RAG/profiles.json`); isso não corresponde a observação ou validação psicométrica de pessoas.
 
 ### 2. Roteamento de Cenário Econômico
-Perfis econômicos realistas calibram custos e ROI (Brasil: PME, Startup SP/RJ, Grande Empresa, Interior; Internacional: US Big Tech, LATAM Remoto, Europa Ocidental). Salários, custo de incidentes e valor por feature variam drasticamente conforme o perfil.
+Perfis econômicos fornecem premissas de custos e valor (Brasil: PME, Startup SP/RJ, Grande Empresa, Interior; Internacional: US Big Tech, LATAM Remoto, Europa Ocidental). Salários, custo de incidentes e valor por feature variam conforme o perfil. São parâmetros de simulação; a revisão não demonstrou calibração empírica desses valores.
 
 ### 3. Engine Financeira Determinística + Estocástica
 O LLM gera a narrativa e os dados brutos do cenário, mas **todos os números financeiros são recalculados por um modelo determinístico** — o LLM nunca inventa o ROI final:
@@ -29,7 +29,7 @@ O LLM gera a narrativa e os dados brutos do cenário, mas **todos os números fi
 - **CoNQ (Cost of Non-Quality)**: custo financeiro de bugs e incidentes.
 - **Surprise Factor (~15% de chance)**: adoções excepcionais em equipes com alta adaptação.
 - **Framework-Organization Fit**: compatibilidade framework vs. porte/cultura da organização.
-- **Viés Responsivo**: o range de ROI se ajusta ao cenário (crítico, típico ou favorável), produzindo resultados entre **-40% e +35%**.
+- **Viés Responsivo**: ajusta premissas conforme o cenário crítico, típico ou favorável. O ROI recalculado pode sair dos intervalos ilustrativos de versões anteriores; não representa retorno observado.
 
 ### 4. Métricas de Negócio e Evolução
 Painéis para eficiência, redução de retrabalho, agilidade, crescimento do time, contratações, turnover, promoções e break-even point.
@@ -41,7 +41,7 @@ Tamanho (Startups a Enterprises 2000+ FTEs), cultura ("Startup Caótica" vs "Cor
 - Estado interno por funcionário (estresse, humor, energia, engajamento, memória de 12 eventos, reflexão), derivado do perfil real e atualizado por turno com RNG semeado.
 - Catálogo de decisões humanas determinísticas: pedido de demissão, burnout→licença (com recuperação de humor no retorno), resistência passiva, confronto com liderança, fofoca com contágio social, apoiar mudança, pedir ajuda.
 - `moral_time`/`velocidade_sprint` do time e `sentiment` de cada persona vêm do agregado desse estado — o LLM só narra e ajusta a confiança (±5).
-- As ~350 personas reais de `RAG/profiles.json` estão conectadas ponta a ponta: hidratadas no `/api/simulate` do backend e usadas pelo `EmployeeBrain`/`PersonaAgent`.
+- Os cerca de 350 perfis sintéticos de `RAG/profiles.json` estão conectados ao `/api/simulate` do backend e ao `EmployeeBrain`/`PersonaAgent`; quantidade e integração não demonstram realismo comportamental.
 - `CriticAgent` roda 1x por simulação e sua `plausibility_score` chega ao frontend como `quality_per_cycle` (antes fixo em 100).
 
 ### 7. Julgamento Jev (v9 experimental, opcional)
@@ -152,7 +152,7 @@ Frame-sim/
 ├── types.ts               # Definições TypeScript compartilhadas
 ├── RAG/                  # Backend agentic Node/Express — projeto independente
 │   ├── src/               # DocumentAgent, CriticAgent, server, chunking...
-│   ├── profiles.json      # ~350 personas reais para enriquecimento
+│   ├── profiles.json      # ~350 perfis sintéticos para enriquecimento
 │   └── package.json
 ├── data/                 # Dados estáticos de cenário/economia
 ├── legacy_v1/             # Versão antiga do simulador (referência histórica)
